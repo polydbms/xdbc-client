@@ -9,10 +9,19 @@
 #include <chrono>
 #include <algorithm>
 #include <iterator>
+#include <zstd.h>
 
 using namespace std;
 
 namespace xdbc {
+
+    void decompress(void *dst, size_t dstSize, const void *src, size_t srcSize) {
+        size_t result = ZSTD_decompress(dst, dstSize, src, srcSize);
+        if (ZSTD_isError(result)) {
+            std::cerr << "ZSTD decompression error: " << ZSTD_getErrorName(result) << std::endl;
+        }
+    }
+
 
     void XClient::finalize() {
         cout << "Finalizing XClient: " << _name << endl;
@@ -97,9 +106,30 @@ namespace xdbc {
             }
 
             // getting response from server
+            bool compressed = false;
+            if (compressed) {
+                boost::asio::streambuf compressed_buffer;
 
-            boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
-                              boost::asio::transfer_exactly(BUFFER_SIZE * TUPLE_SIZE), error);
+                std::array<size_t, 1> header{0};
+
+                boost::asio::read(socket, boost::asio::buffer(header),
+                                  boost::asio::transfer_exactly(8), error);
+
+                if (error == boost::asio::error::eof)
+                    break;
+
+
+                cout << "Received:" << header[0] << endl;
+
+                boost::asio::read(socket, compressed_buffer,
+                                  boost::asio::transfer_exactly(header[0]), error);
+
+                decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer,
+                           header[0]);
+            } else {
+                boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
+                                  boost::asio::transfer_exactly(BUFFER_SIZE * TUPLE_SIZE), error);
+            }
             /*boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
                               boost::asio::transfer_all(), error);*/
 
