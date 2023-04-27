@@ -22,7 +22,9 @@ namespace xdbc {
         //1 zstd
         //2 snappy
         //3 lzo
+        //4 lz4
 
+        //TODO: fix first 2 fields for zstd
         if (method == 1) {
             //TODO: move decompression context outside of this function and pass it
             ZSTD_DCtx *dctx = ZSTD_createDCtx(); // create a decompression context
@@ -190,7 +192,7 @@ namespace xdbc {
             }
 
             // getting response from server
-            bool compressed = true;
+            bool compressed = false;
             if (compressed) {
 
                 std::array<size_t, 1> header{0};
@@ -212,7 +214,7 @@ namespace xdbc {
                 boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
                 //cout << "Received " << readBytes << " bytes" << endl;
                 //decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer, header[0]);
-                decompress(4, _bufferPool[bpi].data(), buffer, readBytes);
+                decompress(1, _bufferPool[bpi].data(), buffer, readBytes);
             } else {
                 boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
                                   boost::asio::transfer_exactly(BUFFER_SIZE * TUPLE_SIZE), error);
