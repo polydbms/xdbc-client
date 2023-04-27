@@ -10,15 +10,98 @@
 #include <algorithm>
 #include <iterator>
 #include <zstd.h>
+#include <snappy.h>
+#include <lzo/lzo1x.h>
+#include <lz4.h>
 
 using namespace std;
 
 namespace xdbc {
 
-    void decompress(void *dst, size_t dstSize, const void *src, size_t srcSize) {
-        size_t result = ZSTD_decompress(dst, dstSize, src, srcSize);
-        if (ZSTD_isError(result)) {
-            std::cerr << "ZSTD decompression error: " << ZSTD_getErrorName(result) << std::endl;
+    void decompress(int method, void *dst, const boost::asio::const_buffer &compressed_buffer, size_t compressed_size) {
+        //1 zstd
+        //2 snappy
+        //3 lzo
+
+        if (method == 1) {
+            //TODO: move decompression context outside of this function and pass it
+            ZSTD_DCtx *dctx = ZSTD_createDCtx(); // create a decompression context
+
+
+            // Get the raw buffer pointer and size
+            //const char* compressed_data = boost::asio::buffer_cast<const char*>(compressed_buffer);
+            //size_t compressed_size = boost::asio::buffer_size(compressed_buffer);
+
+            size_t decompressed_max_size = ZSTD_getFrameContentSize(compressed_buffer.data(), compressed_size);
+            size_t decompressed_size = ZSTD_decompressDCtx(dctx, dst, TUPLE_SIZE * BUFFER_SIZE,
+                                                           compressed_buffer.data(), compressed_size);
+            //cout << "decompressed: " << decompressed_size << endl;
+            /*uint* int_ptr = static_cast<uint*>(dst);
+            int val = *int_ptr;
+            cout << "l_orderkey" << val << endl;*/
+            // Resize the buffer to the decompressed size
+            //buffer = boost::asio::buffer(data, result);
+
+            if (ZSTD_isError(decompressed_size)) {
+                std::cerr << "ZSTD decompression error: " << ZSTD_getErrorName(decompressed_size) << std::endl;
+            }
+        }
+        if (method == 2) {
+            const char *data = boost::asio::buffer_cast<const char *>(compressed_buffer);
+            size_t size = boost::asio::buffer_size(compressed_buffer);
+
+            // Determine the size of the uncompressed data
+            size_t uncompressed_size;
+            if (!snappy::GetUncompressedLength(data, size, &uncompressed_size)) {
+                throw std::runtime_error("failed to get uncompressed size");
+            }
+
+            // Decompress the data into the provided destination
+            if (!snappy::RawUncompress(data, size, static_cast<char *>(dst))) {
+                throw std::runtime_error("failed to decompress data");
+
+            }
+
+
+        }
+        if (method == 3) {
+            //std::size_t compressed_size = boost::asio::buffer_size(compressed_buffer);
+
+            // Estimate the worst-case size of the decompressed data
+            std::size_t max_uncompressed_size = compressed_size;
+
+            // Decompress the data
+            int result = lzo1x_decompress(
+                    reinterpret_cast<const unsigned char *>(boost::asio::buffer_cast<const char *>(compressed_buffer)),
+                    compressed_size,
+                    reinterpret_cast<unsigned char *>(dst),
+                    &max_uncompressed_size,
+                    nullptr
+            );
+
+            if (result != LZO_E_OK) {
+                // Handle error
+            }
+
+            if (max_uncompressed_size != BUFFER_SIZE * TUPLE_SIZE) {
+                // Handle error: the actual size of the decompressed data does not match the expected size
+            }
+        }
+        if (method == 4) {
+            const char *compressed_data = boost::asio::buffer_cast<const char *>(compressed_buffer);
+
+            // Get the size of the uncompressed data
+            int uncompressed_size = LZ4_decompress_safe(compressed_data, static_cast<char *>(dst),
+                                                        compressed_size, BUFFER_SIZE * TUPLE_SIZE);
+
+            if (uncompressed_size < 0) {
+                throw std::runtime_error("Failed to decompress LZ4 data");
+            } else if (uncompressed_size !=
+                       LZ4_decompress_safe(compressed_data, static_cast<char *>(dst), static_cast<int>(compressed_size),
+                                           uncompressed_size)) {
+                throw std::runtime_error(
+                        "Failed to decompress LZ4 data: uncompressed size doesn't match expected size");
+            }
         }
     }
 
@@ -28,8 +111,9 @@ namespace xdbc {
         _finishedReading = true;
     }
 
-    XClient::XClient(std::string name) : _name(name), _bufferPool(), _flagArray(), _finishedTransfer(false),
-                                         _startedTransfer(false), _finishedReading(false) {
+    XClient::XClient(std::string
+                     name) : _name(name), _bufferPool(), _flagArray(), _finishedTransfer(false),
+                             _startedTransfer(false), _finishedReading(false) {
 
         cout << _name << endl;
 
@@ -106,9 +190,8 @@ namespace xdbc {
             }
 
             // getting response from server
-            bool compressed = false;
+            bool compressed = true;
             if (compressed) {
-                boost::asio::streambuf compressed_buffer;
 
                 std::array<size_t, 1> header{0};
 
@@ -118,14 +201,18 @@ namespace xdbc {
                 if (error == boost::asio::error::eof)
                     break;
 
+                std::vector<char> compressed_buffer(header[0]);
 
-                cout << "Received:" << header[0] << endl;
 
-                boost::asio::read(socket, compressed_buffer,
-                                  boost::asio::transfer_exactly(header[0]), error);
+                //cout << "Next buffer size:" << header[0] << endl;
 
-                decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer,
-                           header[0]);
+                size_t readBytes = boost::asio::read(socket, boost::asio::buffer(compressed_buffer),
+                                                     boost::asio::transfer_exactly(header[0]), error);
+
+                boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
+                //cout << "Received " << readBytes << " bytes" << endl;
+                //decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer, header[0]);
+                decompress(4, _bufferPool[bpi].data(), buffer, readBytes);
             } else {
                 boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
                                   boost::asio::transfer_exactly(BUFFER_SIZE * TUPLE_SIZE), error);

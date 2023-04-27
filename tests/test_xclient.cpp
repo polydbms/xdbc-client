@@ -14,7 +14,7 @@ int main() {
 
     cout << "#1 Constructed XClient called: " << c.get_name() << endl;
 
-    thread t1 = c.startReceiving("test_100000");
+    thread t1 = c.startReceiving("test_1000000");
 
 
     int min = INT32_MAX;
@@ -39,13 +39,18 @@ int main() {
                     cout << "Empty tuple at buffer: " << curBuffWithId.id << " and tuple " << cnt << endl;
                     c.printSl(&sl);
                     break;
+                } else {
+                    cnt++;
+                    sum += sl.l_orderkey;
+                    if (sl.l_orderkey < min && sl.l_orderkey > 0)
+                        min = sl.l_orderkey;
+                    if (sl.l_orderkey > max) {
+
+
+                        max = sl.l_orderkey;
+                        //cout << "new max  = " << max << endl;
+                    }
                 }
-                cnt++;
-                sum += sl.l_orderkey;
-                if (sl.l_orderkey < min && sl.l_orderkey > 0)
-                    min = sl.l_orderkey;
-                if (sl.l_orderkey > max)
-                    max = sl.l_orderkey;
             }
         } else
             cout << " found buffer with id: " << curBuffWithId.id << endl;
