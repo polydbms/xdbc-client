@@ -14,7 +14,7 @@ int main() {
 
     cout << "#1 Constructed XClient called: " << c.get_name() << endl;
 
-    thread t1 = c.startReceiving("test_1000000");
+    thread t1 = c.startReceiving("test_10000000");
 
 
     int min = INT32_MAX;

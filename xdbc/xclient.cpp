@@ -158,11 +158,27 @@ namespace xdbc {
         using namespace boost::asio;
         using ip::tcp;
 
-        boost::asio::io_service io_service;
+
+        //this is for IP address
+        /*boost::asio::io_service io_service;
         //socket creation
         ip::tcp::socket socket(io_service);
-        //connection
         socket.connect(tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234));
+         */
+
+        //this is for hostname
+        boost::asio::io_service io_service;
+        ip::tcp::socket socket(io_service);
+        boost::asio::ip::tcp::resolver resolver(io_service);
+        boost::asio::ip::tcp::resolver::query query("xdbcserver", "1234");
+        boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
+        boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
+
+        //connection
+        //TODO: fix hardcoded hostname
+        cout << "trying to connect" << endl;
+        socket.connect(endpoint);
+        cout << "connected" << endl;
 
         const std::string msg = tableName + "\n";
         boost::system::error_code error;

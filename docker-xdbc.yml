@@ -1,0 +1,38 @@
+version: '3.7'
+
+services:
+  xdbc-server:
+    image: xdbc-server
+    container_name: xdbcserver
+    restart: always
+    ports:
+      - 1234:1234
+    labels:
+      com.docker-tc.enabled: 1
+
+  xdbc-client:
+    image: xdbc-client
+    container_name: xdbcclient
+    restart: always
+    labels:
+      com.docker-tc.enabled: 1
+
+  postgres-1:
+    image: postgresdb
+    container_name: pg1
+    restart: always
+    volumes:
+      - test-data:/data
+      - pgvolume1:/var/lib/postgresql/
+    ports:
+      - 15432:5432
+    shm_size: '2gb'
+
+volumes:
+  test-data:
+    external: true
+  pgvolume1:
+
+networks:
+  default:
+    name: polydb-net

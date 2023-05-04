@@ -1,0 +1,10 @@
+CREATE TABLE test_10000000 (LIKE pg1_sf1_lineitem);
+ALTER TABLE test_10000000 DROP COLUMN l_returnflag;
+ALTER TABLE test_10000000 DROP COLUMN l_linestatus;
+ALTER TABLE test_10000000 DROP COLUMN l_shipdate;
+ALTER TABLE test_10000000 DROP COLUMN l_commitdate;
+ALTER TABLE test_10000000 DROP COLUMN l_receiptdate;
+ALTER TABLE test_10000000 DROP COLUMN l_shipinstruct;
+ALTER TABLE test_10000000 DROP COLUMN l_shipmode;
+ALTER TABLE test_10000000 DROP COLUMN l_comment;
+INSERT INTO test_10000000 SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax FROM pg1_sf10_lineitem LIMIT 10000000;
