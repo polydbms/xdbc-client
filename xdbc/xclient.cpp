@@ -208,33 +208,33 @@ namespace xdbc {
             }
 
             // getting response from server
-            bool compressed = false;
-            if (compressed) {
-
-                std::array<size_t, 1> header{0};
-
-                boost::asio::read(socket, boost::asio::buffer(header),
-                                  boost::asio::transfer_exactly(8), error);
-
-                if (error == boost::asio::error::eof)
-                    break;
-
-                std::vector<char> compressed_buffer(header[0]);
 
 
-                //cout << "Next buffer size:" << header[0] << endl;
 
-                size_t readBytes = boost::asio::read(socket, boost::asio::buffer(compressed_buffer),
-                                                     boost::asio::transfer_exactly(header[0]), error);
+            std::array<size_t, 2> header{0, 0};
 
+            boost::asio::read(socket, boost::asio::buffer(header),
+                              boost::asio::transfer_exactly(16), error);
+
+            if (error == boost::asio::error::eof)
+                break;
+
+            //cout << "Next buffer size:" << header[0] << endl;
+            size_t readBytes;
+            //cout << "header | comp: " << header[0] << ", buffer size:" << header[1] << endl;
+            if (header[0] > 0) {
+                std::vector<char> compressed_buffer(header[1]);
+                readBytes = boost::asio::read(socket, boost::asio::buffer(compressed_buffer),
+                                              boost::asio::transfer_exactly(header[1]), error);
                 boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
-                //cout << "Received " << readBytes << " bytes" << endl;
-                //decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer, header[0]);
-                decompress(1, _bufferPool[bpi].data(), buffer, readBytes);
-            } else {
-                boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
-                                  boost::asio::transfer_exactly(BUFFER_SIZE * TUPLE_SIZE), error);
-            }
+                decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes);
+            } else
+                readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
+                                              boost::asio::transfer_exactly(BUFFER_SIZE * TUPLE_SIZE), error);
+
+
+            //cout << "Received " << readBytes << " bytes" << endl;
+            //decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer, header[0]);
             /*boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
                               boost::asio::transfer_all(), error);*/
 
@@ -245,10 +245,9 @@ namespace xdbc {
                 printSl(&x);
             }*/
 
-
-
             if (error == boost::asio::error::eof)
                 break;
+
             _flagArray[bpi] = 0;
             buffers++;
 
