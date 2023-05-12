@@ -296,14 +296,12 @@ namespace xdbc {
 
     bool XClient::hasUnread() {
 
+        for (int i: _flagArray) {
+            if (i == 0)
+                return true;
+        }
         if (!_finishedTransfer)
             return true;
-        for (int i: _flagArray) {
-            if (i == 0 && !_finishedTransfer)
-                return true;
-            else if (_finishedTransfer)
-                return false;
-        }
         return false;
     }
 
