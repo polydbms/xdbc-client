@@ -10,7 +10,7 @@ RUN apt-get upgrade -qy
 
 # install compression libs
 
-RUN apt install -qy libzstd-dev liblzo2-dev liblz4-dev libsnappy-dev
+RUN apt install -qy libzstd-dev liblzo2-dev liblz4-dev libsnappy-dev libbrotli-dev
 
 RUN apt install -qy clang libboost-all-dev build-essential
 
