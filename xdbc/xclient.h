@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <thread>
+#include <stack>
 
 #define TOTAL_TUPLES 10000000
 #define BUFFER_SIZE 1000
@@ -35,11 +36,13 @@ namespace xdbc {
     private:
 
         std::string _name;
-        int _flagArray[BUFFERPOOL_SIZE];
+        std::atomic<int> _flagArray[BUFFERPOOL_SIZE];
+        std::atomic<int> _readState;
         std::vector<std::array<shortLineitem, BUFFER_SIZE>> _bufferPool;
         std::atomic<bool> _finishedTransfer;
         std::atomic<bool> _startedTransfer;
         std::atomic<bool> _finishedReading;
+        std::atomic<int> _totalBuffersRead;
 
 
     public:
@@ -63,6 +66,8 @@ namespace xdbc {
         void printSl(shortLineitem *t);
 
         void finalize();
+
+        bool emptyFlagBuffs();
     };
 
 }

@@ -5,6 +5,7 @@
 #include "xclient.h"
 #include <iostream>
 #include <boost/asio.hpp>
+#include <boost/asio/deadline_timer.hpp>
 #include <thread>
 #include <chrono>
 #include <algorithm>
@@ -18,7 +19,10 @@ using namespace std;
 
 namespace xdbc {
 
-    void decompress(int method, void *dst, const boost::asio::const_buffer &compressed_buffer, size_t compressed_size) {
+    int decompress(int method, void *dst, const boost::asio::const_buffer &compressed_buffer, size_t compressed_size) {
+
+        int ret = 0;
+
         //1 zstd
         //2 snappy
         //3 lzo
@@ -55,13 +59,16 @@ namespace xdbc {
             // Determine the size of the uncompressed data
             size_t uncompressed_size;
             if (!snappy::GetUncompressedLength(data, size, &uncompressed_size)) {
-                throw std::runtime_error("failed to get uncompressed size");
+                //throw std::runtime_error("failed to get uncompressed size");
+                cout << "Client: Snappy: failed to get uncompressed size" << endl;
+                ret = 1;
             }
 
             // Decompress the data into the provided destination
             if (!snappy::RawUncompress(data, size, static_cast<char *>(dst))) {
-                throw std::runtime_error("failed to decompress data");
-
+                //throw std::runtime_error("Client: Snappy: failed to decompress data");
+                cout << "Client: Snappy: failed to decompress data" << endl;
+                ret = 1;
             }
 
 
@@ -97,7 +104,10 @@ namespace xdbc {
                                                         compressed_size, BUFFER_SIZE * TUPLE_SIZE);
 
             if (uncompressed_size < 0) {
-                throw std::runtime_error("Failed to decompress LZ4 data");
+                //cout << "Client: Compressed data size: " << compressed_size << endl;
+                cout << "Client: LZ4: Failed to decompress data" << endl;
+                //throw std::runtime_error("Client: LZ4: Failed to decompress data");
+                ret = 1;
             } else if (uncompressed_size !=
                        LZ4_decompress_safe(compressed_data, static_cast<char *>(dst), static_cast<int>(compressed_size),
                                            uncompressed_size)) {
@@ -105,6 +115,7 @@ namespace xdbc {
                         "Failed to decompress LZ4 data: uncompressed size doesn't match expected size");
             }
         }
+        return ret;
     }
 
 
@@ -113,15 +124,16 @@ namespace xdbc {
         _finishedReading = true;
     }
 
-    XClient::XClient(std::string
-                     name) : _name(name), _bufferPool(), _flagArray(), _finishedTransfer(false),
-                             _startedTransfer(false), _finishedReading(false) {
+    XClient::XClient(std::string name) : _name(name), _bufferPool(), _flagArray(), _finishedTransfer(false),
+                                         _startedTransfer(false), _finishedReading(false), _readState(0),
+                                         _totalBuffersRead(0) {
 
         cout << _name << endl;
 
         cout << "BUFFERPOOL SIZE: " << BUFFERPOOL_SIZE << endl;
         _bufferPool.resize(BUFFERPOOL_SIZE);
-        for (int &i: _flagArray) {
+
+        for (auto &i: _flagArray) {
             i = 1;
 
         }
@@ -146,6 +158,7 @@ namespace xdbc {
     }
 
     thread XClient::startReceiving(std::string tableName) {
+
         thread t1(&XClient::receive, this, tableName);
         while (!_startedTransfer)
             std::this_thread::sleep_for(SLEEP_TIME);
@@ -184,6 +197,7 @@ namespace xdbc {
         boost::system::error_code error;
         boost::asio::write(socket, boost::asio::buffer(msg), error);
 
+
         int bpi = 0;
         int buffers = 0;
 
@@ -191,8 +205,9 @@ namespace xdbc {
 
         //while (buffers < TOTAL_TUPLES / BUFFER_SIZE) {
         while (true) {
-            //cout << "Reading" << endl;
 
+            //cout << "Reading" << endl;
+            _readState.store(0);
             int loops = 0;
             while (_flagArray[bpi] == 0) {
                 bpi++;
@@ -201,7 +216,7 @@ namespace xdbc {
                     loops++;
                     if (loops == 1000000) {
                         loops = 0;
-                        cout << "stuck in receive" << endl;
+                        cout << "client: stuck in receive" << endl;
                         std::this_thread::sleep_for(SLEEP_TIME);
                     }
                 }
@@ -209,30 +224,63 @@ namespace xdbc {
 
             // getting response from server
 
+            std::array<size_t, 2> header{};
+            _readState.store(1);
+
+            size_t headerBytes = boost::asio::read(socket, boost::asio::buffer(header),
+                                                   boost::asio::transfer_exactly(16), error);
 
 
-            std::array<size_t, 2> header{0, 0};
+            if (error) {
+                cout << "Client: boost error while reading header: " << error.message() << endl;
+                cout << "Client: Header: comp: " << header[0] << ", size: " << header[1] << ", headerBytes: "
+                     << headerBytes << endl;
+                if (_totalBuffersRead > 0) {
+                    _finishedTransfer = true;
+                    break;
+                }
 
-            boost::asio::read(socket, boost::asio::buffer(header),
-                              boost::asio::transfer_exactly(16), error);
+            }
 
-            if (error == boost::asio::error::eof)
-                break;
-
+            _readState.store(2);
             //cout << "Next buffer size:" << header[0] << endl;
             size_t readBytes;
             //cout << "header | comp: " << header[0] << ", buffer size:" << header[1] << endl;
+
+            if (header[0] > 4 || header[1] > BUFFER_SIZE * TUPLE_SIZE)
+                cout << "Client: corrupt header: comp: " << header[0] << ", size: " << header[1] << ", headerBytes: "
+                     << headerBytes << endl;
+
             if (header[0] > 0) {
                 std::vector<char> compressed_buffer(header[1]);
                 readBytes = boost::asio::read(socket, boost::asio::buffer(compressed_buffer),
                                               boost::asio::transfer_exactly(header[1]), error);
                 boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
-                decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes);
+                //TODO: handle errors correctly
+                int decompError = decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes);
+                if (decompError == 1)
+                    cout << "Client: decompress error: header: comp: " << header[0] << ", size: " << header[1]
+                         << ", headerBytes: "
+                         << headerBytes << endl;
+
             } else
                 readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
-                                              boost::asio::transfer_exactly(BUFFER_SIZE * TUPLE_SIZE), error);
+                                              boost::asio::transfer_exactly(header[1]), error);
 
+            if (error) {
+                cout << "Client: boost error while reading body: " << error.message() << endl;
+                cout << "Client: readBytes: " << readBytes << endl;
+                if (_totalBuffersRead > 0) {
+                    _finishedTransfer = true;
+                    break;
+                }
 
+            }
+            //cout << "Client: no error, incrementing totalBuffersRead" << endl;
+
+            _totalBuffersRead.fetch_add(1);
+
+            _readState.store(3);
             //cout << "Received " << readBytes << " bytes" << endl;
             //decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer, header[0]);
             /*boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
@@ -245,18 +293,22 @@ namespace xdbc {
                 printSl(&x);
             }*/
 
-            if (error == boost::asio::error::eof)
+            /*if (error == boost::asio::error::eof) {
+
                 break;
+            }*/
 
             _flagArray[bpi] = 0;
             buffers++;
-
+            _readState.store(4);
             /* cout << "bpi: " << bpi << endl;
              cout << "flagidx " << (bpi / (BUFFER_SIZE * TUPLE_SIZE)) << endl;*/
 
         }
-        cout << "finished transfer with #buffers: " << buffers << endl;
-        _finishedTransfer = true;
+        _readState.store(5);
+        _finishedTransfer.store(true);
+        cout << "Client: finished transfer: " << _finishedTransfer << " with #buffers: " << buffers << endl;
+
 
     }
 
@@ -265,23 +317,34 @@ namespace xdbc {
 
         int buffId = 0;
         int loops = 0;
-        while (_flagArray[buffId] == 1 && !_finishedReading) {
-            buffId++;
-            if (buffId == BUFFERPOOL_SIZE) {
-                buffId = 0;
-                loops++;
-                if (loops == 100000) {
-                    loops = 0;
-                    cout << "stuck in getBuffer" << endl;
-                    std::this_thread::sleep_for(SLEEP_TIME);
+        //TODO: remove workaround
+        if (_finishedTransfer)
+            buffId = -1;
+        else {
+            while (_flagArray[buffId] == 1) {
+                buffId++;
+                if (buffId == BUFFERPOOL_SIZE) {
+                    buffId = 0;
+                    loops++;
+                    if (loops == 1000000) {
+                        loops = 0;
+                        cout << "Client: stuck in getBuffer" << endl;
+                        cout << "Client: finishedTransfer: " << _finishedTransfer << ", emptyFlagBuffs: "
+                             << emptyFlagBuffs()
+                             << ", readState:" << _readState << ", totalBuffersRead: " << _totalBuffersRead
+                             << endl;
+                        std::this_thread::sleep_for(SLEEP_TIME);
+                    }
                 }
             }
         }
-
         buffWithId curBuf{};
         curBuf.id = buffId;
-        curBuf.buff = _bufferPool[buffId];
-        //std::copy(std::begin(_bufferPool[i]), std::end(_bufferPool[i]), std::begin(curBuf.buff));
+        if (buffId > -1) {
+            curBuf.buff = _bufferPool[buffId];
+            //std::copy(std::begin(_bufferPool[i]), std::end(_bufferPool[i]), std::begin(curBuf.buff));
+        }
+
 
         return curBuf;
     }
@@ -294,15 +357,18 @@ namespace xdbc {
         return BUFFERPOOL_SIZE;
     }
 
-    bool XClient::hasUnread() {
-
-        for (int i: _flagArray) {
+    bool XClient::emptyFlagBuffs() {
+        for (auto &i: _flagArray) {
             if (i == 0)
-                return true;
+                return false;
         }
-        if (!_finishedTransfer)
-            return true;
-        return false;
+        return true;
+    }
+
+    bool XClient::hasUnread() {
+        if (_finishedTransfer && emptyFlagBuffs())
+            return false;
+        return true;
     }
 
 

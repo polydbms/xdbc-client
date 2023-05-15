@@ -52,11 +52,13 @@ int main() {
                     }
                 }
             }
-        } else
-            cout << " found buffer with id: " << curBuffWithId.id << endl;
+            buffsRead++;
+            c.markBufferAsRead(curBuffWithId.id);
+        } else {
+            cout << " found invalid buffer with id: " << curBuffWithId.id << endl;
+            break;
+        }
 
-        buffsRead++;
-        c.markBufferAsRead(curBuffWithId.id);
     }
     c.finalize();
 
@@ -69,7 +71,7 @@ int main() {
     cout << "cnt: " << cnt << endl;
     cout << "min: " << min << endl;
     cout << "max: " << max << endl;
-    cout << "avg:" << fixed << (sum / (double) cnt) << endl;
+    cout << "avg: " << fixed << (sum / (double) cnt) << endl;
 
     cout << "Elapsed time in milliseconds: "
          << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
