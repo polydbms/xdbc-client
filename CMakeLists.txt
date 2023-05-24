@@ -9,10 +9,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
+find_package(spdlog REQUIRED)
 
 #TODO: fix hardcoded paths
 set(ZSTD_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu/libzstd.so")
 set(SNAPPY_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu/libsnappy.so")
+
+include_directories("/zfp/include")
+link_directories(/zfp/lib)
+
 include(GNUInstallDirs)
 
 add_library(xdbc SHARED
@@ -25,7 +30,7 @@ set_target_properties(xdbc PROPERTIES
         PUBLIC_HEADER xdbc/xclient.h)
 
 target_include_directories(xdbc PUBLIC .)
-target_link_libraries(${PROJECT_NAME} ${ZSTD_LIBRARY_PATH} ${SNAPPY_LIBRARY_PATH} Threads::Threads lzo2 lz4)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${ZSTD_LIBRARY_PATH} ${SNAPPY_LIBRARY_PATH} Threads::Threads lzo2 lz4 zfp spdlog::spdlog_header_only)
 install(TARGETS xdbc
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

@@ -1,11 +1,8 @@
-//
-// Created by harry on 2/6/23.
-//
-
 #include "xclient.h"
 #include <iostream>
 #include <boost/asio.hpp>
 #include <boost/asio/deadline_timer.hpp>
+#include <boost/crc.hpp>
 #include <thread>
 #include <chrono>
 #include <algorithm>
@@ -14,10 +11,26 @@
 #include <snappy.h>
 #include <lzo/lzo1x.h>
 #include <lz4.h>
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
 
 using namespace std;
 
 namespace xdbc {
+
+    uint16_t compute_checksum(const uint8_t *data, std::size_t size) {
+        uint16_t checksum = 0;
+        for (std::size_t i = 0; i < size; ++i) {
+            checksum ^= data[i];
+        }
+        return checksum;
+    }
+
+    size_t compute_crc(const boost::asio::const_buffer &buffer) {
+        boost::crc_32_type crc;
+        crc.process_bytes(boost::asio::buffer_cast<const void *>(buffer), boost::asio::buffer_size(buffer));
+        return crc.checksum();
+    }
 
     int decompress(int method, void *dst, const boost::asio::const_buffer &compressed_buffer, size_t compressed_size) {
 
@@ -27,6 +40,7 @@ namespace xdbc {
         //2 snappy
         //3 lzo
         //4 lz4
+        //5 zfp
 
         //TODO: fix first 2 fields for zstd
         if (method == 1) {
@@ -105,7 +119,7 @@ namespace xdbc {
 
             if (uncompressed_size < 0) {
                 //cout << "Client: Compressed data size: " << compressed_size << endl;
-                cout << "Client: LZ4: Failed to decompress data" << endl;
+                spdlog::get("XDBC.CLIENT")->warn("LZ4: Failed to decompress data");
                 //throw std::runtime_error("Client: LZ4: Failed to decompress data");
                 ret = 1;
             } else if (uncompressed_size !=
@@ -115,12 +129,17 @@ namespace xdbc {
                         "Failed to decompress LZ4 data: uncompressed size doesn't match expected size");
             }
         }
+        if (method == 5) {
+            //TODO: implement
+        }
+
+
         return ret;
     }
 
 
     void XClient::finalize() {
-        cout << "Finalizing XClient: " << _name << endl;
+        spdlog::get("XDBC.CLIENT")->info("Finalizing XClient: {0}", _name);
         _finishedReading = true;
     }
 
@@ -128,9 +147,10 @@ namespace xdbc {
                                          _startedTransfer(false), _finishedReading(false), _readState(0),
                                          _totalBuffersRead(0) {
 
-        cout << _name << endl;
+        auto console = spdlog::stdout_color_mt("XDBC.CLIENT");
 
-        cout << "BUFFERPOOL SIZE: " << BUFFERPOOL_SIZE << endl;
+        spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BUFFERPOOL SIZE: {1}", _name, BUFFERPOOL_SIZE);
+
         _bufferPool.resize(BUFFERPOOL_SIZE);
 
         for (auto &i: _flagArray) {
@@ -163,7 +183,7 @@ namespace xdbc {
         while (!_startedTransfer)
             std::this_thread::sleep_for(SLEEP_TIME);
 
-        cout << "#3 Initialized" << endl;
+        spdlog::get("XDBC.CLIENT")->info("#3 Initialized");
         return t1;
     }
 
@@ -189,9 +209,10 @@ namespace xdbc {
 
         //connection
         //TODO: fix hardcoded hostname
-        cout << "trying to connect" << endl;
+        spdlog::get("XDBC.CLIENT")->info("trying to connect");
+
         socket.connect(endpoint);
-        cout << "connected" << endl;
+        spdlog::get("XDBC.CLIENT")->info("connected");
 
         const std::string msg = tableName + "\n";
         boost::system::error_code error;
@@ -201,7 +222,7 @@ namespace xdbc {
         int bpi = 0;
         int buffers = 0;
 
-        cout << "#2 Entered receive thread" << endl;
+        spdlog::get("XDBC.CLIENT")->info("#2 Entered receive thread");
 
         //while (buffers < TOTAL_TUPLES / BUFFER_SIZE) {
         while (true) {
@@ -216,7 +237,7 @@ namespace xdbc {
                     loops++;
                     if (loops == 1000000) {
                         loops = 0;
-                        cout << "client: stuck in receive" << endl;
+                        spdlog::get("XDBC.CLIENT")->warn("stuck in receive");
                         std::this_thread::sleep_for(SLEEP_TIME);
                     }
                 }
@@ -224,17 +245,20 @@ namespace xdbc {
 
             // getting response from server
 
-            std::array<size_t, 2> header{};
+            std::array<size_t, 4> header{};
             _readState.store(1);
 
             size_t headerBytes = boost::asio::read(socket, boost::asio::buffer(header),
-                                                   boost::asio::transfer_exactly(16), error);
+                                                   boost::asio::transfer_exactly(32), error);
 
+            uint16_t checksum = header[2];
 
+            //TODO: handle error types (e.g., EOF)
             if (error) {
-                cout << "Client: boost error while reading header: " << error.message() << endl;
-                cout << "Client: Header: comp: " << header[0] << ", size: " << header[1] << ", headerBytes: "
-                     << headerBytes << endl;
+                spdlog::get("XDBC.CLIENT")->error("boost error while reading header: {0}", error.message());
+                spdlog::get("XDBC.CLIENT")->error("header com: {0}, size: {1}, headerBytes: {2}", header[0], header[1],
+                                                  headerBytes);
+
                 if (_totalBuffersRead > 0) {
                     _finishedTransfer = true;
                     break;
@@ -258,14 +282,26 @@ namespace xdbc {
                 boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
                 //TODO: handle errors correctly
                 int decompError = decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes);
-                if (decompError == 1)
-                    cout << "Client: decompress error: header: comp: " << header[0] << ", size: " << header[1]
-                         << ", headerBytes: "
-                         << headerBytes << endl;
+                if (decompError == 1) {
+
+                    size_t computed_checksum = compute_crc(boost::asio::buffer(_bufferPool[bpi]));
+                    if (computed_checksum != checksum) {
+                        spdlog::get("XDBC.CLIENT")->warn("CHECKSUM MISMATCH expected: {0}, got: {1}",
+                                                         checksum, computed_checksum);
+                    }
+
+                    shortLineitem sl = {-2, -2, -2, -2, -2, -2, -2, -2};
+                    std::memcpy(_bufferPool[bpi].data(), &sl, sizeof(sl));
+
+                    spdlog::get("XDBC.CLIENT")->warn("decompress error: header: comp: {0}, size: {1}, headerBytes: {2}",
+                                                     header[0], header[1], headerBytes);
+
+                }
 
             } else
                 readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
                                               boost::asio::transfer_exactly(header[1]), error);
+
 
             if (error) {
                 cout << "Client: boost error while reading body: " << error.message() << endl;
@@ -307,11 +343,10 @@ namespace xdbc {
         }
         _readState.store(5);
         _finishedTransfer.store(true);
-        cout << "Client: finished transfer: " << _finishedTransfer << " with #buffers: " << buffers << endl;
 
+        spdlog::get("XDBC.CLIENT")->info("finished transfer: {0}, #buffers: {1}", _finishedTransfer, buffers);
 
     }
-
 
     buffWithId XClient::getBuffer() {
 
@@ -328,11 +363,11 @@ namespace xdbc {
                     loops++;
                     if (loops == 1000000) {
                         loops = 0;
-                        cout << "Client: stuck in getBuffer" << endl;
-                        cout << "Client: finishedTransfer: " << _finishedTransfer << ", emptyFlagBuffs: "
-                             << emptyFlagBuffs()
-                             << ", readState:" << _readState << ", totalBuffersRead: " << _totalBuffersRead
-                             << endl;
+                        spdlog::get("XDBC.CLIENT")->warn("stuck in getBuffer");
+                        spdlog::get("XDBC.CLIENT")->warn(
+                                "finishedTransfer: {0}, emptyFlagBuffs: {1}, readState: {2}, totalBuffersRead: {3}",
+                                _finishedTransfer, emptyFlagBuffs(), _readState, _totalBuffersRead);
+
                         std::this_thread::sleep_for(SLEEP_TIME);
                     }
                 }

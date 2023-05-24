@@ -8,13 +8,17 @@ RUN apt-get upgrade -qy
 
 #-------------------------------------------- Install XDBC and prerequisites -------------------------------------------
 
+RUN apt install -qy cmake git
+
+RUN git clone https://github.com/gabime/spdlog.git && cd spdlog && mkdir build && cd build &&  cmake .. && make -j && make install
+
 # install compression libs
 
 RUN apt install -qy libzstd-dev liblzo2-dev liblz4-dev libsnappy-dev libbrotli-dev
 
-RUN apt install -qy clang libboost-all-dev build-essential
+RUN git clone https://github.com/LLNL/zfp.git && cd zfp && make
 
-RUN apt install -qy cmake
+RUN apt install -qy clang libboost-all-dev build-essential
 
 RUN mkdir /xdbc-client
 

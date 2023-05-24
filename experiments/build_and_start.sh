@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+#set -x
 #params
 #$1 docker container name
 CONTAINER=$1

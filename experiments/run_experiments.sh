@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+#set -x
 
 #$1 absolute server path dir
 SERVER_PATH=$1
@@ -23,10 +23,10 @@ EXECLOG=measurements/${TS}_runs_comp.csv
 echo "date,comp,parallelism,cpu,network,time" >$EXECLOG
 
 for CPUS in 7; do
-  docker update --cpuset-cpus "$CPUS" xdbcclient
-  for NETWORK in 25; do
+  docker update --cpus $CPUS xdbcclient
+  for NETWORK in 100; do
     #for COMP in nocomp snappy lzo lz4; do
-    for COMP in lz4; do
+    for COMP in nocomp; do
       for PAR in 4; do
 
         echo "Running compression: $COMP, parallelism: $PAR, network: $NETWORK"
@@ -34,6 +34,7 @@ for CPUS in 7; do
         curl -d'rate='$NETWORK'mbps' localhost:4080/xdbcclient
 
         bash $SERVER_PATH/build_and_start.sh xdbcserver 2 "-c$COMP -P$PAR" &
+
         SERVER_PID=$!
         sleep 2
         SECONDS=0

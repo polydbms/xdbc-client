@@ -2,6 +2,8 @@
 #include <thread>
 #include "../xdbc/xclient.h"
 #include <iomanip>
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
 
 //#define BUFFERPOOL_SIZE 1000
 #define TOTAL_TUPLES 10000000
@@ -12,7 +14,9 @@ int main() {
 
     xdbc::XClient c("cpp Client");
 
-    cout << "#1 Constructed XClient called: " << c.get_name() << endl;
+    auto console = spdlog::stdout_color_mt("XCLIENT");
+
+    spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", c.get_name());
 
     thread t1 = c.startReceiving("test_10000000");
 
@@ -23,7 +27,7 @@ int main() {
     long cnt = 0;
     long totalcnt = 0;
 
-    cout << "#4 called receive" << endl;
+    spdlog::get("XCLIENT")->info("#4 called receive");
 
     auto start = std::chrono::steady_clock::now();
 
@@ -32,25 +36,32 @@ int main() {
         xdbc::buffWithId curBuffWithId = c.getBuffer();
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
-            for (auto sl: curBuffWithId.buff) {
-                totalcnt++;
-                //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
-                if (sl.l_orderkey < 0) {
-                    cout << "Empty tuple at buffer: " << curBuffWithId.id << " and tuple " << cnt << endl;
-                    c.printSl(&sl);
-                    break;
-                } else {
-                    cnt++;
-                    sum += sl.l_orderkey;
-                    if (sl.l_orderkey < min && sl.l_orderkey > 0)
-                        min = sl.l_orderkey;
-                    if (sl.l_orderkey > max) {
+            int iformat = 1;
+            if (iformat == 1) {
+                for (auto sl: curBuffWithId.buff) {
+                    totalcnt++;
+                    //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
+                    if (sl.l_orderkey < 0) {
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple: {1}", curBuffWithId.id, cnt);
+                        c.printSl(&sl);
+                        break;
+                    } else {
+                        cnt++;
+                        sum += sl.l_orderkey;
+                        if (sl.l_orderkey < min)
+                            min = sl.l_orderkey;
+                        if (sl.l_orderkey > max)
+                            max = sl.l_orderkey;
 
-
-                        max = sl.l_orderkey;
-                        //cout << "new max  = " << max << endl;
                     }
                 }
+            }
+            if (iformat == 2) {
+                // Access the elements from the original inner vector
+                int* element1 = reinterpret_cast<int*>(innerVectorData + calculateOffset(0, sizeof(int)));
+                double* element2 = reinterpret_cast<double*>(innerVectorData + calculateOffset(1, sizeof(double)));
+
+
             }
             buffsRead++;
             c.markBufferAsRead(curBuffWithId.id);
@@ -62,20 +73,18 @@ int main() {
     }
     c.finalize();
 
-    cout << "Total read Buffers: " << buffsRead << endl;
-
+    spdlog::get("XCLIENT")->info("Total read buffers: {0}", buffsRead);
 
     auto end = std::chrono::steady_clock::now();
 
-    cout << "totalcnt: " << totalcnt << endl;
-    cout << "cnt: " << cnt << endl;
-    cout << "min: " << min << endl;
-    cout << "max: " << max << endl;
-    cout << "avg: " << fixed << (sum / (double) cnt) << endl;
+    spdlog::get("XCLIENT")->info("totalcnt: {0}", totalcnt);
+    spdlog::get("XCLIENT")->info("cnt: {0}", cnt);
+    spdlog::get("XCLIENT")->info("min: {0}", min);
+    spdlog::get("XCLIENT")->info("max: {0}", max);
+    spdlog::get("XCLIENT")->info("avg: {0}", (sum / (double) cnt));
 
-    cout << "Elapsed time in milliseconds: "
-         << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-         << " ms" << " for #tuples: " << cnt << endl;
+    spdlog::get("XCLIENT")->info("Total elapsed time: {0} ms, #tuples: {1}",
+                                 std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), cnt);
 
     t1.join();
     return 0;

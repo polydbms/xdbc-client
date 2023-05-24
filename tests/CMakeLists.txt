@@ -1,3 +1,5 @@
 add_executable(test_xclient test_xclient.cpp)
 
-target_link_libraries(test_xclient PUBLIC xdbc)
+find_package(spdlog REQUIRED)
+
+target_link_libraries(test_xclient PRIVATE xdbc spdlog::spdlog)
