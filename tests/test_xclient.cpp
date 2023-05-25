@@ -36,9 +36,10 @@ int main() {
         xdbc::buffWithId curBuffWithId = c.getBuffer();
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
-            int iformat = 1;
-            if (iformat == 1) {
-                for (auto sl: curBuffWithId.buff) {
+            if (curBuffWithId.iformat == 1) {
+                auto *ptr = reinterpret_cast<xdbc::shortLineitem *>(curBuffWithId.buff.data());
+                std::vector<xdbc::shortLineitem> sls(ptr, ptr + BUFFER_SIZE);
+                for (auto sl: sls) {
                     totalcnt++;
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
                     if (sl.l_orderkey < 0) {
@@ -56,11 +57,49 @@ int main() {
                     }
                 }
             }
-            if (iformat == 2) {
-                // Access the elements from the original inner vector
-                int* element1 = reinterpret_cast<int*>(innerVectorData + calculateOffset(0, sizeof(int)));
-                double* element2 = reinterpret_cast<double*>(innerVectorData + calculateOffset(1, sizeof(double)));
+            if (curBuffWithId.iformat == 2) {
+                // Create a byte pointer to the starting address of the vector
+                std::byte *dataPtr = curBuffWithId.buff.data();
 
+                // Construct the first four vectors of type int at the dataPtr address
+
+
+                int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
+                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4);
+                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 2);
+                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 3);
+                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4);
+                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4 +
+                                                        BUFFER_SIZE * 8 * 1);
+                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4 +
+                                                        BUFFER_SIZE * 8 * 2);
+                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4 +
+                                                        BUFFER_SIZE * 8 * 3);
+
+                if (buffsRead == 1) {
+
+                    spdlog::get("XCLIENT")->warn("shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
+                                                 v1[1], v2[1], v3[1], v4[1], v5[1], v6[1], v7[1], v8[1]);
+                }
+
+                for (int i = 0; i < BUFFER_SIZE; i++) {
+                    totalcnt++;
+                    //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
+                    if (v1[i] < 0) {
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple: {1}", curBuffWithId.id, cnt);
+                        spdlog::get("XCLIENT")->warn("l_orderkey: {0}", v1[i]);
+                        //c.printSl(&sl);
+                        break;
+                    } else {
+                        cnt++;
+                        sum += v1[i];
+                        if (v1[i] < min)
+                            min = v1[i];
+                        if (v1[i] > max)
+                            max = v1[i];
+
+                    }
+                }
 
             }
             buffsRead++;

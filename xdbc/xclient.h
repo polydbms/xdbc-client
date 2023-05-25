@@ -29,7 +29,8 @@ namespace xdbc {
 
     struct buffWithId {
         int id;
-        std::array<shortLineitem, BUFFER_SIZE> buff;
+        int iformat;
+        std::vector<std::byte> buff;
     };
 
     class XClient {
@@ -38,7 +39,7 @@ namespace xdbc {
         std::string _name;
         std::atomic<int> _flagArray[BUFFERPOOL_SIZE];
         std::atomic<int> _readState;
-        std::vector<std::array<shortLineitem, BUFFER_SIZE>> _bufferPool;
+        std::vector<std::vector<std::byte>> _bufferPool;
         std::atomic<bool> _finishedTransfer;
         std::atomic<bool> _startedTransfer;
         std::atomic<bool> _finishedReading;

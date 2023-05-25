@@ -151,7 +151,7 @@ namespace xdbc {
 
         spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BUFFERPOOL SIZE: {1}", _name, BUFFERPOOL_SIZE);
 
-        _bufferPool.resize(BUFFERPOOL_SIZE);
+        _bufferPool.resize(BUFFERPOOL_SIZE, std::vector<std::byte>(BUFFER_SIZE * TUPLE_SIZE));
 
         for (auto &i: _flagArray) {
             i = 1;
@@ -290,8 +290,22 @@ namespace xdbc {
                                                          checksum, computed_checksum);
                     }
 
-                    shortLineitem sl = {-2, -2, -2, -2, -2, -2, -2, -2};
-                    std::memcpy(_bufferPool[bpi].data(), &sl, sizeof(sl));
+                    if (header[3] == 1) {
+                        shortLineitem sl = {-2, -2, -2, -2, -2, -2, -2, -2};
+                        std::memcpy(_bufferPool[bpi].data(), &sl, sizeof(sl));
+                    }
+                    if (header[3] == 2) {
+                        int m2 = -2;
+                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(int));
+                        std::memcpy(_bufferPool[bpi].data() + BUFFER_SIZE * 4, &m2, sizeof(int));
+                        std::memcpy(_bufferPool[bpi].data() + BUFFER_SIZE * 4, &m2, sizeof(int));
+                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(int));
+                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
+                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
+                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
+                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
+
+                    }
 
                     spdlog::get("XDBC.CLIENT")->warn("decompress error: header: comp: {0}, size: {1}, headerBytes: {2}",
                                                      header[0], header[1], headerBytes);
@@ -374,9 +388,12 @@ namespace xdbc {
             }
         }
         buffWithId curBuf{};
+        curBuf.buff.resize(BUFFER_SIZE * TUPLE_SIZE);
         curBuf.id = buffId;
         if (buffId > -1) {
             curBuf.buff = _bufferPool[buffId];
+            //TODO: set intermediate format dynamically
+            curBuf.iformat = 2;
             //std::copy(std::begin(_bufferPool[i]), std::end(_bufferPool[i]), std::begin(curBuf.buff));
         }
 
