@@ -5,9 +5,6 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
-//#define BUFFERPOOL_SIZE 1000
-#define TOTAL_TUPLES 10000000
-
 using namespace std;
 
 int main() {

@@ -8,7 +8,6 @@
 #include <thread>
 #include <stack>
 
-#define TOTAL_TUPLES 10000000
 #define BUFFER_SIZE 1000
 #define BUFFERPOOL_SIZE 1000
 #define TUPLE_SIZE 48

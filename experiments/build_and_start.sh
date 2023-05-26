@@ -8,6 +8,7 @@ OPTION=$2
 #$3 run params (for now compression library)
 RUNPARAMS=$3
 
+#copy files & build
 if [ $OPTION == 1 ] || [ $OPTION == 3 ]; then
   DIR=$(dirname $(dirname "$(realpath -- "$0")"))
   docker exec $CONTAINER bash -c "rm -rf xdbc-client && mkdir xdbc-client"
@@ -23,7 +24,7 @@ if [ $OPTION == 1 ] || [ $OPTION == 3 ]; then
 
 fi
 
-# start
+# run
 if [[ $OPTION != 3 ]]; then
   docker exec -it $CONTAINER bash -c "cd xdbc-client/tests/build && ./test_xclient ${RUNPARAMS}"
 fi
