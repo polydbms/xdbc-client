@@ -9,7 +9,12 @@ using namespace std;
 
 int main() {
 
-    xdbc::XClient c("cpp Client");
+    xdbc::RuntimeEnv env;
+    env.bufferpool_size = 1000;
+    env.buffer_size = 1000;
+    env.tuple_size = 48;
+    env.env_name = "Cpp Client";
+    xdbc::XClient c(env);
 
     auto console = spdlog::stdout_color_mt("XCLIENT");
 
@@ -35,7 +40,7 @@ int main() {
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
                 auto *ptr = reinterpret_cast<xdbc::shortLineitem *>(curBuffWithId.buff.data());
-                std::vector<xdbc::shortLineitem> sls(ptr, ptr + BUFFER_SIZE);
+                std::vector<xdbc::shortLineitem> sls(ptr, ptr + env.buffer_size);
                 for (auto sl: sls) {
                     totalcnt++;
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
@@ -63,16 +68,16 @@ int main() {
 
 
                 int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
-                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4);
-                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 2);
-                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 3);
-                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4);
-                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4 +
-                                                        BUFFER_SIZE * 8 * 1);
-                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4 +
-                                                        BUFFER_SIZE * 8 * 2);
-                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + BUFFER_SIZE * 4 * 4 +
-                                                        BUFFER_SIZE * 8 * 3);
+                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4);
+                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 2);
+                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 3);
+                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4);
+                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
+                                                        env.buffer_size * 8 * 1);
+                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
+                                                        env.buffer_size * 8 * 2);
+                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
+                                                        env.buffer_size * 8 * 3);
 
                 if (buffsRead == 1) {
 
@@ -80,7 +85,7 @@ int main() {
                                                  v1[1], v2[1], v3[1], v4[1], v5[1], v6[1], v7[1], v8[1]);
                 }
 
-                for (int i = 0; i < BUFFER_SIZE; i++) {
+                for (int i = 0; i < env.buffer_size; i++) {
                     totalcnt++;
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
                     if (v1[i] < 0) {

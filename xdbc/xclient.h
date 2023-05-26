@@ -8,12 +8,19 @@
 #include <thread>
 #include <stack>
 
-#define BUFFER_SIZE 1000
-#define BUFFERPOOL_SIZE 1000
-#define TUPLE_SIZE 48
 #define SLEEP_TIME 10ms
 
 namespace xdbc {
+
+    struct RuntimeEnv {
+        std::string env_name;
+        int bufferpool_size;
+        int buffer_size;
+        int tuple_size;
+        int iformat;
+        int sleep_time;
+        int parallelism;
+    };
 
     struct shortLineitem {
         int l_orderkey;
@@ -36,7 +43,8 @@ namespace xdbc {
     private:
 
         std::string _name;
-        std::atomic<int> _flagArray[BUFFERPOOL_SIZE];
+        RuntimeEnv _xdbcenv;
+        std::vector<std::atomic<int>> _flagArray;
         std::atomic<int> _readState;
         std::vector<std::vector<std::byte>> _bufferPool;
         std::atomic<bool> _finishedTransfer;
@@ -47,11 +55,11 @@ namespace xdbc {
 
     public:
 
-        XClient(std::string name);
+        explicit XClient(const RuntimeEnv &xdbcenv);
 
         std::string get_name() const;
 
-        void receive(std::string tableName);
+        void receive(const std::string &tableName);
 
         std::thread startReceiving(std::string tableName);
 

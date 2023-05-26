@@ -7,6 +7,7 @@
 #include <chrono>
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
@@ -30,7 +31,7 @@ namespace xdbc {
         return crc.checksum();
     }
 
-    int decompress(int method, void *dst, const boost::asio::const_buffer &compressed_buffer, size_t compressed_size) {
+    int decompress(int method, void *dst, const boost::asio::const_buffer &in, size_t in_size, int out_size) {
         //1 zstd
         //2 snappy
         //3 lzo
@@ -38,19 +39,19 @@ namespace xdbc {
         //5 zlib
 
         if (method == 1)
-            return Decompressor::decompress_zstd(dst, compressed_buffer, compressed_size);
+            return Decompressor::decompress_zstd(dst, in, in_size, out_size);
 
         if (method == 2)
-            return Decompressor::decompress_snappy(dst, compressed_buffer, compressed_size);
+            return Decompressor::decompress_snappy(dst, in, in_size, out_size);
 
         if (method == 3)
-            return Decompressor::decompress_lzo(dst, compressed_buffer, compressed_size);
+            return Decompressor::decompress_lzo(dst, in, in_size, out_size);
 
         if (method == 4)
-            return Decompressor::decompress_lz4(dst, compressed_buffer, compressed_size);
+            return Decompressor::decompress_lz4(dst, in, in_size, out_size);
 
         if (method == 5)
-            return Decompressor::decompress_zlib(dst, compressed_buffer, compressed_size);
+            return Decompressor::decompress_zlib(dst, in, in_size, out_size);
 
 
         return 1;
@@ -62,20 +63,25 @@ namespace xdbc {
         _finishedReading = true;
     }
 
-    XClient::XClient(std::string name) : _name(name), _bufferPool(), _flagArray(), _finishedTransfer(false),
-                                         _startedTransfer(false), _finishedReading(false), _readState(0),
-                                         _totalBuffersRead(0) {
+    XClient::XClient(const RuntimeEnv &env) :
+            _xdbcenv(env),
+            _bufferPool(),
+            _flagArray(env.bufferpool_size),
+            _finishedTransfer(false),
+            _startedTransfer(false),
+            _finishedReading(false),
+            _readState(0),
+            _totalBuffersRead(0) {
 
         auto console = spdlog::stdout_color_mt("XDBC.CLIENT");
 
-        spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BUFFERPOOL SIZE: {1}", _name, BUFFERPOOL_SIZE);
+        spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2}, TS: {3}, iformat: {4} ",
+                                         _name, env.bufferpool_size, env.buffer_size, env.tuple_size, env.iformat);
 
-        _bufferPool.resize(BUFFERPOOL_SIZE, std::vector<std::byte>(BUFFER_SIZE * TUPLE_SIZE));
+        _bufferPool.resize(env.bufferpool_size, std::vector<std::byte>(env.buffer_size * env.tuple_size));
 
-        for (auto &i: _flagArray) {
-            i = 1;
-
-        }
+        for (auto &i: _flagArray)
+            i.store(1);
 
     }
 
@@ -106,7 +112,7 @@ namespace xdbc {
         return t1;
     }
 
-    void XClient::receive(std::string tableName) {
+    void XClient::receive(const std::string &tableName) {
         using namespace boost::asio;
         using ip::tcp;
 
@@ -151,7 +157,7 @@ namespace xdbc {
             int loops = 0;
             while (_flagArray[bpi] == 0) {
                 bpi++;
-                if (bpi == BUFFERPOOL_SIZE) {
+                if (bpi == _xdbcenv.bufferpool_size) {
                     bpi = 0;
                     loops++;
                     if (loops == 1000000) {
@@ -191,7 +197,7 @@ namespace xdbc {
             size_t readBytes;
             //cout << "header | comp: " << header[0] << ", buffer size:" << header[1] << endl;
 
-            if (header[0] > 5 || header[1] > BUFFER_SIZE * TUPLE_SIZE)
+            if (header[0] > 5 || header[1] > _xdbcenv.buffer_size * _xdbcenv.tuple_size)
                 spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
                                                   header[0], header[1], headerBytes);
 
@@ -201,7 +207,8 @@ namespace xdbc {
                                               boost::asio::transfer_exactly(header[1]), error);
                 boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
                 //TODO: handle errors correctly
-                int decompError = decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes);
+                int decompError = decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes,
+                                             _xdbcenv.buffer_size * _xdbcenv.tuple_size);
                 if (decompError == 1) {
 
                     /*size_t computed_checksum = compute_crc(boost::asio::buffer(_bufferPool[bpi]));
@@ -216,14 +223,15 @@ namespace xdbc {
                     }
                     if (header[3] == 2) {
                         int m2 = -2;
-                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(int));
-                        std::memcpy(_bufferPool[bpi].data() + BUFFER_SIZE * 4, &m2, sizeof(int));
-                        std::memcpy(_bufferPool[bpi].data() + BUFFER_SIZE * 4, &m2, sizeof(int));
-                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(int));
-                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
-                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
-                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
-                        std::memcpy(_bufferPool[bpi].data(), &m2, sizeof(double));
+                        int bs = _xdbcenv.buffer_size;
+                        std::memcpy(_bufferPool[bpi].data(), &m2, 4);
+                        std::memcpy(_bufferPool[bpi].data() + bs * 4, &m2, 4);
+                        std::memcpy(_bufferPool[bpi].data() + bs * 4 * 2, &m2, 4);
+                        std::memcpy(_bufferPool[bpi].data() + bs * 4 * 3, &m2, 4);
+                        std::memcpy(_bufferPool[bpi].data() + bs * 4 * 4, &m2, 8);
+                        std::memcpy(_bufferPool[bpi].data() + bs * 16 + bs * 8, &m2, 8);
+                        std::memcpy(_bufferPool[bpi].data() + bs * 16 + bs * 8 * 2, &m2, 8);
+                        std::memcpy(_bufferPool[bpi].data() + bs * 16 + bs * 8 * 3, &m2, 8);
 
                     }
 
@@ -293,7 +301,7 @@ namespace xdbc {
         else {
             while (_flagArray[buffId] == 1) {
                 buffId++;
-                if (buffId == BUFFERPOOL_SIZE) {
+                if (buffId == _xdbcenv.bufferpool_size) {
                     buffId = 0;
                     loops++;
                     if (loops == 1000000) {
@@ -309,7 +317,7 @@ namespace xdbc {
             }
         }
         buffWithId curBuf{};
-        curBuf.buff.resize(BUFFER_SIZE * TUPLE_SIZE);
+        curBuf.buff.resize(_xdbcenv.buffer_size * _xdbcenv.tuple_size);
         curBuf.id = buffId;
         if (buffId > -1) {
             curBuf.buff = _bufferPool[buffId];
@@ -327,7 +335,7 @@ namespace xdbc {
     }
 
     int XClient::getBufferPoolSize() {
-        return BUFFERPOOL_SIZE;
+        return _xdbcenv.bufferpool_size;
     }
 
     bool XClient::emptyFlagBuffs() {
