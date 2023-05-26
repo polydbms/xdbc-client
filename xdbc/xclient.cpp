@@ -11,6 +11,7 @@
 #include <snappy.h>
 #include <lzo/lzo1x.h>
 #include <lz4.h>
+#include <zlib.h>
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
@@ -40,7 +41,7 @@ namespace xdbc {
         //2 snappy
         //3 lzo
         //4 lz4
-        //5 zfp
+        //5 zlib
 
         //TODO: fix first 2 fields for zstd
         if (method == 1) {
@@ -130,10 +131,35 @@ namespace xdbc {
             }
         }
         if (method == 5) {
-            //TODO: implement
+            // Get the underlying data pointer and size from the const_buffer
+            const char *compressed_data = static_cast<const char *>(compressed_buffer.data());
+
+            // Initialize zlib stream
+            z_stream stream{};
+            stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(compressed_data));
+            stream.avail_in = static_cast<uInt>(compressed_size);
+            stream.avail_out = BUFFER_SIZE * TUPLE_SIZE;
+            stream.next_out = reinterpret_cast<Bytef *>(dst);
+
+
+            // Initialize zlib for decompression
+            if (inflateInit(&stream) != Z_OK) {
+                std::cerr << "Failed to initialize zlib for decompression" << std::endl;
+                spdlog::get("XDBC.CLIENT")->warn("ZLIB: Failed to initialize zlib for decompression ");
+                ret = 1;
+            }
+
+            // Decompress the data
+            int retZ = inflate(&stream, Z_FINISH);
+            if (retZ != Z_STREAM_END) {
+                spdlog::get("XDBC.CLIENT")->warn("ZLIB: Decompression failed with error code: {0}", zError(retZ));
+                ret = 1;
+            }
+
+            // Clean up zlib resources
+            inflateEnd(&stream);
+
         }
-
-
         return ret;
     }
 
@@ -256,7 +282,8 @@ namespace xdbc {
             //TODO: handle error types (e.g., EOF)
             if (error) {
                 spdlog::get("XDBC.CLIENT")->error("boost error while reading header: {0}", error.message());
-                spdlog::get("XDBC.CLIENT")->error("header com: {0}, size: {1}, headerBytes: {2}", header[0], header[1],
+                spdlog::get("XDBC.CLIENT")->error("header com: {0}, size: {1}, headerBytes: {2}", header[0],
+                                                  header[1],
                                                   headerBytes);
 
                 if (_totalBuffersRead > 0) {
@@ -271,9 +298,9 @@ namespace xdbc {
             size_t readBytes;
             //cout << "header | comp: " << header[0] << ", buffer size:" << header[1] << endl;
 
-            if (header[0] > 4 || header[1] > BUFFER_SIZE * TUPLE_SIZE)
-                cout << "Client: corrupt header: comp: " << header[0] << ", size: " << header[1] << ", headerBytes: "
-                     << headerBytes << endl;
+            if (header[0] > 5 || header[1] > BUFFER_SIZE * TUPLE_SIZE)
+                spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
+                                                  header[0], header[1], headerBytes);
 
             if (header[0] > 0) {
                 std::vector<char> compressed_buffer(header[1]);
@@ -284,11 +311,11 @@ namespace xdbc {
                 int decompError = decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes);
                 if (decompError == 1) {
 
-                    size_t computed_checksum = compute_crc(boost::asio::buffer(_bufferPool[bpi]));
+                    /*size_t computed_checksum = compute_crc(boost::asio::buffer(_bufferPool[bpi]));
                     if (computed_checksum != checksum) {
                         spdlog::get("XDBC.CLIENT")->warn("CHECKSUM MISMATCH expected: {0}, got: {1}",
                                                          checksum, computed_checksum);
-                    }
+                    }*/
 
                     if (header[3] == 1) {
                         shortLineitem sl = {-2, -2, -2, -2, -2, -2, -2, -2};
@@ -307,8 +334,9 @@ namespace xdbc {
 
                     }
 
-                    spdlog::get("XDBC.CLIENT")->warn("decompress error: header: comp: {0}, size: {1}, headerBytes: {2}",
-                                                     header[0], header[1], headerBytes);
+                    spdlog::get("XDBC.CLIENT")->warn(
+                            "decompress error: header: comp: {0}, size: {1}, headerBytes: {2}",
+                            header[0], header[1], headerBytes);
 
                 }
 
@@ -421,6 +449,18 @@ namespace xdbc {
         if (_finishedTransfer && emptyFlagBuffs())
             return false;
         return true;
+    }
+
+    std::string XClient::slStr(shortLineitem *t) {
+
+        return std::to_string(t->l_orderkey) + std::string(", ") +
+               std::to_string(t->l_partkey) + std::string(", ") +
+               std::to_string(t->l_suppkey) + std::string(", ") +
+               std::to_string(t->l_linenumber) + std::string(", ") +
+               std::to_string(t->l_quantity) + std::string(", ") +
+               std::to_string(t->l_extendedprice) + std::string(", ") +
+               std::to_string(t->l_discount) + std::string(", ") +
+               std::to_string(t->l_tax);
     }
 
 

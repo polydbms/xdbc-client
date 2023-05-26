@@ -66,6 +66,8 @@ namespace xdbc {
 
         void printSl(shortLineitem *t);
 
+        std::string slStr(shortLineitem *t);
+
         void finalize();
 
         bool emptyFlagBuffs();

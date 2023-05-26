@@ -43,8 +43,9 @@ int main() {
                     totalcnt++;
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
                     if (sl.l_orderkey < 0) {
-                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple: {1}", curBuffWithId.id, cnt);
-                        c.printSl(&sl);
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}, tuple: [{2}]",
+                                                     curBuffWithId.id, cnt, c.slStr(&sl));
+
                         break;
                     } else {
                         cnt++;

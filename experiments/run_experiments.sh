@@ -25,8 +25,8 @@ echo "date,comp,parallelism,cpu,network,time" >$EXECLOG
 for CPUS in 7; do
   docker update --cpus $CPUS xdbcclient
   for NETWORK in 100; do
-    #for COMP in nocomp snappy lzo lz4; do
-    for COMP in nocomp; do
+    #for COMP in nocomp snappy lzo lz4 zlib; do
+    for COMP in zlib; do
       for PAR in 4; do
         for FORMAT in 2; do
 
