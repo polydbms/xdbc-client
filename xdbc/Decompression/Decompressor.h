@@ -3,8 +3,6 @@
 
 #include <boost/asio.hpp>
 
-#define SLEEP_TIME 10ms
-
 class Decompressor {
 public:
     static int decompress_zstd(void *dst, const boost::asio::const_buffer &in, size_t in_size, int out_size);

@@ -7,8 +7,10 @@
 #include <atomic>
 #include <thread>
 #include <stack>
+#include <boost/asio.hpp>
 
-#define SLEEP_TIME 10ms
+using namespace boost::asio;
+using ip::tcp;
 
 namespace xdbc {
 
@@ -18,7 +20,7 @@ namespace xdbc {
         int buffer_size;
         int tuple_size;
         int iformat;
-        int sleep_time;
+        std::chrono::milliseconds sleep_time;
         int parallelism;
     };
 
@@ -42,15 +44,17 @@ namespace xdbc {
     class XClient {
     private:
 
-        std::string _name;
         RuntimeEnv _xdbcenv;
         std::vector<std::atomic<int>> _flagArray;
         std::atomic<int> _readState;
         std::vector<std::vector<std::byte>> _bufferPool;
-        std::atomic<bool> _finishedTransfer;
-        std::atomic<bool> _startedTransfer;
-        std::atomic<bool> _finishedReading;
+        std::vector<std::atomic<bool>> _finishedTransfer;
+        std::vector<std::atomic<bool>> _startedTransfer;
         std::atomic<int> _totalBuffersRead;
+        std::vector<std::thread> _readThreads;
+        std::vector<ip::tcp::socket> _readSockets;
+        boost::asio::io_context _ioContext;
+        boost::asio::ip::tcp::socket _baseSocket;
 
 
     public:
@@ -59,9 +63,11 @@ namespace xdbc {
 
         std::string get_name() const;
 
-        void receive(const std::string &tableName);
+        void receive(int threadno);
 
-        std::thread startReceiving(std::string tableName);
+        ip::tcp::socket initialize(const std::string &tableName);
+
+        int startReceiving(const std::string &tableName);
 
         bool hasUnread();
 
@@ -78,6 +84,10 @@ namespace xdbc {
         void finalize();
 
         bool emptyFlagBuffs();
+
+        bool tFinishedTransfer();
+
+        bool tStartedTransfer();
     };
 
 }

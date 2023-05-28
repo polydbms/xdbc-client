@@ -27,23 +27,29 @@ for CPUS in 7; do
   for NETWORK in 100; do
     #for COMP in nocomp snappy lzo lz4 zlib; do
     for COMP in zlib; do
-      for PAR in 4; do
-        for FORMAT in 2; do
+      for RPAR in 16; do
+        for NPAR in 16; do
+          for FORMAT in 2; do
+            for BUFFPOOLSIZE in 10000; do
+              for BUFFSIZE in 10000; do
 
-          echo "Running compression: $COMP, parallelism: $PAR, network: $NETWORK"
+                echo "Running cpus: $CPUS, network: $NETWORK, compression: $COMP, rparallelism: $RPAR, nparallelism: $NPAR, format: $FORMAT, bufferpool_size $BUFFPOOLSIZE, buffer_size: $BUFFSIZE"
 
-          curl -d'rate='$NETWORK'mbps' localhost:4080/xdbcclient
+                curl -d'rate='$NETWORK'mbps' localhost:4080/xdbcclient
 
-          bash $SERVER_PATH/build_and_start.sh xdbcserver 2 "-c$COMP -P$PAR -f$FORMAT" &
+                bash $SERVER_PATH/build_and_start.sh xdbcserver 2 "-c$COMP --read-parallelism=$RPAR --network-parallelism=$NPAR -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -s2" &
+                SERVER_PID=$!
 
-          SERVER_PID=$!
-          sleep 2
-          SECONDS=0
-          bash $CLIENT_PATH/build_and_start.sh xdbcclient 2
-          ELAPSED_SEC=$SECONDS
-          echo "$(date +%F),$COMP,$PAR,$CPUS,$NETWORK,$ELAPSED_SEC" >>$EXECLOG
-          echo "$(date +%F),$COMP,$PAR,$CPUS,$NETWORK,$ELAPSED_SEC"
-          kill $SERVER_PID
+                sleep 1
+                SECONDS=0
+                bash $CLIENT_PATH/build_and_start.sh xdbcclient 2 "-f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -P$NPAR -s2"
+                ELAPSED_SEC=$SECONDS
+                echo "$(date +%F),$COMP,$PAR,$CPUS,$NETWORK,$ELAPSED_SEC" >>$EXECLOG
+                echo "$(date +%F),$COMP,$PAR,$CPUS,$NETWORK,$ELAPSED_SEC"
+                kill $SERVER_PID
+              done
+            done
+          done
         done
       done
     done

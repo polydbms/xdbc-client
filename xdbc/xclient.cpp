@@ -14,8 +14,21 @@
 #include "Decompression/Decompressor.h"
 
 using namespace std;
+using namespace boost::asio;
+using ip::tcp;
 
 namespace xdbc {
+
+    std::string boolVectorToString(const std::vector<std::atomic<bool>> &vec) {
+        std::string result;
+        for (size_t i = 0; i < vec.size(); ++i) {
+            result += vec[i] ? "1" : "0";
+            if (i != vec.size() - 1) {
+                result += ",";
+            }
+        }
+        return result;
+    }
 
     uint16_t compute_checksum(const uint8_t *data, std::size_t size) {
         uint16_t checksum = 0;
@@ -58,28 +71,55 @@ namespace xdbc {
     }
 
 
+    string boolVecAsStr(vector <atomic<bool>> &vec) {
+        std::string result;
+
+        for (size_t i = 0; i < vec.size(); ++i) {
+            result += vec[i].load() ? "1" : "0";
+
+            if (i < vec.size() - 1) {
+                result += ",";
+            }
+        }
+
+        return result;
+    }
+
     void XClient::finalize() {
-        spdlog::get("XDBC.CLIENT")->info("Finalizing XClient: {0}", _name);
-        _finishedReading = true;
+        spdlog::get("XDBC.CLIENT")->info("Finalizing XClient: {0}, finishedTransfer: [{1}], startedTransfer: [{2}]",
+                                         _xdbcenv.env_name, boolVecAsStr(_finishedTransfer),
+                                         boolVecAsStr(_startedTransfer));
+        for (int i = 0; i < _xdbcenv.parallelism; i++) {
+            _readThreads[i].join();
+        }
+        _baseSocket.close();
     }
 
     XClient::XClient(const RuntimeEnv &env) :
             _xdbcenv(env),
             _bufferPool(),
             _flagArray(env.bufferpool_size),
-            _finishedTransfer(false),
-            _startedTransfer(false),
-            _finishedReading(false),
+            _finishedTransfer(env.parallelism),
+            _startedTransfer(env.parallelism),
             _readState(0),
-            _totalBuffersRead(0) {
+            _totalBuffersRead(0),
+            _readThreads(env.parallelism),
+            _readSockets(),
+            _baseSocket(_ioContext) {
 
         auto console = spdlog::stdout_color_mt("XDBC.CLIENT");
 
         spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2}, TS: {3}, iformat: {4} ",
-                                         _name, env.bufferpool_size, env.buffer_size, env.tuple_size, env.iformat);
+                                         _xdbcenv.env_name, env.bufferpool_size, env.buffer_size, env.tuple_size,
+                                         env.iformat);
 
         _bufferPool.resize(env.bufferpool_size, std::vector<std::byte>(env.buffer_size * env.tuple_size));
 
+
+        for (int i = 0; i < env.parallelism; i++) {
+            _finishedTransfer[i].store(false);
+            _startedTransfer[i].store(false);
+        }
         for (auto &i: _flagArray)
             i.store(1);
 
@@ -87,7 +127,19 @@ namespace xdbc {
 
 
     std::string XClient::get_name() const {
-        return _name;
+        return _xdbcenv.env_name;
+    }
+
+    string read_(tcp::socket &socket) {
+        boost::asio::streambuf buf;
+        boost::system::error_code error;
+        size_t bytes = boost::asio::read_until(socket, buf, "\n", error);
+
+        if (error) {
+            spdlog::get("XDBC.CLIENT")->warn("Boost error while reading: {0} ", error.message());
+        }
+        string data = boost::asio::buffer_cast<const char *>(buf.data());
+        return data;
     }
 
     void XClient::printSl(shortLineitem *t) {
@@ -102,20 +154,26 @@ namespace xdbc {
              << endl;
     }
 
-    thread XClient::startReceiving(std::string tableName) {
+    int XClient::startReceiving(const std::string &tableName) {
 
-        thread t1(&XClient::receive, this, tableName);
-        while (!_startedTransfer)
-            std::this_thread::sleep_for(SLEEP_TIME);
+        //establish base connection with server
+        _baseSocket = XClient::initialize(tableName);
+
+        //create read threads
+        for (int i = 0; i < _xdbcenv.parallelism; i++) {
+            _readThreads[i] = std::thread(&XClient::receive, this, i);
+        }
+
+
+        while (!tStartedTransfer())
+            std::this_thread::sleep_for(_xdbcenv.sleep_time);
 
         spdlog::get("XDBC.CLIENT")->info("#3 Initialized");
-        return t1;
+        return 1;
     }
 
-    void XClient::receive(const std::string &tableName) {
-        using namespace boost::asio;
-        using ip::tcp;
 
+    ip::tcp::socket XClient::initialize(const std::string &tableName) {
 
         //this is for IP address
         /*boost::asio::io_service io_service;
@@ -125,6 +183,7 @@ namespace xdbc {
          */
 
         //this is for hostname
+        //TODO: fix hardcoded hostname
         boost::asio::io_service io_service;
         ip::tcp::socket socket(io_service);
         boost::asio::ip::tcp::resolver resolver(io_service);
@@ -132,38 +191,83 @@ namespace xdbc {
         boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
         boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
 
-        //connection
-        //TODO: fix hardcoded hostname
-        spdlog::get("XDBC.CLIENT")->info("trying to connect");
+
+        spdlog::get("XDBC.CLIENT")->info("Basesocket: trying to connect");
 
         socket.connect(endpoint);
-        spdlog::get("XDBC.CLIENT")->info("connected");
+        spdlog::get("XDBC.CLIENT")->info("Basesocket: connected");
 
         const std::string msg = tableName + "\n";
         boost::system::error_code error;
         boost::asio::write(socket, boost::asio::buffer(msg), error);
 
+        string ready = read_(socket);
 
-        int bpi = 0;
+        //ready.erase(std::remove(ready.begin(), ready.end(), '\n'), ready.cend());
+        //spdlog::get("XDBC.CLIENT")->info("Basesocket: Server signaled: {0}", ready);
+
+        return socket;
+    }
+
+
+    void XClient::receive(int thr) {
+
+        boost::asio::io_service io_service;
+        ip::tcp::socket socket(io_service);
+        boost::asio::ip::tcp::resolver resolver(io_service);
+        boost::asio::ip::tcp::resolver::query query("xdbcserver", std::to_string(1234 + thr + 1));
+        boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
+        boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
+
+        while (true) {
+            try {
+                socket.connect(endpoint);
+                break;
+            } catch (const boost::system::system_error &error) {
+                std::this_thread::sleep_for(_xdbcenv.sleep_time);
+            }
+        }
+
+
+        spdlog::get("XDBC.CLIENT")->info("Read thread {0} connected to {1}:{2}",
+                                         thr, endpoint.address().to_string(), endpoint.port());
+
+        const std::string msg = to_string(thr) + "\n";
+        boost::system::error_code error;
+
+        try {
+            size_t b = boost::asio::write(socket, boost::asio::buffer(msg), error);
+        } catch (const boost::system::system_error &e) {
+            spdlog::get("XDBC.CLIENT")->warn("Could not write thread no, error: {0}", e.what());
+        }
+
+        //partition read threads
+        int minBId = thr * (_xdbcenv.bufferpool_size / _xdbcenv.parallelism);
+        int maxBId = (thr + 1) * (_xdbcenv.bufferpool_size / _xdbcenv.parallelism);
+
+        spdlog::get("XDBC.CLIENT")->info("Read thread {0} assigned ({1},{2})", thr, minBId, maxBId);
+
+
+        int bpi = minBId;
         int buffers = 0;
 
-        spdlog::get("XDBC.CLIENT")->info("#2 Entered receive thread");
-
-        //while (buffers < TOTAL_TUPLES / BUFFER_SIZE) {
+        spdlog::get("XDBC.CLIENT")->info("Read thread {0} started", thr);
         while (true) {
 
-            //cout << "Reading" << endl;
             _readState.store(0);
             int loops = 0;
             while (_flagArray[bpi] == 0) {
                 bpi++;
-                if (bpi == _xdbcenv.bufferpool_size) {
-                    bpi = 0;
+                if (bpi == maxBId) {
+                    bpi = minBId;
                     loops++;
                     if (loops == 1000000) {
                         loops = 0;
-                        spdlog::get("XDBC.CLIENT")->warn("stuck in receive");
-                        std::this_thread::sleep_for(SLEEP_TIME);
+                        spdlog::get("XDBC.CLIENT")->warn(
+                                "stuck in receive read state: {0}, total buffers: {1}, startedTransfer: {2}, finishedTransfer: {3}",
+                                _readState, _totalBuffersRead, boolVecAsStr(_startedTransfer),
+                                boolVecAsStr(_finishedTransfer));
+                        std::this_thread::sleep_for(_xdbcenv.sleep_time);
                     }
                 }
             }
@@ -180,13 +284,14 @@ namespace xdbc {
 
             //TODO: handle error types (e.g., EOF)
             if (error) {
-                spdlog::get("XDBC.CLIENT")->error("boost error while reading header: {0}", error.message());
+                spdlog::get("XDBC.CLIENT")->error("Read thread {0}: boost error while reading header: {1}", thr,
+                                                  error.message());
                 spdlog::get("XDBC.CLIENT")->error("header com: {0}, size: {1}, headerBytes: {2}", header[0],
                                                   header[1],
                                                   headerBytes);
 
-                if (_totalBuffersRead > 0) {
-                    _finishedTransfer = true;
+                if (error == boost::asio::error::eof && _totalBuffersRead > 0) {
+                    _finishedTransfer[thr].store(true);
                     break;
                 }
 
@@ -249,8 +354,8 @@ namespace xdbc {
             if (error) {
                 cout << "Client: boost error while reading body: " << error.message() << endl;
                 cout << "Client: readBytes: " << readBytes << endl;
-                if (_totalBuffersRead > 0) {
-                    _finishedTransfer = true;
+                if (error == boost::asio::error::eof && _totalBuffersRead > 0) {
+                    _finishedTransfer[thr].store(true);
                     break;
                 }
 
@@ -265,7 +370,7 @@ namespace xdbc {
             /*boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
                               boost::asio::transfer_all(), error);*/
 
-            _startedTransfer = true;
+            _startedTransfer[thr].store(true);
 
             /*for (auto x: _bufferPool[bpi]) {
 
@@ -285,9 +390,11 @@ namespace xdbc {
 
         }
         _readState.store(5);
-        _finishedTransfer.store(true);
+        _finishedTransfer[thr].store(true);
 
-        spdlog::get("XDBC.CLIENT")->info("finished transfer: {0}, #buffers: {1}", _finishedTransfer, buffers);
+        socket.close();
+        spdlog::get("XDBC.CLIENT")->info("Read thread {0} finished transfer: {1}, #buffers: {2}",
+                                         thr, _finishedTransfer[thr], buffers);
 
     }
 
@@ -295,8 +402,9 @@ namespace xdbc {
 
         int buffId = 0;
         int loops = 0;
+
         //TODO: remove workaround
-        if (_finishedTransfer)
+        if (!hasUnread())
             buffId = -1;
         else {
             while (_flagArray[buffId] == 1) {
@@ -308,10 +416,10 @@ namespace xdbc {
                         loops = 0;
                         spdlog::get("XDBC.CLIENT")->warn("stuck in getBuffer");
                         spdlog::get("XDBC.CLIENT")->warn(
-                                "finishedTransfer: {0}, emptyFlagBuffs: {1}, readState: {2}, totalBuffersRead: {3}",
-                                _finishedTransfer, emptyFlagBuffs(), _readState, _totalBuffersRead);
+                                "finishedTransfer: [{0}], emptyFlagBuffs: {1}, readState: {2}, totalBuffersRead: {3}",
+                                boolVectorToString(_finishedTransfer), emptyFlagBuffs(), _readState, _totalBuffersRead);
 
-                        std::this_thread::sleep_for(SLEEP_TIME);
+                        std::this_thread::sleep_for(_xdbcenv.sleep_time);
                     }
                 }
             }
@@ -322,7 +430,7 @@ namespace xdbc {
         if (buffId > -1) {
             curBuf.buff = _bufferPool[buffId];
             //TODO: set intermediate format dynamically
-            curBuf.iformat = 2;
+            curBuf.iformat = _xdbcenv.iformat;
             //std::copy(std::begin(_bufferPool[i]), std::end(_bufferPool[i]), std::begin(curBuf.buff));
         }
 
@@ -347,7 +455,7 @@ namespace xdbc {
     }
 
     bool XClient::hasUnread() {
-        if (_finishedTransfer && emptyFlagBuffs())
+        if (tFinishedTransfer() && emptyFlagBuffs())
             return false;
         return true;
     }
@@ -365,4 +473,23 @@ namespace xdbc {
     }
 
 
+    bool XClient::tFinishedTransfer() {
+        for (int i = 0; i < _xdbcenv.parallelism; i++)
+            if (!_finishedTransfer[i])
+                return false;
+
+        return true;
+    }
+
+    bool XClient::tStartedTransfer() {
+
+        bool t = true;
+        for (int i = 0; i < _xdbcenv.parallelism; i++)
+            t = t & _startedTransfer[i];
+
+        if (t)
+            return true;
+
+        return false;
+    }
 }

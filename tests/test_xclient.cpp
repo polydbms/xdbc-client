@@ -4,24 +4,81 @@
 #include <iomanip>
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
+#include <boost/program_options.hpp>
 
 using namespace std;
+namespace po = boost::program_options;
 
-int main() {
+xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
+    // Declare the supported options.
+    po::options_description desc("Usage: ./test_client [options]\n\nAllowed options");
+    desc.add_options()
+            ("help,h", "Produce this help message.")
+            ("intermediate-format,f", po::value<int>()->default_value(1),
+             "Set intermediate-format: \nDefault:\n  1 (row)\nOther:\n  2 (col)")
+            ("buffer-size,b", po::value<int>()->default_value(1000),
+             "Set buffer-size of buffers used to read data from the database.\nDefault: 1000")
+            ("bufferpool-size,p", po::value<int>()->default_value(1000),
+             "Set the amount of buffers used.\nDefault: 1000")
+            ("tuple-size,t", po::value<int>()->default_value(48), "Set the tuple size.\nDefault: 48")
+            ("sleep-time,s", po::value<int>()->default_value(5), "Set a sleep-time in milli seconds.\nDefault: 5ms")
+            ("parallelism,P", po::value<int>()->default_value(4), "Set the parallelism grade.\nDefault: 4");
+
+    po::positional_options_description p;
+    p.add("compression-type", 1);
+
+    po::variables_map vm;
+    po::store(po::command_line_parser(ac, av).options(desc).positional(p).run(), vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+        cout << desc << "\n";
+        exit(0);
+    }
 
     xdbc::RuntimeEnv env;
-    env.bufferpool_size = 1000;
-    env.buffer_size = 1000;
-    env.tuple_size = 48;
-    env.env_name = "Cpp Client";
-    xdbc::XClient c(env);
+
+    if (vm.count("intermediate-format")) {
+        spdlog::get("XCLIENT")->info("Intermediate format: {0}", vm["intermediate-format"].as<int>());
+        env.iformat = vm["intermediate-format"].as<int>();
+    }
+
+    if (vm.count("buffer-size")) {
+        spdlog::get("XCLIENT")->info("Buffer size: {0}", vm["buffer-size"].as<int>());
+        env.buffer_size = vm["buffer-size"].as<int>();
+    }
+    if (vm.count("bufferpool-size")) {
+        spdlog::get("XCLIENT")->info("Bufferpool size: {0}", vm["bufferpool-size"].as<int>());
+        env.bufferpool_size = vm["bufferpool-size"].as<int>();
+    }
+    if (vm.count("tuple-size")) {
+        spdlog::get("XCLIENT")->info("Tuple size: {0}", vm["tuple-size"].as<int>());
+        env.tuple_size = vm["tuple-size"].as<int>();
+    }
+    if (vm.count("sleep-time")) {
+        spdlog::get("XCLIENT")->info("Sleep time: {0} ms", vm["sleep-time"].as<int>());
+        env.sleep_time = std::chrono::milliseconds(vm["sleep-time"].as<int>());
+    }
+    if (vm.count("parallelism")) {
+        spdlog::get("XCLIENT")->info("Parallelism: {0}", vm["parallelism"].as<int>());
+        env.parallelism = vm["parallelism"].as<int>();
+    }
+
+    return env;
+}
+
+int main(int argc, char *argv[]) {
 
     auto console = spdlog::stdout_color_mt("XCLIENT");
 
+    xdbc::RuntimeEnv env = handleCMDParams(argc, argv);
+    env.env_name = "Cpp Client";
+
+    xdbc::XClient c(env);
+
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", c.get_name());
 
-    thread t1 = c.startReceiving("test_10000000");
-
+    c.startReceiving("test_10000000");
 
     int min = INT32_MAX;
     int max = INT32_MIN;
@@ -89,8 +146,8 @@ int main() {
                     totalcnt++;
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
                     if (v1[i] < 0) {
-                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple: {1}", curBuffWithId.id, cnt);
-                        spdlog::get("XCLIENT")->warn("l_orderkey: {0}", v1[i]);
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple_no: {1}, l_orderkey: {2}",
+                                                     curBuffWithId.id, cnt, v1[i]);
                         //c.printSl(&sl);
                         break;
                     } else {
@@ -108,7 +165,8 @@ int main() {
             buffsRead++;
             c.markBufferAsRead(curBuffWithId.id);
         } else {
-            cout << " found invalid buffer with id: " << curBuffWithId.id << endl;
+            spdlog::get("XCLIENT")->warn("found invalid buffer with id: {0}, buff_no: {1}",
+                                         curBuffWithId.id, buffsRead);
             break;
         }
 
@@ -128,6 +186,6 @@ int main() {
     spdlog::get("XCLIENT")->info("Total elapsed time: {0} ms, #tuples: {1}",
                                  std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), cnt);
 
-    t1.join();
+
     return 0;
 }
