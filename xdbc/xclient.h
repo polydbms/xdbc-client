@@ -22,6 +22,7 @@ namespace xdbc {
         int iformat;
         std::chrono::milliseconds sleep_time;
         int parallelism;
+        std::string table;
     };
 
     struct shortLineitem {

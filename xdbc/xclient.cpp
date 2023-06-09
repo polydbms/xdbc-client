@@ -251,7 +251,7 @@ namespace xdbc {
         int bpi = minBId;
         int buffers = 0;
 
-        spdlog::get("XDBC.CLIENT")->info("Read thread {0} started", thr);
+        //spdlog::get("XDBC.CLIENT")->info("Read thread {0} started", thr);
         while (true) {
 
             _readState.store(0);

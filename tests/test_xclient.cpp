@@ -14,6 +14,8 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
     po::options_description desc("Usage: ./test_client [options]\n\nAllowed options");
     desc.add_options()
             ("help,h", "Produce this help message.")
+            ("table,e", po::value<string>()->default_value("test_10000000"),
+             "Set table: \nDefault:\n  test_10000000")
             ("intermediate-format,f", po::value<int>()->default_value(1),
              "Set intermediate-format: \nDefault:\n  1 (row)\nOther:\n  2 (col)")
             ("buffer-size,b", po::value<int>()->default_value(1000),
@@ -38,6 +40,10 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
 
     xdbc::RuntimeEnv env;
 
+    if (vm.count("table")) {
+        spdlog::get("XCLIENT")->info("Table: {0}", vm["table"].as<string>());
+        env.table = vm["table"].as<string>();
+    }
     if (vm.count("intermediate-format")) {
         spdlog::get("XCLIENT")->info("Intermediate format: {0}", vm["intermediate-format"].as<int>());
         env.iformat = vm["intermediate-format"].as<int>();
@@ -78,7 +84,7 @@ int main(int argc, char *argv[]) {
 
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", c.get_name());
 
-    c.startReceiving("test_10000000");
+    c.startReceiving(env.table);
 
     int min = INT32_MAX;
     int max = INT32_MIN;

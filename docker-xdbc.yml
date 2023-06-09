@@ -28,10 +28,22 @@ services:
       - 15432:5432
     shm_size: '2gb'
 
+  clickhouse:
+    image: my/clickhouse-all-in-one
+    container_name: ch
+    privileged: true
+    ports:
+      - 19000:9000
+    volumes:
+      - test-data:/data
+      - chdbvol:/var/lib/clickhouse
+    shm_size: '2gb'
+
 volumes:
   test-data:
     external: true
   pgvolume1:
+  chdbvol:
 
 networks:
   default:
