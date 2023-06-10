@@ -252,7 +252,7 @@ namespace xdbc {
         int buffers = 0;
 
         //spdlog::get("XDBC.CLIENT")->info("Read thread {0} started", thr);
-        while (true) {
+        while (error != boost::asio::error::eof) {
 
             _readState.store(0);
             int loops = 0;
@@ -422,6 +422,10 @@ namespace xdbc {
                         std::this_thread::sleep_for(_xdbcenv.sleep_time);
                     }
                 }
+                if (!hasUnread()) {
+                    buffId = -1;
+                    break;
+                }
             }
         }
         buffWithId curBuf{};
@@ -474,6 +478,10 @@ namespace xdbc {
 
 
     bool XClient::tFinishedTransfer() {
+
+        if (_readState == 5)
+            return true;
+
         for (int i = 0; i < _xdbcenv.parallelism; i++)
             if (!_finishedTransfer[i])
                 return false;
