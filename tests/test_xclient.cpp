@@ -80,6 +80,20 @@ int main(int argc, char *argv[]) {
     xdbc::RuntimeEnv env = handleCMDParams(argc, argv);
     env.env_name = "Cpp Client";
 
+    //create schema
+    std::vector<std::tuple<std::string, std::string, int>> schema;
+    schema.emplace_back("l_orderkey", "INT", 4);
+    schema.emplace_back("l_partkey", "INT", 4);
+    schema.emplace_back("l_suppkey", "INT", 4);
+    schema.emplace_back("l_linenumber", "INT", 4);
+    schema.emplace_back("l_quantity", "DOUBLE", 8);
+    schema.emplace_back("l_extendedprice", "DOUBLE", 8);
+    schema.emplace_back("l_discount", "DOUBLE", 8);
+    schema.emplace_back("l_tax", "DOUBLE", 8);
+
+
+    env.schema = schema;
+
     xdbc::XClient c(env);
 
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", c.get_name());
@@ -121,7 +135,15 @@ int main(int argc, char *argv[]) {
                             max = sl.l_orderkey;
 
                     }
+                    if (buffsRead == 1) {
+
+                        /*spdlog::get("XCLIENT")->info(
+                                "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
+                                sl.l_orderkey, sl.l_partkey, sl.l_suppkey, sl.l_linenumber, sl.l_quantity,
+                                sl.l_extendedprice, sl.l_discount, sl.l_tax);*/
+                    }
                 }
+
             }
             if (curBuffWithId.iformat == 2) {
                 // Create a byte pointer to the starting address of the vector
@@ -144,16 +166,21 @@ int main(int argc, char *argv[]) {
 
                 if (buffsRead == 1) {
 
-                    spdlog::get("XCLIENT")->warn("shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
-                                                 v1[1], v2[1], v3[1], v4[1], v5[1], v6[1], v7[1], v8[1]);
+                    spdlog::get("XCLIENT")->info("first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
+                                                 v1[0], v2[0], v3[0], v4[0], v5[0], v6[0], v7[0], v8[0]);
                 }
 
                 for (int i = 0; i < env.buffer_size; i++) {
                     totalcnt++;
+                    /*if (v1[i] > 0) {
+                        spdlog::get("XCLIENT")->info(
+                                "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
+                                v1[i], v2[i], v3[i], v4[i], v5[i], v6[i], v7[i], v8[i]);
+                    }*/
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
                     if (v1[i] < 0) {
-                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple_no: {1}, l_orderkey: {2}",
-                                                     curBuffWithId.id, cnt, v1[i]);
+                        //spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple_no: {1}, l_orderkey: {2}",
+                        //                            curBuffWithId.id, cnt, v1[i]);
                         //c.printSl(&sl);
                         break;
                     } else {

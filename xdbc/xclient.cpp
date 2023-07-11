@@ -12,12 +12,35 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "Decompression/Decompressor.h"
+#include <fastpfor/codecfactory.h>
+#include <fastpfor/deltautil.h>
+#include <fpzip.h>
 
 using namespace std;
 using namespace boost::asio;
 using ip::tcp;
 
 namespace xdbc {
+    static int
+    decompress_fpz(FPZ *fpz, void *data, size_t inbytes) {
+        /* read header */
+        if (!fpzip_read_header(fpz)) {
+            spdlog::get("XDBC.CLIENT")->error("fpzip: cannot read header: {0}", fpzip_errstr[fpzip_errno]);
+            return 0;
+        }
+        /* make sure array size stored in header matches expectations */
+        if ((fpz->type == FPZIP_TYPE_FLOAT ? sizeof(float) : sizeof(double)) * fpz->nx * fpz->ny * fpz->nz * fpz->nf !=
+            inbytes) {
+            fprintf(stderr, "array size does not match dimensions from header\n");
+            return 0;
+        }
+        /* perform actual decompression */
+        if (!fpzip_read(fpz, data)) {
+            fprintf(stderr, "decompression failed: %s\n", fpzip_errstr[fpzip_errno]);
+            return 0;
+        }
+        return 1;
+    }
 
     std::string boolVectorToString(const std::vector<std::atomic<bool>> &vec) {
         std::string result;
@@ -44,7 +67,49 @@ namespace xdbc {
         return crc.checksum();
     }
 
-    int decompress(int method, void *dst, const boost::asio::const_buffer &in, size_t in_size, int out_size) {
+    int decompress_int_col(const void *src, size_t compressed_size, void *dst, int bufferSize) {
+
+
+        using namespace FastPForLib;
+        CODECFactory factory;
+        IntegerCODEC &codec = *factory.getFromName("simdfastpfor256");
+        std::vector<uint32_t> mydataback(bufferSize + 1024);
+        size_t recoveredsize = mydataback.size();
+        //size_t recoveredsize = bufferSize;
+
+
+        //spdlog::get("XDBC.CLIENT")->warn("Entered decompress_col, recoveredsize: {0}", recoveredsize);
+
+        //spdlog::get("XDBC.CLIENT")->warn("compressed size {0}", compressed_size);
+
+        codec.decodeArray(reinterpret_cast<const uint32_t *>(src), compressed_size,
+                          mydataback.data(), recoveredsize);
+
+        mydataback.resize(recoveredsize);
+
+        //spdlog::get("XDBC.CLIENT")->warn("recovered size {0}, First value: {1}, ", recoveredsize, mydataback[0]);
+
+        //void *ptr = reinterpret_cast<void *>(mydataback.data());
+
+        memcpy(dst, mydataback.data(), recoveredsize * sizeof(uint32_t));
+
+        return 0;
+    }
+
+    int decompress_double_col(const void *src, size_t compressed_size, void *dst, int bufferSize) {
+
+
+        auto fpz = fpzip_read_from_buffer(src);
+
+        auto status = decompress_fpz(fpz, dst, bufferSize * sizeof(double));
+        fpzip_read_close(fpz);
+
+        //spdlog::get("XDBC.CLIENT")->warn("fpzip status: {0}", status);
+
+        return 0;
+    }
+
+    int decompress(int method, void *dst, const void *src, size_t in_size, int out_size) {
         //1 zstd
         //2 snappy
         //3 lzo
@@ -52,19 +117,19 @@ namespace xdbc {
         //5 zlib
 
         if (method == 1)
-            return Decompressor::decompress_zstd(dst, in, in_size, out_size);
+            return Decompressor::decompress_zstd(dst, src, in_size, out_size);
 
         if (method == 2)
-            return Decompressor::decompress_snappy(dst, in, in_size, out_size);
+            return Decompressor::decompress_snappy(dst, src, in_size, out_size);
 
         if (method == 3)
-            return Decompressor::decompress_lzo(dst, in, in_size, out_size);
+            return Decompressor::decompress_lzo(dst, src, in_size, out_size);
 
         if (method == 4)
-            return Decompressor::decompress_lz4(dst, in, in_size, out_size);
+            return Decompressor::decompress_lz4(dst, src, in_size, out_size);
 
         if (method == 5)
-            return Decompressor::decompress_zlib(dst, in, in_size, out_size);
+            return Decompressor::decompress_zlib(dst, src, in_size, out_size);
 
 
         return 1;
@@ -201,6 +266,7 @@ namespace xdbc {
         boost::system::error_code error;
         boost::asio::write(socket, boost::asio::buffer(msg), error);
 
+        //std::this_thread::sleep_for(_xdbcenv.sleep_time*10);
         string ready = read_(socket);
 
         //ready.erase(std::remove(ready.begin(), ready.end(), '\n'), ready.cend());
@@ -252,6 +318,7 @@ namespace xdbc {
         int buffers = 0;
 
         //spdlog::get("XDBC.CLIENT")->info("Read thread {0} started", thr);
+
         while (error != boost::asio::error::eof) {
 
             _readState.store(0);
@@ -274,20 +341,22 @@ namespace xdbc {
 
             // getting response from server
 
-            std::array<size_t, 4> header{};
+            //std::array<size_t, 4> header{};
             _readState.store(1);
 
-            size_t headerBytes = boost::asio::read(socket, boost::asio::buffer(header),
-                                                   boost::asio::transfer_exactly(32), error);
+            Header header;
+            size_t headerBytes = boost::asio::read(socket, boost::asio::buffer(&header, sizeof(Header)),
+                                                   boost::asio::transfer_exactly(sizeof(Header)), error);
 
-            uint16_t checksum = header[2];
+            uint16_t checksum = header.crc;
 
             //TODO: handle error types (e.g., EOF)
             if (error) {
                 spdlog::get("XDBC.CLIENT")->error("Read thread {0}: boost error while reading header: {1}", thr,
                                                   error.message());
-                spdlog::get("XDBC.CLIENT")->error("header com: {0}, size: {1}, headerBytes: {2}", header[0],
-                                                  header[1],
+                spdlog::get("XDBC.CLIENT")->error("header com: {0}, size: {1}, headerBytes: {2}",
+                                                  header.compressionType,
+                                                  header.totalSize,
                                                   headerBytes);
 
                 if (error == boost::asio::error::eof && _totalBuffersRead > 0) {
@@ -300,20 +369,75 @@ namespace xdbc {
             _readState.store(2);
             //cout << "Next buffer size:" << header[0] << endl;
             size_t readBytes;
-            //cout << "header | comp: " << header[0] << ", buffer size:" << header[1] << endl;
+            /*spdlog::get("XDBC.CLIENT")->info("header: comp: {0}, size: {1}, headerbytes: {2}, firstAttbytes: {3}",
+                                             header.compressionType, header.totalSize, headerBytes,
+                                             header.attributeSize[0]);*/
 
-            if (header[0] > 5 || header[1] > _xdbcenv.buffer_size * _xdbcenv.tuple_size)
+
+            if (header.compressionType > 6)
                 spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
-                                                  header[0], header[1], headerBytes);
+                                                  header.compressionType, header.totalSize, headerBytes);
+            if (header.totalSize > _xdbcenv.buffer_size * _xdbcenv.tuple_size)
+                spdlog::get("XDBC.CLIENT")->error(
+                        "Client: corrupt body: comp: {0}, size: {1}/{2}, headerbytes: {3}",
+                        header.compressionType, header.totalSize, _xdbcenv.buffer_size * _xdbcenv.tuple_size,
+                        headerBytes);
 
-            if (header[0] > 0) {
-                std::vector<char> compressed_buffer(header[1]);
+            if (header.compressionType > 0) {
+                std::vector<char> compressed_buffer(header.totalSize);
                 readBytes = boost::asio::read(socket, boost::asio::buffer(compressed_buffer),
-                                              boost::asio::transfer_exactly(header[1]), error);
-                boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
+                                              boost::asio::transfer_exactly(header.totalSize), error);
+                //boost::asio::const_buffer buffer = boost::asio::buffer(compressed_buffer.data(), readBytes);
                 //TODO: handle errors correctly
-                int decompError = decompress(header[0], _bufferPool[bpi].data(), buffer, readBytes,
+                int decompError;
+
+
+                if (header.compressionType == 6) {
+
+                    int posInWriteBuffer = 0;
+                    size_t posInReadBuffer = 0;
+                    int i = 0;
+
+                    for (auto attribute: _xdbcenv.schema) {
+
+                        //spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}", std::get<0>(attribute));
+
+                        if (std::get<1>(attribute) == "INT") {
+
+
+                            decompError = decompress_int_col(
+                                    reinterpret_cast<const uint32_t *>(compressed_buffer.data()) +
+                                    posInReadBuffer / std::get<2>(attribute),
+                                    header.attributeSize[i] / std::get<2>(attribute),
+                                    _bufferPool[bpi].data() + posInWriteBuffer,
+                                    _xdbcenv.buffer_size);
+
+                        } else if (std::get<1>(attribute) == "DOUBLE") {
+                            /*spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}, compressed_size: {1}",
+                                                             std::get<0>(attribute), attSize);*/
+
+                            /*decompError = Decompressor::decompress_zstd(_bufferPool[bpi].data() + posInWriteBuffer,
+                                                                          compressed_buffer.data() + posInReadBuffer,
+                                                                          header.attributeSize[i],
+                                                                          _xdbcenv.buffer_size *8);*/
+                            //TODO: refactor fpzip decompression to method
+                            decompError = decompress_double_col(
+                                    compressed_buffer.data() + posInReadBuffer,
+                                    header.attributeSize[i],
+                                    _bufferPool[bpi].data() + posInWriteBuffer,
+                                    _xdbcenv.buffer_size);
+
+                        }
+                        posInWriteBuffer += _xdbcenv.buffer_size * std::get<2>(attribute);
+                        posInReadBuffer += header.attributeSize[i];
+                        i++;
+                    }
+
+                } else
+                    decompError = decompress(header.compressionType, _bufferPool[bpi].data(),
+                                             compressed_buffer.data(), readBytes,
                                              _xdbcenv.buffer_size * _xdbcenv.tuple_size);
+
                 if (decompError == 1) {
 
                     /*size_t computed_checksum = compute_crc(boost::asio::buffer(_bufferPool[bpi]));
@@ -322,11 +446,11 @@ namespace xdbc {
                                                          checksum, computed_checksum);
                     }*/
 
-                    if (header[3] == 1) {
+                    if (header.intermediateFormat == 1) {
                         shortLineitem sl = {-2, -2, -2, -2, -2, -2, -2, -2};
                         std::memcpy(_bufferPool[bpi].data(), &sl, sizeof(sl));
                     }
-                    if (header[3] == 2) {
+                    if (header.intermediateFormat == 2) {
                         int m2 = -2;
                         int bs = _xdbcenv.buffer_size;
                         std::memcpy(_bufferPool[bpi].data(), &m2, 4);
@@ -342,18 +466,19 @@ namespace xdbc {
 
                     spdlog::get("XDBC.CLIENT")->warn(
                             "decompress error: header: comp: {0}, size: {1}, headerBytes: {2}",
-                            header[0], header[1], headerBytes);
+                            header.compressionType, header.totalSize, headerBytes);
 
                 }
 
-            } else
+            } else {
                 readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
-                                              boost::asio::transfer_exactly(header[1]), error);
+                                              boost::asio::transfer_exactly(header.totalSize), error);
+            }
 
 
             if (error) {
-                cout << "Client: boost error while reading body: " << error.message() << endl;
-                cout << "Client: readBytes: " << readBytes << endl;
+                spdlog::get("XDBC.CLIENT")->error("Client: boost error while reading body: readBytes {0}, error: {1}",
+                                                  readBytes, error.message());
                 if (error == boost::asio::error::eof && _totalBuffersRead > 0) {
                     _finishedTransfer[thr].store(true);
                     break;
