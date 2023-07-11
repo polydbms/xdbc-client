@@ -11,6 +11,9 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(FastPFOR REQUIRED)
+find_package(FPZIP REQUIRED)
+find_library(FPZIP_LIBRARY NAMES fpzip)
 
 #TODO: fix hardcoded paths
 set(ZSTD_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu/libzstd.so")
@@ -31,7 +34,7 @@ set_target_properties(xdbc PROPERTIES
         PUBLIC_HEADER xdbc/xclient.h)
 
 target_include_directories(xdbc PUBLIC .)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${ZSTD_LIBRARY_PATH} ${SNAPPY_LIBRARY_PATH} Threads::Threads lzo2 lz4 zfp spdlog::spdlog_header_only ZLIB::ZLIB)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${ZSTD_LIBRARY_PATH} ${SNAPPY_LIBRARY_PATH} Threads::Threads lzo2 lz4 spdlog::spdlog_header_only ZLIB::ZLIB FastPFOR::FastPFOR ${FPZIP_LIBRARY})
 install(TARGETS xdbc
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

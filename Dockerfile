@@ -10,15 +10,29 @@ RUN apt-get upgrade -qy
 
 RUN apt install -qy cmake git
 
-RUN apt install -qy clang libboost-all-dev build-essential
+RUN apt install -qy clang libboost-all-dev build-essential libspdlog-dev
 
-RUN git clone https://github.com/gabime/spdlog.git && cd spdlog && mkdir build && cd build &&  cmake .. && make -j8 && make install
+#RUN git clone https://github.com/gabime/spdlog.git && cd spdlog && mkdir build && cd build &&  cmake .. && make -j8 && make install
 
 # install compression libs
 
 RUN apt install -qy libzstd-dev liblzo2-dev liblz4-dev libsnappy-dev libbrotli-dev
 
-RUN git clone https://github.com/LLNL/zfp.git && cd zfp && make
+#RUN git clone https://github.com/LLNL/zfp.git && cd zfp && make
+
+RUN git clone https://github.com/lemire/FastPFor.git && cd FastPFor && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    cmake --build . --config Release && \
+    make install
+
+RUN git clone https://github.com/LLNL/fpzip.git && cd fpzip && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    cmake --build . --config Release && \
+    make install
 
 RUN mkdir /xdbc-client
 
