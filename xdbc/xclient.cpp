@@ -331,7 +331,8 @@ namespace xdbc {
                     if (loops == 1000000) {
                         loops = 0;
                         spdlog::get("XDBC.CLIENT")->warn(
-                                "stuck in receive read state: {0}, total buffers: {1}, startedTransfer: {2}, finishedTransfer: {3}",
+                                "Read thread {0} stuck in receive read state: {1}, total buffers: {2}, startedTransfer: {3}, finishedTransfer: {4}",
+                                thr,
                                 _readState, _totalBuffersRead, boolVecAsStr(_startedTransfer),
                                 boolVecAsStr(_finishedTransfer));
                         std::this_thread::sleep_for(_xdbcenv.sleep_time);
@@ -360,6 +361,7 @@ namespace xdbc {
                                                   headerBytes);
 
                 if (error == boost::asio::error::eof && _totalBuffersRead > 0) {
+                    _startedTransfer[thr].store(true);
                     _finishedTransfer[thr].store(true);
                     break;
                 }
@@ -480,6 +482,7 @@ namespace xdbc {
                 spdlog::get("XDBC.CLIENT")->error("Client: boost error while reading body: readBytes {0}, error: {1}",
                                                   readBytes, error.message());
                 if (error == boost::asio::error::eof && _totalBuffersRead > 0) {
+                    _startedTransfer[thr].store(true);
                     _finishedTransfer[thr].store(true);
                     break;
                 }
@@ -490,10 +493,6 @@ namespace xdbc {
             _totalBuffersRead.fetch_add(1);
 
             _readState.store(3);
-            //cout << "Received " << readBytes << " bytes" << endl;
-            //decompress(_bufferPool[bpi].data(), BUFFER_SIZE * TUPLE_SIZE, &compressed_buffer, header[0]);
-            /*boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi]),
-                              boost::asio::transfer_all(), error);*/
 
             _startedTransfer[thr].store(true);
 
@@ -603,9 +602,6 @@ namespace xdbc {
 
 
     bool XClient::tFinishedTransfer() {
-
-        if (_readState == 5)
-            return true;
 
         for (int i = 0; i < _xdbcenv.parallelism; i++)
             if (!_finishedTransfer[i])
