@@ -7,13 +7,20 @@ services:
     restart: always
     ports:
       - 1234:1234
+      - 1235:1235
+      - 1236:1236
+      - 1237:1237
+      - 1238:1238
+    shm_size: '2gb'
     labels:
       com.docker-tc.enabled: 1
+
 
   xdbc-client:
     image: xdbc-client
     container_name: xdbcclient
     restart: always
+    shm_size: '2gb'
     labels:
       com.docker-tc.enabled: 1
 
