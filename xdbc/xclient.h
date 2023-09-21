@@ -8,6 +8,9 @@
 #include <thread>
 #include <stack>
 #include <boost/asio.hpp>
+#include <set>
+#include "queue.h"
+#include "utils.h"
 
 using namespace boost::asio;
 using ip::tcp;
@@ -25,6 +28,7 @@ namespace xdbc {
         size_t attributeComp[MAX_ATTRIBUTES];
 
     };
+    typedef std::shared_ptr<queue<int>> FBQ_ptr;
 
     struct RuntimeEnv {
         std::string env_name;
@@ -33,20 +37,15 @@ namespace xdbc {
         int tuple_size;
         int iformat;
         std::chrono::milliseconds sleep_time;
-        int parallelism;
+        int rcv_parallelism;
+        int read_parallelism;
         std::string table;
+        std::string server_host;
+        std::string server_port;
         std::vector<std::tuple<std::string, std::string, int>> schema;
-    };
-
-    struct shortLineitem {
-        int l_orderkey;
-        int l_partkey;
-        int l_suppkey;
-        int l_linenumber;
-        double l_quantity;
-        double l_extendedprice;
-        double l_discount;
-        double l_tax;
+        std::vector<FBQ_ptr> rcvBufferPtr;
+        std::vector<FBQ_ptr> readBufferPtr;
+        int mode;
     };
 
     struct buffWithId {
@@ -59,49 +58,42 @@ namespace xdbc {
     private:
 
         RuntimeEnv _xdbcenv;
-        std::vector<std::atomic<int>> _flagArray;
         std::atomic<int> _readState;
         std::vector<std::vector<std::byte>> _bufferPool;
-        std::vector<std::atomic<bool>> _finishedTransfer;
-        std::vector<std::atomic<bool>> _startedTransfer;
+        std::vector<std::atomic<bool>> _consumedAll;
         std::atomic<int> _totalBuffersRead;
-        std::vector<std::thread> _readThreads;
+        std::vector<std::thread> _rcvThreads;
+        //std::vector<std::thread> _readThreads;
         std::vector<ip::tcp::socket> _readSockets;
         boost::asio::io_context _ioContext;
         boost::asio::ip::tcp::socket _baseSocket;
 
-
     public:
 
-        explicit XClient(const RuntimeEnv &xdbcenv);
+        XClient(const RuntimeEnv &xdbcenv);
+
+        ~XClient();
 
         std::string get_name() const;
 
         void receive(int threadno);
 
-        ip::tcp::socket initialize(const std::string &tableName);
+        void initialize(const std::string &tableName);
 
         int startReceiving(const std::string &tableName);
 
-        bool hasUnread();
+        bool hasNext();
 
         buffWithId getBuffer();
 
-        void markBufferAsRead(int bufferId);
-
-        int getBufferPoolSize();
-
-        void printSl(shortLineitem *t);
-
-        std::string slStr(shortLineitem *t);
+        int getBufferPoolSize() const;
 
         void finalize();
 
-        bool emptyFlagBuffs();
+        bool tConsumedAll();
 
-        bool tFinishedTransfer();
+        void markBufferAsRead(int buffId);
 
-        bool tStartedTransfer();
     };
 
 }

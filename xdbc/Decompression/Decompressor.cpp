@@ -7,6 +7,35 @@
 #include <lzo/lzo1x.h>
 #include <lz4.h>
 #include <zlib.h>
+#include <fastpfor/codecfactory.h>
+#include <fastpfor/deltautil.h>
+#include <fpzip.h>
+
+int Decompressor::decompress(int method, void *dst, const void *src, size_t in_size, int out_size) {
+    //1 zstd
+    //2 snappy
+    //3 lzo
+    //4 lz4
+    //5 zlib
+
+    if (method == 1)
+        return Decompressor::decompress_zstd(dst, src, in_size, out_size);
+
+    if (method == 2)
+        return Decompressor::decompress_snappy(dst, src, in_size, out_size);
+
+    if (method == 3)
+        return Decompressor::decompress_lzo(dst, src, in_size, out_size);
+
+    if (method == 4)
+        return Decompressor::decompress_lz4(dst, src, in_size, out_size);
+
+    if (method == 5)
+        return Decompressor::decompress_zlib(dst, src, in_size, out_size);
+
+
+    return 1;
+}
 
 int Decompressor::decompress_zstd(void *dst, const void *src, size_t in_size, int out_size) {
     int ret = 0;
@@ -141,5 +170,67 @@ int Decompressor::decompress_zlib(void *dst, const void *src, size_t in_size, in
     // Clean up zlib resources
     inflateEnd(&stream);
     return ret;
+}
+
+int Decompressor::decompress_int_col(const void *src, size_t compressed_size, void *dst, int bufferSize) {
+
+
+    using namespace FastPForLib;
+    CODECFactory factory;
+    IntegerCODEC &codec = *factory.getFromName("simdfastpfor256");
+    std::vector<uint32_t> mydataback(bufferSize + 1024);
+    size_t recoveredsize = mydataback.size();
+    //size_t recoveredsize = bufferSize;
+
+
+    //spdlog::get("XDBC.CLIENT")->warn("Entered decompress_col, recoveredsize: {0}", recoveredsize);
+
+    //spdlog::get("XDBC.CLIENT")->warn("compressed size {0}", compressed_size);
+
+    codec.decodeArray(reinterpret_cast<const uint32_t *>(src), compressed_size,
+                      mydataback.data(), recoveredsize);
+
+    mydataback.resize(recoveredsize);
+
+    //spdlog::get("XDBC.CLIENT")->warn("recovered size {0}, First value: {1}, ", recoveredsize, mydataback[0]);
+
+    //void *ptr = reinterpret_cast<void *>(mydataback.data());
+
+    memcpy(dst, mydataback.data(), recoveredsize * sizeof(uint32_t));
+
+    return 0;
+}
+
+static int decompress_fpz(FPZ *fpz, void *data, size_t inbytes) {
+    /* read header */
+    if (!fpzip_read_header(fpz)) {
+        spdlog::get("XDBC.CLIENT")->error("fpzip: cannot read header: {0}", fpzip_errstr[fpzip_errno]);
+        return 0;
+    }
+    /* make sure array size stored in header matches expectations */
+    if ((fpz->type == FPZIP_TYPE_FLOAT ? sizeof(float) : sizeof(double)) * fpz->nx * fpz->ny * fpz->nz * fpz->nf !=
+        inbytes) {
+        fprintf(stderr, "array size does not match dimensions from header\n");
+        return 0;
+    }
+    /* perform actual decompression */
+    if (!fpzip_read(fpz, data)) {
+        fprintf(stderr, "decompression failed: %s\n", fpzip_errstr[fpzip_errno]);
+        return 0;
+    }
+    return 1;
+}
+
+int Decompressor::decompress_double_col(const void *src, size_t compressed_size, void *dst, int bufferSize) {
+
+
+    auto fpz = fpzip_read_from_buffer(src);
+
+    auto status = decompress_fpz(fpz, dst, bufferSize * sizeof(double));
+    fpzip_read_close(fpz);
+
+    //spdlog::get("XDBC.CLIENT")->warn("fpzip status: {0}", status);
+
+    return 0;
 }
 

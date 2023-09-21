@@ -5,6 +5,7 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <boost/program_options.hpp>
+#include <fstream>
 
 using namespace std;
 namespace po = boost::program_options;
@@ -24,6 +25,7 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
              "Set the amount of buffers used.\nDefault: 1000")
             ("tuple-size,t", po::value<int>()->default_value(48), "Set the tuple size.\nDefault: 48")
             ("sleep-time,s", po::value<int>()->default_value(5), "Set a sleep-time in milli seconds.\nDefault: 5ms")
+            ("mode,m", po::value<int>()->default_value(1), "1: Analytics, 2: Storage.\nDefault: 1")
             ("parallelism,P", po::value<int>()->default_value(4), "Set the parallelism grade.\nDefault: 4");
 
     po::positional_options_description p;
@@ -67,8 +69,17 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
     }
     if (vm.count("parallelism")) {
         spdlog::get("XCLIENT")->info("Parallelism: {0}", vm["parallelism"].as<int>());
-        env.parallelism = vm["parallelism"].as<int>();
+        env.rcv_parallelism = vm["parallelism"].as<int>();
+        env.read_parallelism = vm["parallelism"].as<int>();
     }
+    if (vm.count("mode")) {
+        spdlog::get("XCLIENT")->info("Mode: {0}", vm["mode"].as<int>());
+        env.mode = vm["mode"].as<int>();
+    }
+
+
+    env.server_host = "xdbcserver";
+    env.server_port = "1234";
 
     return env;
 }
@@ -94,8 +105,9 @@ int main(int argc, char *argv[]) {
 
     env.schema = schema;
 
-    xdbc::XClient c(env);
+    auto start = std::chrono::steady_clock::now();
 
+    xdbc::XClient c(env);
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", c.get_name());
 
     c.startReceiving(env.table);
@@ -106,33 +118,39 @@ int main(int argc, char *argv[]) {
     long cnt = 0;
     long totalcnt = 0;
 
-    spdlog::get("XCLIENT")->info("#4 called receive");
+    spdlog::get("XCLIENT")->info("#4 called receive, after: {0}ms",
+                                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::steady_clock::now() - start).count());
 
-    auto start = std::chrono::steady_clock::now();
+
+    std::ofstream csvFile("/dev/shm/output.csv", std::ios::out);
 
     int buffsRead = 0;
-    while (c.hasUnread()) {
+    while (c.hasNext()) {
         xdbc::buffWithId curBuffWithId = c.getBuffer();
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
-                auto *ptr = reinterpret_cast<xdbc::shortLineitem *>(curBuffWithId.buff.data());
-                std::vector<xdbc::shortLineitem> sls(ptr, ptr + env.buffer_size);
-                for (auto sl: sls) {
-                    totalcnt++;
-                    //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
-                    if (sl.l_orderkey < 0) {
-                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}, tuple: [{2}]",
-                                                     curBuffWithId.id, cnt, c.slStr(&sl));
+                auto *ptr = reinterpret_cast<Utils::shortLineitem *>(curBuffWithId.buff.data());
+                std::vector<Utils::shortLineitem> sls(ptr, ptr + env.buffer_size);
+                if (env.mode == 1) {
+                    for (auto sl: sls) {
+                        totalcnt++;
+                        //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
+                        if (sl.l_orderkey < 0) {
+                            spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}, tuple: [{2}]",
+                                                         curBuffWithId.id, cnt, Utils::slStr(&sl));
 
-                        break;
-                    } else {
-                        cnt++;
-                        sum += sl.l_orderkey;
-                        if (sl.l_orderkey < min)
-                            min = sl.l_orderkey;
-                        if (sl.l_orderkey > max)
-                            max = sl.l_orderkey;
+                            break;
+                        } else {
+                            cnt++;
+
+                            sum += sl.l_orderkey;
+                            if (sl.l_orderkey < min)
+                                min = sl.l_orderkey;
+                            if (sl.l_orderkey > max)
+                                max = sl.l_orderkey;
+                        }
 
                     }
                     if (buffsRead == 1) {
@@ -141,6 +159,22 @@ int main(int argc, char *argv[]) {
                                 "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
                                 sl.l_orderkey, sl.l_partkey, sl.l_suppkey, sl.l_linenumber, sl.l_quantity,
                                 sl.l_extendedprice, sl.l_discount, sl.l_tax);*/
+                    }
+                } else {
+                    for (auto sl: sls) {
+                        totalcnt++;
+                        if (sl.l_orderkey < 0) {
+                            spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}, tuple: [{2}]",
+                                                         curBuffWithId.id, cnt, Utils::slStr(&sl));
+
+                            break;
+                        } else {
+                            cnt++;
+                            csvFile << sl.l_orderkey << "," << sl.l_partkey << "," << sl.l_suppkey
+                                    << "," << sl.l_linenumber << "," << sl.l_quantity << "," << sl.l_extendedprice
+                                    << "," << sl.l_discount << "," << sl.l_tax << std::endl;
+
+                        }
                     }
                 }
 
@@ -204,11 +238,13 @@ int main(int argc, char *argv[]) {
         }
 
     }
-    c.finalize();
 
     spdlog::get("XCLIENT")->info("Total read buffers: {0}", buffsRead);
 
     auto end = std::chrono::steady_clock::now();
+
+    spdlog::get("XCLIENT")->info("Total elapsed time: {0} ms, #tuples: {1}",
+                                 std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), cnt);
 
     spdlog::get("XCLIENT")->info("totalcnt: {0}", totalcnt);
     spdlog::get("XCLIENT")->info("cnt: {0}", cnt);
@@ -216,9 +252,12 @@ int main(int argc, char *argv[]) {
     spdlog::get("XCLIENT")->info("max: {0}", max);
     spdlog::get("XCLIENT")->info("avg: {0}", (sum / (double) cnt));
 
-    spdlog::get("XCLIENT")->info("Total elapsed time: {0} ms, #tuples: {1}",
-                                 std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), cnt);
+    csvFile.seekp(0, std::ios::end);
+    std::streampos fileSize = csvFile.tellp();
+    spdlog::get("XCLIENT")->info("fileSize: {0}", fileSize);
+    csvFile.close();
 
+    c.finalize();
 
     return 0;
 }
