@@ -1,0 +1,1 @@
+COPY test_10000000 TO '/tmp/test_10000000.csv' DELIMITER ',';

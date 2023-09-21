@@ -24,10 +24,12 @@ fi
 #mkdir -p ${EXECLOG_DIR}
 TS=$(date +%s)
 EXECLOG=measurements/${TS}_runs_comp.csv
-echo "date,comp,rparallelism,npar,cpu,network,format,bpsize,bsize,time,datasize" >$EXECLOG
+echo "date,sys,cpu,network,comp,rparallelism,rparts,deserpar,npar,format,bpsize,bsize,time,datasize" >$EXECLOG
 
+#readmode: 1 analytics, 2 storage
+RMODE=1
 #systems=("postgres" "clickhouse")
-systems=("postgres")
+systems=("csv")
 #tables=("test_10000000" "test_1000000")
 tables=("test_10000000")
 #cpus=(.2 7)
@@ -35,52 +37,71 @@ cpus=(7)
 #networks=(100 50 25 13 6)
 networks=(100)
 #comps=("nocomp" "zstd" "snappy" "lzo" "lz4" "zlib" "cols")
-comps=("nocomp" "zstd" "cols")
+comps=("nocomp")
 #rpars=(1 2 4 8 16)
-rpars=(4)
+rpars=(8)
+#readpartitions=(1 2 4 8)
+readpartitions=(8)
+#deserpars=(8)
+deserpars=(8)
 #npars=(1 2 4 8 16)
 npars=(1)
 #formats=(1 2)
-formats=(2)
+formats=(1)
 bufpoolsizes=(1000)
 #bufpoolsizes=(1000)
 #buffsizes=(1000 10000)
-buffsizes=(10000)
+buffsizes=(1000)
 
 for SYS in "${systems[@]}"; do
   for TBL in "${tables[@]}"; do
-    for CPUS in "${cpus[@]}"; do
+    for CPU in "${cpus[@]}"; do
       docker update --cpus $CPUS xdbcclient
       for NETWORK in "${networks[@]}"; do
         for COMP in "${comps[@]}"; do
           for RPAR in "${rpars[@]}"; do
-            for NPAR in "${npars[@]}"; do
-              for FORMAT in "${formats[@]}"; do
-                for BUFFPOOLSIZE in "${bufpoolsizes[@]}"; do
-                  for BUFFSIZE in "${buffsizes[@]}"; do
+            for RPARTS in "${readpartitions[@]}"; do
+              for DESERPAR in "${deserpars[@]}"; do
+                if [ $SYS == 'csv' ]; then
+                  #docker exec xdbcserver bash -c "cd /tmp/ && split -d -n $DESERPAR ${TBL}.csv -a 2 --additional-suffix=.csv ${TBL}_"
+                  total_lines=$(docker exec xdbcserver bash -c "wc -l </dev/shm/${TBL}.csv")
+                  lines_per_file=$((($total_lines + $DESERPAR - 1) / $DESERPAR))
+                  docker exec xdbcserver bash -c "cd /dev/shm/ && split -d --lines=${lines_per_file} test_10000000.csv --additional-suffix=.csv ${TBL}_"
+                fi
+                for NPAR in "${npars[@]}"; do
+                  for FORMAT in "${formats[@]}"; do
+                    for BUFFPOOLSIZE in "${bufpoolsizes[@]}"; do
+                      for BUFFSIZE in "${buffsizes[@]}"; do
 
-                    echo "Running cpus: $CPUS, network: $NETWORK, compression: $COMP, rparallelism: $RPAR, nparallelism: $NPAR, format: $FORMAT, bufferpool_size $BUFFPOOLSIZE, buffer_size: $BUFFSIZE"
+                        echo "Running cpus: $CPU, network: $NETWORK, compression: $COMP, rparallelism: $RPAR, rpartitions: $RPARTS, nparallelism: $NPAR, format: $FORMAT, bufferpool_size $BUFFPOOLSIZE, buffer_size: $BUFFSIZE"
 
-                    curl -d'rate='$NETWORK'mbps' localhost:4080/xdbcclient
+                        curl -d'rate='$NETWORK'mbps' localhost:4080/xdbcclient
 
-                    echo "server cmd: ./xdbc-server -c$COMP --read-parallelism=$RPAR --network-parallelism=$NPAR -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -s2 --system=$SYS"
-                    bash $SERVER_PATH/build_and_start.sh xdbcserver 2 "-c$COMP --read-parallelism=$RPAR --network-parallelism=$NPAR -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -s2 --system=$SYS" &
-                    SERVER_PID=$!
+                        echo "server cmd: ./xdbc-server -c$COMP --read-parallelism=$RPAR --read-partitions=$RPARTS --deser-parallelism=$DESERPAR --network-parallelism=$NPAR -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -s1 --system=$SYS"
+                        bash $SERVER_PATH/build_and_start.sh xdbcserver 2 "-c$COMP --read-parallelism=$RPAR --read-partitions=$RPARTS --deser-parallelism=$DESERPAR --network-parallelism=$NPAR -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -s1 --system=$SYS" &
+                        #bash $SERVER_PATH/build_and_start.sh xdbcserver 2 "-c$COMP --read-parallelism=$RPAR --network-parallelism=$NPAR -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -s1 --system=$SYS" &
+                        SERVER_PID=$!
 
-                    sleep 1
-                    echo "client cmd: ./test_xclient -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -P$NPAR -s2 --table=$TBL"
-                    SECONDS=0
-                    DATASIZE=$(bash experiments_measure_network.sh "xdbcclient")
-                    bash $CLIENT_PATH/build_and_start.sh xdbcclient 2 "-f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -P$NPAR -s2 --table=$TBL"
-                    ELAPSED_SEC=$SECONDS
-                    DATASIZE="$(($(bash experiments_measure_network.sh "xdbcclient")-$DATASIZE))"
+                        sleep 1
+                        echo "client cmd: ./test_xclient -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -P$NPAR -s1 -m$RMODE --table=$TBL"
+                        SECONDS=0
+                        DATASIZE=$(bash experiments_measure_network.sh "xdbcclient")
+                        bash $CLIENT_PATH/build_and_start.sh xdbcclient 2 "-f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -P$NPAR -s1 --table=$TBL -m$RMODE"
+                        ELAPSED_SEC=$SECONDS
+                        DATASIZE="$(($(bash experiments_measure_network.sh "xdbcclient") - $DATASIZE))"
 
-                    echo "$(date +%F),$COMP,$RPAR,$NPAR,$CPUS,$NETWORK,$FORMAT,$BUFFPOOLSIZE,$BUFFSIZE,$ELAPSED_SEC,$DATASIZE" >>$EXECLOG
-                    echo "$(date +%F),$COMP,$RPAR,$NPAR,$CPUS,$NETWORK,$FORMAT,$BUFFPOOLSIZE,$BUFFSIZE,$ELAPSED_SEC,$DATASIZE"
-                    #TODO: find correct pid
-                    #kill $SERVER_PID
+                        echo "$(date +%F),$SYS,$CPU,$NETWORK,$COMP,$RPAR,$RPARTS,$DESERPAR,$NPAR,$FORMAT,$BUFFPOOLSIZE,$BUFFSIZE,$ELAPSED_SEC,$DATASIZE" >>$EXECLOG
+                        echo "$(date +%F),$SYS,$CPU,$NETWORK,$COMP,$RPAR,$RPARTS,$DESERPAR,$NPAR,$FORMAT,$BUFFPOOLSIZE,$BUFFSIZE,$ELAPSED_SEC,$DATASIZE"
+
+                        #TODO: find correct pid
+                        #kill $SERVER_PID
+                      done
+                    done
                   done
                 done
+                if [ $SYS == 'csv' ]; then
+                  docker exec xdbcserver bash -c "rm /dev/shm/${TBL}_*.csv"
+                fi
               done
             done
           done
