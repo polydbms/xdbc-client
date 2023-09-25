@@ -38,13 +38,15 @@ namespace xdbc {
         int iformat;
         std::chrono::milliseconds sleep_time;
         int rcv_parallelism;
+        int decomp_parallelism;
         int read_parallelism;
         std::string table;
         std::string server_host;
         std::string server_port;
         std::vector<std::tuple<std::string, std::string, int>> schema;
-        std::vector<FBQ_ptr> rcvBufferPtr;
-        std::vector<FBQ_ptr> readBufferPtr;
+        std::vector<FBQ_ptr> freeBufferIds;
+        std::vector<FBQ_ptr> compressedBufferIds;
+        std::vector<FBQ_ptr> decompressedBufferIds;
         int mode;
     };
 
@@ -63,10 +65,13 @@ namespace xdbc {
         std::vector<std::atomic<bool>> _consumedAll;
         std::atomic<int> _totalBuffersRead;
         std::vector<std::thread> _rcvThreads;
-        //std::vector<std::thread> _readThreads;
+        std::vector<std::thread> _decompThreads;
         std::vector<ip::tcp::socket> _readSockets;
         boost::asio::io_context _ioContext;
         boost::asio::ip::tcp::socket _baseSocket;
+        std::vector<int> _emptyDecompThreadCtr;
+        std::atomic<int> _outThreadId;
+        std::atomic<int> _markedFreeCounter{};
 
     public:
 
@@ -78,19 +83,23 @@ namespace xdbc {
 
         void receive(int threadno);
 
+        void decompress(int threadno);
+
         void initialize(const std::string &tableName);
 
         int startReceiving(const std::string &tableName);
 
-        bool hasNext();
+        bool hasNext(int readThread);
 
-        buffWithId getBuffer();
+        buffWithId getBuffer(int readThread);
 
         int getBufferPoolSize() const;
 
         void finalize();
 
         bool tConsumedAll();
+
+        int getUnconsumed();
 
         void markBufferAsRead(int buffId);
 
