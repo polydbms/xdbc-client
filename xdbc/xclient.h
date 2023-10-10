@@ -97,10 +97,6 @@ namespace xdbc {
 
         void finalize();
 
-        bool tConsumedAll();
-
-        int getUnconsumed();
-
         void markBufferAsRead(int buffId);
 
     };

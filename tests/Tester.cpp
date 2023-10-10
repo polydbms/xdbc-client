@@ -176,16 +176,15 @@ void Tester::runAnalytics() {
     spdlog::get("XCLIENT")->info("avg: {0}", (sum / (double) cnt));
 }
 
+int Tester::storageThread(int thr, std::ofstream &csvFile) {
 
-void Tester::runStorage(std::string filename) {
-
-    std::ofstream csvFile(filename, std::ios::out);
-
+    std::mutex mtx;
+    std::ostringstream csvBuffer;
     int totalcnt = 0;
     int cnt = 0;
     int buffsRead = 0;
-    while (xclient.hasNext(0)) {
-        xdbc::buffWithId curBuffWithId = xclient.getBuffer(0);
+    while (xclient.hasNext(thr)) {
+        xdbc::buffWithId curBuffWithId = xclient.getBuffer(thr);
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
@@ -200,9 +199,9 @@ void Tester::runStorage(std::string filename) {
                         break;
                     } else {
                         cnt++;
-                        csvFile << sl.l_orderkey << "," << sl.l_partkey << "," << sl.l_suppkey
-                                << "," << sl.l_linenumber << "," << sl.l_quantity << "," << sl.l_extendedprice
-                                << "," << sl.l_discount << "," << sl.l_tax << std::endl;
+                        csvBuffer << sl.l_orderkey << "," << sl.l_partkey << "," << sl.l_suppkey
+                                  << "," << sl.l_linenumber << "," << sl.l_quantity << "," << sl.l_extendedprice
+                                  << "," << sl.l_discount << "," << sl.l_tax << std::endl;
 
                     }
                 }
@@ -213,7 +212,10 @@ void Tester::runStorage(std::string filename) {
                             sl.l_orderkey, sl.l_partkey, sl.l_suppkey, sl.l_linenumber, sl.l_quantity,
                             sl.l_extendedprice, sl.l_discount, sl.l_tax);*/
                 }
+                std::lock_guard<std::mutex> lock(mtx);
+                csvFile << csvBuffer.str();
 
+                csvBuffer.str("");
             }
             if (curBuffWithId.iformat == 2) {
                 // Create a byte pointer to the starting address of the vector
@@ -249,9 +251,13 @@ void Tester::runStorage(std::string filename) {
                                 v1[i], v2[i], v3[i], v4[i], v5[i], v6[i], v7[i], v8[i]);
                     }*/
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
-                    csvFile << v1[i] << "," << v2[i] << "," << v3[i] << "," << v4[i] << "," << v5[i] << ","
-                            << v6[i] << "," << v7[i] << "," << v8[i] << std::endl;
+                    csvBuffer << v1[i] << "," << v2[i] << "," << v3[i] << "," << v4[i] << "," << v5[i] << ","
+                              << v6[i] << "," << v7[i] << "," << v8[i] << std::endl;
                 }
+                std::lock_guard<std::mutex> lock(mtx);
+                csvFile << csvBuffer.str();
+
+                csvBuffer.str("");
 
             }
             buffsRead++;
@@ -264,7 +270,33 @@ void Tester::runStorage(std::string filename) {
 
     }
 
-    spdlog::get("XCLIENT")->info("Total read buffers: {0}", buffsRead);
+    spdlog::get("XCLIENT")->info("Read thread {0} Total read buffers: {1}", thr, buffsRead);
+
+    return buffsRead;
+}
+
+
+void Tester::runStorage(const std::string &filename) {
+
+
+    xclient.startReceiving(env.table);
+    spdlog::get("XCLIENT")->info("#4 called receive, after: {0}ms",
+                                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::steady_clock::now() - start).count());
+
+    std::ofstream csvFile(filename, std::ios::out);
+
+    std::thread readThreads[env.read_parallelism];
+
+    for (int i = 0; i < env.read_parallelism; i++) {
+        readThreads[i] = std::thread(&Tester::storageThread, this, i, std::ref(csvFile));
+    }
+
+
+    for (int i = 0; i < env.read_parallelism; i++) {
+        readThreads[i].join();
+    }
+
 
     csvFile.seekp(0, std::ios::end);
     std::streampos fileSize = csvFile.tellp();
@@ -273,6 +305,7 @@ void Tester::runStorage(std::string filename) {
 
 
 }
+
 
 
 

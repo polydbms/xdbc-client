@@ -10,7 +10,7 @@ public:
 
     void runAnalytics();
 
-    void runStorage(std::string filename);
+    void runStorage(const std::string &filename);
 
     void close();
 
@@ -22,6 +22,8 @@ private:
     std::chrono::steady_clock::time_point start;
 
     int analyticsThread(int thr, int &mins, int &maxs, long &sums, long &cnts, long &totalctns);
+
+    int storageThread(int thr, std::ofstream& csvFile);
 
 
 };

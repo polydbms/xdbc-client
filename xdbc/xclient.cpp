@@ -22,7 +22,6 @@ namespace xdbc {
     XClient::XClient(const RuntimeEnv &env) :
             _xdbcenv(env),
             _bufferPool(),
-            _consumedAll(env.rcv_parallelism),
             _readState(0),
             _totalBuffersRead(0),
             _decompThreads(env.decomp_parallelism),
@@ -45,7 +44,6 @@ namespace xdbc {
 
 
         for (int i = 0; i < env.read_parallelism; i++) {
-            _consumedAll[i].store(false);
             _emptyDecompThreadCtr[i] = 0;
         }
 
@@ -58,8 +56,8 @@ namespace xdbc {
 
     void XClient::finalize() {
         spdlog::get("XDBC.CLIENT")->info(
-                "Finalizing XClient: {0}, shutting down {1} threads, read state {2}, consumedAll {3}, baseSocket {4}",
-                _xdbcenv.env_name, _xdbcenv.rcv_parallelism, _readState, tConsumedAll(), _baseSocket.is_open());
+                "Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads",
+                _xdbcenv.env_name, _xdbcenv.rcv_parallelism, _xdbcenv.decomp_parallelism);
 
         for (int i = 0; i < _xdbcenv.rcv_parallelism; i++) {
             _rcvThreads[i].join();
@@ -415,7 +413,16 @@ namespace xdbc {
         spdlog::get("XDBC.CLIENT")->warn("Decomp thread {0} finished", thr);
     }
 
+    //TODO: handle parallelism internally
+    bool XClient::hasNext(int readThreadId) {
 
+        if (_emptyDecompThreadCtr[readThreadId] == _xdbcenv.decomp_parallelism)
+            return false;
+
+        return true;
+    }
+
+    //TODO: handle parallelism internally
     buffWithId XClient::getBuffer(int readThreadId) {
 
         int buffId = _xdbcenv.decompressedBufferIds[readThreadId]->pop();
@@ -440,23 +447,6 @@ namespace xdbc {
 
     int XClient::getBufferPoolSize() const {
         return _xdbcenv.bufferpool_size;
-    }
-
-    bool XClient::hasNext(int readThreadId) {
-
-        if (_emptyDecompThreadCtr[readThreadId] == _xdbcenv.decomp_parallelism)
-            return false;
-
-        return true;
-    }
-
-    bool XClient::tConsumedAll() {
-
-        for (int i = 0; i < _xdbcenv.read_parallelism; i++)
-            if (!_consumedAll[i])
-                return false;
-
-        return true;
     }
 
     void XClient::markBufferAsRead(int buffId) {
