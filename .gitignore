@@ -1,4 +1,5 @@
 build/*
 cmake-build-debug/*
 .idea/*
-experiments/measurements/*
+experiments/local_measurements/*
+__pycache__/
