@@ -7,6 +7,12 @@ CONTAINER=$1
 OPTION=$2
 #$3 run params (for now compression library)
 RUNPARAMS=$3
+INTERACTIVE=$4
+IT=""
+
+if [[ $INTERACTIVE == "" ]]; then
+  IT="-it"
+fi
 
 #copy files & build
 if [ $OPTION == 1 ] || [ $OPTION == 3 ]; then
@@ -19,12 +25,12 @@ if [ $OPTION == 1 ] || [ $OPTION == 3 ]; then
   docker cp ${DIR}/CMakeLists.txt $CONTAINER:/xdbc-client/
 
   #build & install
-  docker exec -it $CONTAINER bash -c "cd xdbc-client/ && rm -rf build/ && mkdir build && cd build && cmake .. && make -j8 && make install"
-  docker exec -it $CONTAINER bash -c "cd xdbc-client/tests && rm -rf build/ && mkdir build && cd build && cmake .. && make -j8"
+  docker exec $IT $CONTAINER bash -c "cd xdbc-client/ && rm -rf build/ && mkdir build && cd build && cmake .. && make -j8 && make install"
+  docker exec $IT $CONTAINER bash -c "cd xdbc-client/tests && rm -rf build/ && mkdir build && cd build && cmake .. && make -j8"
 
 fi
 
 # run
 if [[ $OPTION != 3 ]]; then
-  docker exec -it $CONTAINER bash -c "cd xdbc-client/tests/build && ./test_xclient ${RUNPARAMS}"
+  docker exec $IT $CONTAINER bash -c "cd xdbc-client/tests/build && ./test_xclient ${RUNPARAMS}"
 fi

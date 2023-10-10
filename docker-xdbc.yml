@@ -36,8 +36,8 @@ services:
     shm_size: '2gb'
 
   clickhouse:
-    #image: my/clickhouse-all-in-one
-    image: clickhousedb
+    image: my/clickhouse-all-in-one
+    #image: clickhousedb
     container_name: ch
     privileged: true
     ports:

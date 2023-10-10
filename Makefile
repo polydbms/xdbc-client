@@ -1,2 +1,2 @@
 build_dockerimage:
-	docker build -f Dockerfile -t xdbc-client .
+	docker build --no-cache -f Dockerfile -t xdbc-client .

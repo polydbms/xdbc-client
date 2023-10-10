@@ -1,4 +1,4 @@
-CREATE TABLE test_10000000 (LIKE pg1_sf1_lineitem);
+CREATE TABLE test_10000000 (LIKE pg1_sf10_lineitem);
 ALTER TABLE test_10000000 DROP COLUMN l_returnflag;
 ALTER TABLE test_10000000 DROP COLUMN l_linestatus;
 ALTER TABLE test_10000000 DROP COLUMN l_shipdate;
