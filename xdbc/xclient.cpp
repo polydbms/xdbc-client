@@ -10,7 +10,9 @@
 #include <numeric>
 
 #include "spdlog/spdlog.h"
+#include "spdlog/stopwatch.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
+#include "spdlog/sinks/basic_file_sink.h"
 #include "Decompression/Decompressor.h"
 
 
@@ -33,6 +35,37 @@ namespace xdbc {
             _baseSocket(_ioContext) {
 
         auto console = spdlog::stdout_color_mt("XDBC.CLIENT");
+        auto file_log = spdlog::basic_logger_mt("XDBC.CLIENT.FILE", "xdbcclient.txt", true);
+        file_log->set_pattern("%t, %v, %E.%Fs");
+
+        spdlog::get("XDBC.CLIENT.FILE")->info("Client");
+
+        // Sollte eigentlich ein multithreaded logger sein, der gleichzeitig in die console und in eine Datei loggt. Gibt aber einen segmentation fault!
+        /*        std::vector<spdlog::sink_ptr> sinks;
+        sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+        sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("xdbcclient.txt", true));
+        auto combined_logger = std::make_shared<spdlog::logger>("XDBC.CLIENT", begin(sinks), end(sinks));
+        spdlog::register_logger(combined_logger);
+
+        try
+        {
+            // Set up spdlog logger
+            auto testlogger = spdlog::get("XDBC.CLIENT");
+            if (!testlogger)
+            {
+                throw std::runtime_error("Logger not found");
+            }
+
+            // Log a message
+            testlogger->error("Hello, World!");
+        }
+        catch (const std::exception& e)
+        {
+            // Handle exception and print error message
+            std::cout << "Error: " << e.what() << std::endl;
+            //spdlog::get("XDBC.CLIENT")->error("Yep, an errror!");
+        }*/
+
 
         spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2}, TS: {3}, iformat: {4} ",
                                          _xdbcenv.env_name, env.bufferpool_size, env.buffer_size, env.tuple_size,
@@ -52,6 +85,7 @@ namespace xdbc {
 
     XClient::~XClient() {
         // Destructor implementation...
+        spdlog::get("XDBC.CLIENT.FILE")->info("Client");
     }
 
     void XClient::finalize() {
@@ -131,6 +165,8 @@ namespace xdbc {
         socket.connect(tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234));
          */
 
+        spdlog::get("XDBC.CLIENT.FILE")->info("Connection");
+
         //this is for hostname
 
         boost::asio::ip::tcp::resolver resolver(_ioContext);
@@ -153,6 +189,7 @@ namespace xdbc {
         //ready.erase(std::remove(ready.begin(), ready.end(), '\n'), ready.cend());
         spdlog::get("XDBC.CLIENT")->info("Basesocket: Server signaled: {0}", ready);
 
+        spdlog::get("XDBC.CLIENT.FILE")->info("Connection");
         //return socket;
 
     }
@@ -160,6 +197,7 @@ namespace xdbc {
 
     void XClient::receive(int thr) {
         spdlog::get("XDBC.CLIENT")->info("Entered receive thread {0} ", thr);
+        spdlog::get("XDBC.CLIENT.FILE")->info("Receive data");
         boost::asio::io_service io_service;
         ip::tcp::socket socket(io_service);
         boost::asio::ip::tcp::resolver resolver(io_service);
@@ -293,10 +331,11 @@ namespace xdbc {
         socket.close();
 
         spdlog::get("XDBC.CLIENT")->info("Receive thread {0} #buffers: {1}", thr, buffers);
+        spdlog::get("XDBC.CLIENT.FILE")->info("Receive data");
     }
 
-    void XClient::decompress(int thr) {
-
+    void XClient::  decompress(int thr) {
+        spdlog::get("XDBC.CLIENT.FILE")->info("Decompress data");
 
         int readThrId = 0;
         int emptyCtr = 0;
@@ -411,6 +450,7 @@ namespace xdbc {
             _xdbcenv.decompressedBufferIds[i]->push(-1);
 
         spdlog::get("XDBC.CLIENT")->warn("Decomp thread {0} finished", thr);
+        spdlog::get("XDBC.CLIENT.FILE")->info("Decompress data");
     }
 
     //TODO: handle parallelism internally
