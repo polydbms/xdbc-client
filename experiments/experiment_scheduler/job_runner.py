@@ -38,7 +38,7 @@ def run_job(ssh, host, config):
         execute_ssh_cmd(ssh, f"curl -s -d 'rate={config['network']}mbps' localhost:4080/xdbcclient")
 
         execute_ssh_cmd(ssh,
-                        f"bash {server_path}/build_and_start.sh xdbcserver 2 \"-c{config['compression']} --read-parallelism={config['server_read_par']} --read-partitions={config['server_read_partitions']} --deser-parallelism={config['server_deser_par']} --network-parallelism={config['network_parallelism']} -f{config['format']} -b{config['buff_size']} -p{config['bufpool_size']} -s1 --system={config['system']}\"",
+                        f"bash {server_path}/build_and_start.sh xdbcserver 2 \"-c{config['compression']} --read-parallelism={config['server_read_par']} --read-partitions={config['server_read_partitions']} --deser-parallelism={config['server_deser_par']} --compression-parallelism={config['server_comp_par']} --network-parallelism={config['network_parallelism']} -f{config['format']} -b{config['buff_size']} -p{config['bufpool_size']} -s1 --system={config['system']}\"",
                         True)
         # TODO: fix? maybe check when server has started instead of sleeping
         time.sleep(2)

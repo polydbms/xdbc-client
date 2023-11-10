@@ -64,7 +64,7 @@ def execute_ssh_cmd(ssh, cmd, background=False):
                 hostname = socket.gethostbyaddr(ip_address)[0]
             except socket.herror:
                 hostname = ip_address
-            print(f"error on host: {hostname}, cmd: {cmd}, error: {error_output}")
+            raise SSHExecutionError(f"error on host: {hostname}, cmd: {cmd}, error: {error_output}")
     return stdout.read().decode().strip()
 
 

@@ -35,12 +35,16 @@ print(f"Starting experiments, jobs to run: {jobs_to_run}")
 ssh_connections = create_ssh_connections(hosts)
 signal.signal(signal.SIGINT, close_ssh_connections)
 
-
 # print(ssh_connections)
+xdbc_version = 2
 
 
 def write_csv_header(filename, config):
-    header = ['date', 'host'] + list(config.keys()) + ['time', 'datasize']
+    header = ['date', 'xdbc_version', 'host', 'run', 'system', 'table', 'compression', 'format', 'network_parallelism',
+              'bufpool_size',
+              'buff_size', 'network', 'client_readmode', 'client_cpu', 'client_read_par', 'client_decomp_par',
+              'server_cpu', 'server_read_par', 'server_read_partitions', 'server_deser_par', 'server_comp_par', 'time',
+              'datasize']
 
     with open(filename, mode="w", newline="") as file:
         writer = csv.writer(file)
@@ -51,23 +55,35 @@ def write_csv_header(filename, config):
 def write_to_csv(filename, host, config, result):
     with open(filename, mode="a", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow([result['date']] + [host] + list(config.values()) + [result['time'], result['size']])
+        writer.writerow(
+            [result['date']] + [xdbc_version, host] + [1, config['system'], config['table'], config['compression'],
+                                                       config['format'], config['network_parallelism'],
+                                                       config['bufpool_size'],
+                                                       config['buff_size'], config['network'],
+                                                       config['client_readmode'],
+                                                       config['client_cpu'], config['client_read_par'],
+                                                       config['client_decomp_par'],
+                                                       config['server_cpu'], config['server_read_par'],
+                                                       config['server_read_partitions'], config['server_deser_par'],
+                                                       config['server_comp_par']] + [result['time'], result['size']])
 
 
 # Function to be executed by each thread
 def worker(host, filename):
     while True:
         try:
-            config = experiment_queue.get(timeout=1)
+            config = experiment_queue.get()
         except queue.Empty:
             break
         else:
             result = run_job(ssh_connections[host], host, config)
             experiment_queue.task_done()
-            pbar.update(1)
+            pbar.update()
             if result is not None:
                 write_to_csv(filename, host, config, result)
             elif not ssh_connections[host].get_transport() or not ssh_connections[host].get_transport().is_active():
+                # print(f"Adding back to queue: {config}")
+                # experiment_queue.put(config)
                 break
         # break
 

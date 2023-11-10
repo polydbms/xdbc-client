@@ -1,9 +1,11 @@
-import itertools
+from itertools import product
+from itertools import groupby
+import pandas as pd
 import queue
 import random
-import csv
 
 hosts = [
+    "sr630-wn-a-02.dima.tu-berlin.de",
     "sr630-wn-a-03.dima.tu-berlin.de",
     "sr630-wn-a-04.dima.tu-berlin.de",
     "sr630-wn-a-05.dima.tu-berlin.de",
@@ -64,86 +66,100 @@ hosts = [
 ]
 
 params = {
-    "run": [1],
+    "client_cpu": [7, 1, .2],
+    "server_cpu": [7, 1, .2],
+    "network": [6, 50, 100],
     "system": ["csv"],
     "table": ["test_10000000"],
+    "bufpool_size": [1000],
+    "buff_size": [1000],
     "compression": ["nocomp", "zstd", "snappy", "lzo", "lz4", "zlib", "cols"],
     "format": [1, 2],
     "network_parallelism": [1, 2, 4],
-    "bufpool_size": [1000],
-    "buff_size": [1000, 10000],
-    "network": [100, 50, 6],
     "client_readmode": [2],
-    "client_cpu": [7, 1, .2],
     "client_read_par": [1, 2, 4],
-    "client_decomp_par": [1, 2, 4, 8],
-    "server_cpu": [7, 1, .2],
-    "server_read_par": [1, 2, 4, 8],
-    "server_read_partitions": [1, 2, 4, 8],
-    "server_deser_par": [1, 2, 4, 8],
+    "client_decomp_par": [1, 2, 4],
+    "server_read_par": [1, 2, 4],
+    "server_read_partitions": [1, 2, 4],
+    "server_deser_par": [1, 2, 4],
+    "server_comp_par": [1, 2, 4]
 }
 
 
-def generate_param_combinations():
-    # Extract parameter names and values from the configurations dictionary
-    param_names = list(params.keys())
-    param_values = list(params.values())
-
-    # Generate all possible combinations of parameter values
-    param_combinations = list(itertools.product(*param_values))
-
-    # Create a list of dictionaries, each representing a parameter combination
-    param_dicts = []
-    for combo in param_combinations:
-        param_dict = {param_names[i]: combo[i] for i in range(len(param_names))}
-        param_dicts.append(param_dict)
-
-    return param_dicts
-
-
 def get_experiment_queue(filename=None):
-    recorded_configs = set()
+    # Columns that should not be considered when comparing combinations
+    exclude_columns = ["run", "date", "host", "time", "datasize"]  # Add more columns if needed
 
-    # If a filename is provided, read the existing CSV file and extract recorded configurations
+    recorded_experiments = []
+
     if filename:
         try:
-            with open(filename, mode="r") as file:
-                reader = csv.DictReader(file)
-                for row in reader:
-                    # Extract relevant configuration columns from the CSV and convert values to strings
-                    config = {key: str(row[key]) for key in params.keys()}
-                    recorded_configs.add(tuple(config.values()))
-        except FileNotFoundError:
-            # If the file doesn't exist, there are no recorded configurations
-            pass
+            df = pd.read_csv(filename)
 
-    # Generate all possible configurations
-    configurations = generate_param_combinations()
+            # Remove excluded columns for an accurate comparison
+            for col in exclude_columns:
+                if col in df.columns:
+                    df = df.drop(columns=[col])
 
-    # Filter out configurations that have already been recorded, and convert values to strings for comparison
-    remaining_configs = [config for config in configurations if
-                         tuple(str(val) for val in config.values()) not in recorded_configs]
+            # Convert DataFrame records to dictionaries and then to a set of frozensets for faster operations
+            recorded_experiments = [frozenset(record.items()) for record in df.to_dict('records')]
 
-    # Shuffle the remaining configurations randomly
-    random.shuffle(remaining_configs)
+        except Exception as e:
+            print(f"An error occurred while reading the CSV file: {e}. Proceeding with all possible combinations.")
 
-    total_combinations = len(configurations)
-    recorded_combinations = len(recorded_configs)
-    remaining_combinations = len(remaining_configs)
+    # Generate all possible combinations from the parameters
+    keys, values = zip(*params.items())
+    all_combinations = [frozenset(zip(keys, v)) for v in product(*values)]
 
+    # Convert the list of recorded experiments to a set for faster membership checking
+    recorded_experiments_set = set(recorded_experiments)
+
+    # Find the difference between all possible combinations and recorded experiments
+    remaining_combinations = set(all_combinations) - recorded_experiments_set
+
+    # Convert the frozensets back to dictionaries
+    remaining_combinations_list = [dict(comb) for comb in remaining_combinations]
+
+    # Shuffle the remaining combinations
+    # random.shuffle(remaining_combinations_list)
+
+    # Sort by non-environment parameters
+    environment_params = ["client_cpu", "server_cpu", "network"]
+
+    # Function to get the key for non-environment parameters
+    def non_env_key(config):
+        return tuple(str(config[k]) for k in sorted(config.keys()) if k not in environment_params)
+
+    # Group the configurations based on non-environment parameters
+    sorted_list = sorted(remaining_combinations_list, key=non_env_key)
+    grouped = [(key, list(group)) for key, group in groupby(sorted_list, key=non_env_key)]
+
+    # Shuffle the groups
+    random.shuffle(grouped)
+
+    # Flatten the shuffled groups back to a list
+    shuffled_grouped_list = []
+    for _, group in grouped:
+        shuffled_grouped_list.extend(group)
+
+    remaining_combinations_list = shuffled_grouped_list
+
+    print('\n'.join(str(comb) for comb in remaining_combinations_list[:5]))
+
+    # Initialize a queue and add the remaining combinations to it
+    experiment_queue = queue.Queue()
+    for item in remaining_combinations_list:
+        experiment_queue.put(item)
+
+    # Counters
+    total_combinations = len(all_combinations)
+    recorded_combinations = len(recorded_experiments_set)
+    remaining_combinations = experiment_queue.qsize()  # Getting the size of the queue
+
+    # Print the statistics
     print(f"Total generated combinations: {total_combinations}")
     print(f"Recorded combinations: {recorded_combinations}")
     print(f"Remaining combinations to run: {remaining_combinations}")
 
-    experiment_queue = queue.Queue()
-
-    # Put all remaining configurations in the queue
-    for config in remaining_configs:
-        experiment_queue.put(config)
-
-    # Print the first 10 elements in the queue as samples without removing them
-    sample_configs = remaining_configs[:10]
-    for i, config in enumerate(sample_configs, 1):
-        print(f"Sample Configuration {i}: {config}")
-
+    # Return the total number of combinations and the experiment queue
     return total_combinations, experiment_queue
