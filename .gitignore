@@ -3,3 +3,7 @@ cmake-build-debug/*
 .idea/*
 experiments/local_measurements/*
 __pycache__/
+**/plots/.ipynb_checkpoints/
+**/plots/myvenv
+**/plots/*.pdf
+**/plots/*.csv
