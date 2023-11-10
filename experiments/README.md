@@ -5,7 +5,7 @@
 - Build postgres container (instructions in the xdb repo under ``docker/postgres``)
 - Build xdbc-client and xdbc-server containers through their respective ``make`` files
 - Start the xdbc & postgres environment: ``docker-compose -f docker-xdbc.yml``
-- Load data & create test table with ``create_test_table.sql``
+- Load data & create test table with ``create_test_table_and_import.sql``
 - Start the "traffic controller": ``docker-compose -f docker-tc.yml``
 
 ## Run experiments

@@ -7,3 +7,4 @@ __pycache__/
 **/plots/myvenv
 **/plots/*.pdf
 **/plots/*.csv
+experiments/experiment_scheduler/measurements/*
