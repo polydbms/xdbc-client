@@ -30,7 +30,9 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
             ("net-parallelism,n", po::value<int>()->default_value(4), "Set the network parallelism grade.\nDefault: 1")
             ("read-parallelism,r", po::value<int>()->default_value(4), "Set the read parallelism grade.\nDefault: 1")
             ("decomp-parallelism,d", po::value<int>()->default_value(4),
-             "Set the decompression parallelism grade.\nDefault: 1");
+             "Set the decompression parallelism grade.\nDefault: 1")
+            ("transfer-id,tid", po::value<long>()->default_value(0),
+             "Set the transfer id.\nDefault: 0");
 
     po::positional_options_description p;
     p.add("compression-type", 1);
@@ -86,6 +88,10 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
     if (vm.count("mode")) {
         spdlog::get("XCLIENT")->info("Mode: {0}", vm["mode"].as<int>());
         env.mode = vm["mode"].as<int>();
+    }
+    if (vm.count("transfer-id")) {
+        spdlog::get("XCLIENT")->info("Transfer id: {0}", vm["transfer-id"].as<long>());
+        env.transfer_id = vm["transfer-id"].as<long>();
     }
 
 

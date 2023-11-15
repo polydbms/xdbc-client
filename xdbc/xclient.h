@@ -31,6 +31,7 @@ namespace xdbc {
     typedef std::shared_ptr<queue<int>> FBQ_ptr;
 
     struct RuntimeEnv {
+        long transfer_id;
         std::string env_name;
         int bufferpool_size;
         int buffer_size;
