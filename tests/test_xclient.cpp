@@ -11,7 +11,7 @@
 using namespace std;
 namespace po = boost::program_options;
 
-xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
+void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
     // Declare the supported options.
     po::options_description desc("Usage: ./test_client [options]\n\nAllowed options");
     desc.add_options()
@@ -45,8 +45,6 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
         cout << desc << "\n";
         exit(0);
     }
-
-    xdbc::RuntimeEnv env;
 
     if (vm.count("table")) {
         spdlog::get("XCLIENT")->info("Table: {0}", vm["table"].as<string>());
@@ -98,14 +96,21 @@ xdbc::RuntimeEnv handleCMDParams(int ac, char *av[]) {
     env.server_host = "xdbcserver";
     env.server_port = "1234";
 
-    return env;
+    env.rcv_time = 0;
+    env.decomp_time = 0;
+    env.read_time = 0;
+
+    env.rcv_wait_time = 0;
+    env.decomp_wait_time = 0;
+    env.read_wait_time = 0;
 }
 
 int main(int argc, char *argv[]) {
 
     auto console = spdlog::stdout_color_mt("XCLIENT");
 
-    xdbc::RuntimeEnv env = handleCMDParams(argc, argv);
+    xdbc::RuntimeEnv env;
+    handleCMDParams(argc, argv, env);
     env.env_name = "Cpp Client";
 
     //create schema

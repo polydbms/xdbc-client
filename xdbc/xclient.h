@@ -41,6 +41,12 @@ namespace xdbc {
         int rcv_parallelism;
         int decomp_parallelism;
         int read_parallelism;
+        std::atomic<long long> rcv_wait_time;
+        std::atomic<long long> decomp_wait_time;
+        std::atomic<long long> read_wait_time;
+        std::atomic<long long> rcv_time;
+        std::atomic<long long> decomp_time;
+        std::atomic<long long> read_time;
         std::string table;
         std::string server_host;
         std::string server_port;
@@ -60,7 +66,7 @@ namespace xdbc {
     class XClient {
     private:
 
-        RuntimeEnv _xdbcenv;
+        RuntimeEnv *_xdbcenv;
         std::atomic<int> _readState;
         std::vector<std::vector<std::byte>> _bufferPool;
         std::vector<std::atomic<bool>> _consumedAll;
@@ -76,7 +82,7 @@ namespace xdbc {
 
     public:
 
-        XClient(const RuntimeEnv &xdbcenv);
+        XClient(RuntimeEnv &xdbcenv);
 
         ~XClient();
 

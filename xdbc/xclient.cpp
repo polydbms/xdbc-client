@@ -21,8 +21,8 @@ using ip::tcp;
 
 namespace xdbc {
 
-    XClient::XClient(const RuntimeEnv &env) :
-            _xdbcenv(env),
+    XClient::XClient(RuntimeEnv &env) :
+            _xdbcenv(&env),
             _bufferPool(),
             _readState(0),
             _totalBuffersRead(0),
@@ -68,7 +68,7 @@ namespace xdbc {
 
 
         spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2}, TS: {3}, iformat: {4} ",
-                                         _xdbcenv.env_name, env.bufferpool_size, env.buffer_size, env.tuple_size,
+                                         _xdbcenv->env_name, env.bufferpool_size, env.buffer_size, env.tuple_size,
                                          env.iformat);
 
         // populate bufferpool with empty vectors (header + payload)
@@ -91,13 +91,13 @@ namespace xdbc {
     void XClient::finalize() {
         spdlog::get("XDBC.CLIENT")->info(
                 "Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads",
-                _xdbcenv.env_name, _xdbcenv.rcv_parallelism, _xdbcenv.decomp_parallelism);
+                _xdbcenv->env_name, _xdbcenv->rcv_parallelism, _xdbcenv->decomp_parallelism);
 
-        for (int i = 0; i < _xdbcenv.rcv_parallelism; i++) {
+        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
             _rcvThreads[i].join();
         }
 
-        for (int i = 0; i < _xdbcenv.decomp_parallelism; i++) {
+        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) {
             _decompThreads[i].join();
         }
         _baseSocket.close();
@@ -107,7 +107,7 @@ namespace xdbc {
 
 
     std::string XClient::get_name() const {
-        return _xdbcenv.env_name;
+        return _xdbcenv->env_name;
     }
 
     std::string read_(tcp::socket &socket) {
@@ -128,27 +128,27 @@ namespace xdbc {
         XClient::initialize(tableName);
 
         //create rcv threads
-        for (int i = 0; i < _xdbcenv.rcv_parallelism; i++) {
+        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
             FBQ_ptr q(new queue<int>);
-            _xdbcenv.freeBufferIds.push_back(q);
+            _xdbcenv->freeBufferIds.push_back(q);
             //initially all buffers are free to write into
-            for (int j = i * (_xdbcenv.bufferpool_size / _xdbcenv.rcv_parallelism);
-                 j < (i + 1) * (_xdbcenv.bufferpool_size / _xdbcenv.rcv_parallelism);
+            for (int j = i * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
+                 j < (i + 1) * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
                  j++)
                 q->push(j);
 
             _rcvThreads[i] = std::thread(&XClient::receive, this, i);
         }
 
-        for (int i = 0; i < _xdbcenv.decomp_parallelism; i++) {
+        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) {
             FBQ_ptr q(new queue<int>);
-            _xdbcenv.compressedBufferIds.push_back(q);
+            _xdbcenv->compressedBufferIds.push_back(q);
             _decompThreads[i] = std::thread(&XClient::decompress, this, i);
         }
 
-        for (int i = 0; i < _xdbcenv.read_parallelism; i++) {
+        for (int i = 0; i < _xdbcenv->read_parallelism; i++) {
             FBQ_ptr q(new queue<int>);
-            _xdbcenv.decompressedBufferIds.push_back(q);
+            _xdbcenv->decompressedBufferIds.push_back(q);
         }
 
         spdlog::get("XDBC.CLIENT")->info("#3 Initialized");
@@ -170,7 +170,7 @@ namespace xdbc {
         //this is for hostname
 
         boost::asio::ip::tcp::resolver resolver(_ioContext);
-        boost::asio::ip::tcp::resolver::query query(_xdbcenv.server_host, _xdbcenv.server_port);
+        boost::asio::ip::tcp::resolver::query query(_xdbcenv->server_host, _xdbcenv->server_port);
         boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
         boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
 
@@ -183,7 +183,7 @@ namespace xdbc {
         boost::system::error_code error;
         boost::asio::write(_baseSocket, boost::asio::buffer(msg), error);
 
-        //std::this_thread::sleep_for(_xdbcenv.sleep_time*10);
+        //std::this_thread::sleep_for(_xdbcenv->sleep_time*10);
         std::string ready = read_(_baseSocket);
 
         //ready.erase(std::remove(ready.begin(), ready.end(), '\n'), ready.cend());
@@ -201,8 +201,8 @@ namespace xdbc {
         boost::asio::io_service io_service;
         ip::tcp::socket socket(io_service);
         boost::asio::ip::tcp::resolver resolver(io_service);
-        boost::asio::ip::tcp::resolver::query query(_xdbcenv.server_host,
-                                                    std::to_string(stoi(_xdbcenv.server_port) + thr + 1));
+        boost::asio::ip::tcp::resolver::query query(_xdbcenv->server_host,
+                                                    std::to_string(stoi(_xdbcenv->server_port) + thr + 1));
         boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
         boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
 
@@ -212,7 +212,7 @@ namespace xdbc {
 
         } catch (const boost::system::system_error &error) {
             spdlog::get("XDBC.CLIENT")->warn("Server error: {0}", error.what());
-            //std::this_thread::sleep_for(_xdbcenv.sleep_time);
+            //std::this_thread::sleep_for(_xdbcenv->sleep_time);
         }
 
 
@@ -229,8 +229,8 @@ namespace xdbc {
         }
 
         //partition read threads
-        //int minBId = thr * (_xdbcenv.bufferpool_size / _xdbcenv.rcv_parallelism);
-        //int maxBId = (thr + 1) * (_xdbcenv.bufferpool_size / _xdbcenv.rcv_parallelism);
+        //int minBId = thr * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
+        //int maxBId = (thr + 1) * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
 
         //spdlog::get("XDBC.CLIENT")->info("Read thread {0} assigned ({1},{2})", thr, minBId, maxBId);
 
@@ -245,14 +245,28 @@ namespace xdbc {
         int decompThreadId = 0;
         while (error != boost::asio::error::eof) {
 
+            // Wait for next free buffer. Measure wait time and set appropriate readstates while wating and when starting after the wait.
             _readState.store(0);
-            bpi = _xdbcenv.freeBufferIds[thr]->pop();
+            auto start_wait = std::chrono::high_resolution_clock::now();
+
+            bpi = _xdbcenv->freeBufferIds[thr]->pop();
+
+            auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - start_wait).count();
+            _xdbcenv->rcv_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
             _readState.store(1);
 
-            // getting response from server
+            // getting response from server. Start with reading header and measuring header receive time.
+
+            auto start_hdrrcv = std::chrono::high_resolution_clock::now();
+
             Header header{};
             headerBytes = boost::asio::read(socket, boost::asio::buffer(&header, sizeof(Header)),
                                             boost::asio::transfer_exactly(sizeof(Header)), error);
+
+            auto duration_hdr_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - start_hdrrcv).count();
+            _xdbcenv->rcv_time.fetch_add(duration_hdr_microseconds, std::memory_order_relaxed);
 
             //uint16_t checksum = header.crc;
 
@@ -277,14 +291,16 @@ namespace xdbc {
             if (header.compressionType > 6)
                 spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
                                                   header.compressionType, header.totalSize, headerBytes);
-            if (header.totalSize > _xdbcenv.buffer_size * _xdbcenv.tuple_size)
+            if (header.totalSize > _xdbcenv->buffer_size * _xdbcenv->tuple_size)
                 spdlog::get("XDBC.CLIENT")->error(
                         "Client: corrupt body: comp: {0}, size: {1}/{2}, headerbytes: {3}",
-                        header.compressionType, header.totalSize, _xdbcenv.buffer_size * _xdbcenv.tuple_size,
+                        header.compressionType, header.totalSize, _xdbcenv->buffer_size * _xdbcenv->tuple_size,
                         headerBytes);
 
-            // all good, read incoming body
+            // all good, read incoming body and measure time
             std::vector<std::byte> compressed_buffer(sizeof(Header) + header.totalSize);
+
+            auto start_fullrcv = std::chrono::high_resolution_clock::now();
 
             //TODO: read header directly into the compressed buffer
             std::memcpy(_bufferPool[bpi].data(), &header, sizeof(Header));
@@ -293,6 +309,9 @@ namespace xdbc {
                                                                       header.totalSize),
                                           boost::asio::transfer_exactly(header.totalSize), error);
 
+            auto duration_full_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - start_fullrcv).count();
+            _xdbcenv->rcv_time.fetch_add(duration_full_microseconds, std::memory_order_relaxed);
 
 
             // check for errors in body
@@ -311,9 +330,9 @@ namespace xdbc {
             //printSl(reinterpret_cast<shortLineitem *>(compressed_buffer.data()));
 
             _totalBuffersRead.fetch_add(1);
-            _xdbcenv.compressedBufferIds[decompThreadId]->push(bpi);
+            _xdbcenv->compressedBufferIds[decompThreadId]->push(bpi);
             decompThreadId++;
-            if (decompThreadId == _xdbcenv.decomp_parallelism)
+            if (decompThreadId == _xdbcenv->decomp_parallelism)
                 decompThreadId = 0;
 
             buffers++;
@@ -325,8 +344,8 @@ namespace xdbc {
 
         _readState.store(4);
 
-        for (int i = 0; i < _xdbcenv.decomp_parallelism; i++)
-            _xdbcenv.compressedBufferIds[i]->push(-1);
+        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
+            _xdbcenv->compressedBufferIds[i]->push(-1);
 
         socket.close();
 
@@ -340,9 +359,23 @@ namespace xdbc {
         int readThrId = 0;
         int emptyCtr = 0;
         int decompError;
-        std::vector<char> decompressed_buffer(_xdbcenv.buffer_size * _xdbcenv.tuple_size);
-        while (emptyCtr < _xdbcenv.rcv_parallelism) {
-            int compBuffId = _xdbcenv.compressedBufferIds[thr]->pop();
+        std::vector<char> decompressed_buffer(_xdbcenv->buffer_size * _xdbcenv->tuple_size);
+        while (emptyCtr < _xdbcenv->rcv_parallelism) {
+
+            // Wait for next buffer to decompress and measure the waiting time
+            auto start_wait = std::chrono::high_resolution_clock::now();
+
+            int compBuffId = _xdbcenv->compressedBufferIds[thr]->pop();
+
+            auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - start_wait).count();
+            _xdbcenv->decomp_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
+
+
+            // decompress the specific buffer depending on the type (header or not, type of header,...) and measure time
+
+            auto start = std::chrono::high_resolution_clock::now();
+
             if (compBuffId == -1)
                 emptyCtr++;
             else {
@@ -359,7 +392,7 @@ namespace xdbc {
                         size_t posInReadBuffer = 0;
                         int i = 0;
 
-                        for (auto attribute: _xdbcenv.schema) {
+                        for (auto attribute: _xdbcenv->schema) {
 
                             //spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}", std::get<0>(attribute));
 
@@ -370,7 +403,7 @@ namespace xdbc {
                                         posInReadBuffer / std::get<2>(attribute),
                                         header->attributeSize[i] / std::get<2>(attribute),
                                         decompressed_buffer.data() + posInWriteBuffer,
-                                        _xdbcenv.buffer_size);
+                                        _xdbcenv->buffer_size);
 
                             } else if (std::get<1>(attribute) == "DOUBLE") {
                                 /*spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}, compressed_size: {1}",
@@ -380,16 +413,16 @@ namespace xdbc {
                                         decompressed_buffer.data() + posInWriteBuffer,
                                         compressed_buffer + posInReadBuffer,
                                         header->attributeSize[i],
-                                        _xdbcenv.buffer_size * 8);*/
+                                        _xdbcenv->buffer_size * 8);*/
 
                                 decompError = Decompressor::decompress_double_col(
                                         compressed_buffer + posInReadBuffer,
                                         header->attributeSize[i],
                                         decompressed_buffer.data() + posInWriteBuffer,
-                                        _xdbcenv.buffer_size);
+                                        _xdbcenv->buffer_size);
 
                             }
-                            posInWriteBuffer += _xdbcenv.buffer_size * std::get<2>(attribute);
+                            posInWriteBuffer += _xdbcenv->buffer_size * std::get<2>(attribute);
                             posInReadBuffer += header->attributeSize[i];
                             i++;
                         }
@@ -397,7 +430,7 @@ namespace xdbc {
                     } else
                         decompError = Decompressor::decompress(header->compressionType, decompressed_buffer.data(),
                                                                compressed_buffer, header->totalSize,
-                                                               _xdbcenv.buffer_size * _xdbcenv.tuple_size);
+                                                               _xdbcenv->buffer_size * _xdbcenv->tuple_size);
 
                     if (decompError == 1) {
 
@@ -413,7 +446,7 @@ namespace xdbc {
                             std::memcpy(decompressed_buffer.data(), &sl, sizeof(sl));
                         } else if (header->intermediateFormat == 2) {
                             int m2 = -2;
-                            int bs = _xdbcenv.buffer_size;
+                            int bs = _xdbcenv->buffer_size;
                             std::memcpy(decompressed_buffer.data(), &m2, 4);
                             std::memcpy(decompressed_buffer.data() + bs * 4, &m2, 4);
                             std::memcpy(decompressed_buffer.data() + bs * 4 * 2, &m2, 4);
@@ -432,22 +465,27 @@ namespace xdbc {
                     }
 
                     memcpy(_bufferPool[compBuffId].data(), decompressed_buffer.data(),
-                           _xdbcenv.tuple_size * _xdbcenv.buffer_size);
+                           _xdbcenv->tuple_size * _xdbcenv->buffer_size);
 
                 } else if (header->compressionType == 0) {
 
                     memmove(_bufferPool[compBuffId].data(), compressed_buffer, header->totalSize);
                 }
-                _xdbcenv.decompressedBufferIds[readThrId]->push(compBuffId);
+
+                auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::high_resolution_clock::now() - start).count();
+                _xdbcenv->decomp_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
+
+                _xdbcenv->decompressedBufferIds[readThrId]->push(compBuffId);
 
                 readThrId++;
-                if (readThrId == _xdbcenv.read_parallelism)
+                if (readThrId == _xdbcenv->read_parallelism)
                     readThrId = 0;
             }
         }
 
-        for (int i = 0; i < _xdbcenv.read_parallelism; i++)
-            _xdbcenv.decompressedBufferIds[i]->push(-1);
+        for (int i = 0; i < _xdbcenv->read_parallelism; i++)
+            _xdbcenv->decompressedBufferIds[i]->push(-1);
 
         spdlog::get("XDBC.CLIENT")->warn("Decomp thread {0} finished", thr);
         spdlog::get("XDBC.CLIENT.FILE")->info("Decompress data");
@@ -456,7 +494,7 @@ namespace xdbc {
     //TODO: handle parallelism internally
     bool XClient::hasNext(int readThreadId) {
 
-        if (_emptyDecompThreadCtr[readThreadId] == _xdbcenv.decomp_parallelism)
+        if (_emptyDecompThreadCtr[readThreadId] == _xdbcenv->decomp_parallelism)
             return false;
 
         return true;
@@ -465,19 +503,19 @@ namespace xdbc {
     //TODO: handle parallelism internally
     buffWithId XClient::getBuffer(int readThreadId) {
 
-        int buffId = _xdbcenv.decompressedBufferIds[readThreadId]->pop();
+        int buffId = _xdbcenv->decompressedBufferIds[readThreadId]->pop();
 
         if (buffId == -1)
             _emptyDecompThreadCtr[readThreadId]++;
 
         buffWithId curBuf{};
-        curBuf.buff.resize(_xdbcenv.buffer_size * _xdbcenv.tuple_size);
+        curBuf.buff.resize(_xdbcenv->buffer_size * _xdbcenv->tuple_size);
         curBuf.id = buffId;
 
         if (buffId > -1) {
             curBuf.buff = _bufferPool[buffId];
             //TODO: set intermediate format dynamically
-            curBuf.iformat = _xdbcenv.iformat;
+            curBuf.iformat = _xdbcenv->iformat;
             //std::copy(std::begin(_bufferPool[i]), std::end(_bufferPool[i]), std::begin(curBuf.buff));
         }
 
@@ -486,13 +524,13 @@ namespace xdbc {
     }
 
     int XClient::getBufferPoolSize() const {
-        return _xdbcenv.bufferpool_size;
+        return _xdbcenv->bufferpool_size;
     }
 
     void XClient::markBufferAsRead(int buffId) {
         //TODO: ensure equal distribution
-        //spdlog::get("XDBC.CLIENT")->warn("freeing {0}", _markedFreeCounter % _xdbcenv.rcv_parallelism);
-        _xdbcenv.freeBufferIds[_markedFreeCounter % _xdbcenv.rcv_parallelism]->push(buffId);
+        //spdlog::get("XDBC.CLIENT")->warn("freeing {0}", _markedFreeCounter % _xdbcenv->rcv_parallelism);
+        _xdbcenv->freeBufferIds[_markedFreeCounter % _xdbcenv->rcv_parallelism]->push(buffId);
         _markedFreeCounter.fetch_add(1);
     }
 

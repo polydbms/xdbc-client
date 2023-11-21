@@ -26,8 +26,9 @@ TS=$(date +%s)
 EXECLOG=local_measurements/${TS}_runs_comp.csv
 echo "date,xdbcver,sys,table,scpu,ccpu,network,comp,format,npar,bpsize,bsize,sreadpar,sreadparts,sdeserpar,scomppar,creadpar,cdecomppar,datasize,time,avgcpuserver,avgcpuclient,run" >$EXECLOG
 
+# generate statistics file with appropriate header line
 docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo 'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time' > /tmp/xdbc_server_timings.csv"
-#TODO: the same for xdbcclient
+docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo 'transfer_id,total_time,rcv_time,rcv_wait_time,decomp_time,decomp_wait_time,read_wait_time,read_time' > /tmp/xdbc_client_timings.csv"
 
 ### GENERAL
 XDBCVER=2
@@ -41,7 +42,7 @@ comps=("snappy")
 #formats=(1 2)
 formats=(1)
 #npars=(1 2 4 8 16)
-npars=(1)
+npars=(4)
 #bufpoolsizes=(1000)
 bufpoolsizes=(1000)
 #buffsizes=(1000 10000)
@@ -53,21 +54,21 @@ networks=(100)
 #readmode: 1 analytics, 2 storage
 RMODE=2
 #cpus=(.2 7)
-clientcpus=(8)
+clientcpus=(7)
 #clientrpars=(1 2 4 8 16)
-clientrpars=(1)
+clientrpars=(4)
 #clientdecomppars=(8)
-clientdecomppars=(1)
+clientdecomppars=(4)
 
 ### SERVER
 #cpus=(.2 7)
-servercpus=(8)
+servercpus=(7)
 #serverrpars=(1 2 4 8 16)
-serverrpars=(1)
+serverrpars=(8)
 #serverreadpartitions=(1 2 4 8)
-serverreadpartitions=(1)
+serverreadpartitions=(4)
 #serverdeserpars=(8)
-serverdeserpars=(1)
+serverdeserpars=(8)
 #servercomppars=(1 2 4 8)
 servercomppars=(1)
 
@@ -125,6 +126,7 @@ for SYS in "${systems[@]}"; do
                                   wait
                                   metrics_json=$(cat /tmp/resource_metrics.json)
 
+                                  # TODO parse error in these lines
                                   CPU_UTIL_SERVER=$(echo "$metrics_json" | jq -r '.["xdbcserver"].average_cpu_usage')
                                   CPU_UTIL_CLIENT=$(echo "$metrics_json" | jq -r '.["xdbcclient"].average_cpu_usage')
 
@@ -132,7 +134,7 @@ for SYS in "${systems[@]}"; do
                                   SCPU_LIMIT_PERCENT=$(echo "$SCPU*100" | bc)
                                   CCPU_LIMIT_PERCENT=$(echo "$CCPU*100" | bc)
 
-                                  # Calculate normalized CPU utilization
+                                  # Calculate normalized CPU utilization TODO syntax error in these lines
                                   SCPU_UTIL_NORM=$(echo "scale=2; ($CPU_UTIL_SERVER / $SCPU_LIMIT_PERCENT) * 100" | bc)
                                   CCPU_UTIL_NORM=$(echo "scale=2; ($CPU_UTIL_CLIENT / $CCPU_LIMIT_PERCENT) * 100" | bc)
 
@@ -163,3 +165,4 @@ for SYS in "${systems[@]}"; do
 done
 
 docker cp xdbcserver:/tmp/xdbc_server_timings.csv local_measurements/
+docker cp xdbcclient:/tmp/xdbc_client_timings.csv local_measurements/

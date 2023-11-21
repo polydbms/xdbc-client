@@ -5,7 +5,7 @@ class Tester {
 
 public:
 
-    Tester(std::string name, const xdbc::RuntimeEnv &env,
+    Tester(std::string name, xdbc::RuntimeEnv &env,
            std::vector<std::tuple<std::string, std::string, int>> schema);
 
     void runAnalytics();
@@ -15,7 +15,7 @@ public:
     void close();
 
 private:
-    xdbc::RuntimeEnv env;
+    xdbc::RuntimeEnv *env;
     std::vector<std::tuple<std::string, std::string, int>> schema;
     xdbc::XClient xclient;
     std::string name;

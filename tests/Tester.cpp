@@ -6,12 +6,13 @@
 #include <thread>
 #include <utility>
 #include <fstream>
+#include <iomanip>
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
-Tester::Tester(std::string name, const xdbc::RuntimeEnv &env,
+Tester::Tester(std::string name, xdbc::RuntimeEnv &env,
                std::vector<std::tuple<std::string, std::string, int>> schema)
-        : name(std::move(name)), env(env), schema(std::move(schema)), xclient(env) {
+        : name(std::move(name)), env(&env), schema(std::move(schema)), xclient(env) {
 
     start = std::chrono::steady_clock::now();
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", xclient.get_name());
@@ -21,9 +22,35 @@ Tester::Tester(std::string name, const xdbc::RuntimeEnv &env,
 void Tester::close() {
 
     auto end = std::chrono::steady_clock::now();
+    auto total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     spdlog::get("XCLIENT")->info("Total elapsed time: {0} ms",
-                                 std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+                                 total_time);
+
+    spdlog::get("XCLIENT")->info(
+            "xdbc client | receive time: {0} ms, decompress time: {1} ms, read time {2} ms",
+            env->rcv_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
+            env->decomp_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
+            env->read_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
+
+    spdlog::get("XCLIENT")->info(
+            "xdbc client | receive wait time: {0} ms, decompress wait time: {1} ms, read wait time {2} ms",
+            env->rcv_wait_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
+            env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
+            env->read_wait_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
+
+    std::ofstream csv_file("/tmp/xdbc_client_timings.csv",
+                           std::ios::out | std::ios::app);
+
+    csv_file << std::fixed << std::setprecision(2)
+             << std::to_string(env->transfer_id) << "," << total_time << ","
+             << env->rcv_wait_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism << ","
+             << env->rcv_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism << ","
+             << env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism << ","
+             << env->decomp_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism << ","
+             << env->read_wait_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << ","
+             << env->read_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << "\n";
+    csv_file.close();
 
     xclient.finalize();
 }
@@ -33,12 +60,23 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
     int buffsRead = 0;
 
     while (xclient.hasNext(thr)) {
+        // Get next read buffer and measure the wait time
+        auto start_wait = std::chrono::high_resolution_clock::now();
+
         xdbc::buffWithId curBuffWithId = xclient.getBuffer(thr);
+
+        auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now() - start_wait).count();
+        env->read_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
+
+        // Read the buffer and measure the working time
+        auto start = std::chrono::high_resolution_clock::now();
+
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
                 auto *ptr = reinterpret_cast<Utils::shortLineitem *>(curBuffWithId.buff.data());
-                std::vector<Utils::shortLineitem> sls(ptr, ptr + env.buffer_size);
+                std::vector<Utils::shortLineitem> sls(ptr, ptr + env->buffer_size);
 
                 for (auto sl: sls) {
                     totalcnt++;
@@ -74,16 +112,16 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
                 // Construct the first four vectors of type int at the dataPtr address
 
                 int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
-                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4);
-                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 2);
-                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 3);
-                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4);
-                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
-                                                        env.buffer_size * 8 * 1);
-                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
-                                                        env.buffer_size * 8 * 2);
-                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
-                                                        env.buffer_size * 8 * 3);
+                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4);
+                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 2);
+                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 3);
+                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4);
+                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
+                                                        env->buffer_size * 8 * 1);
+                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
+                                                        env->buffer_size * 8 * 2);
+                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
+                                                        env->buffer_size * 8 * 3);
 
                 if (buffsRead == 1) {
 
@@ -91,7 +129,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
                                                  v1[0], v2[0], v3[0], v4[0], v5[0], v6[0], v7[0], v8[0]);
                 }
 
-                for (int i = 0; i < env.buffer_size; i++) {
+                for (int i = 0; i < env->buffer_size; i++) {
                     totalcnt++;
                     /*if (v1[i] > 0) {
                         spdlog::get("XCLIENT")->info(
@@ -124,6 +162,11 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
             break;
         }
 
+        // add the measured time to total reading time
+        auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now() - start).count();
+        env->read_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
+
     }
 
     return buffsRead;
@@ -133,20 +176,20 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
 
 void Tester::runAnalytics() {
 
-    xclient.startReceiving(env.table);
+    xclient.startReceiving(env->table);
     spdlog::get("XCLIENT")->info("#4 called receive, after: {0}ms",
                                  std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::steady_clock::now() - start).count());
 
-    int mins[env.read_parallelism];
-    int maxs[env.read_parallelism];
-    long sums[env.read_parallelism];
-    long cnts[env.read_parallelism];
-    long totalcnts[env.read_parallelism];
+    int mins[env->read_parallelism];
+    int maxs[env->read_parallelism];
+    long sums[env->read_parallelism];
+    long cnts[env->read_parallelism];
+    long totalcnts[env->read_parallelism];
 
-    std::thread readThreads[env.read_parallelism];
+    std::thread readThreads[env->read_parallelism];
 
-    for (int i = 0; i < env.read_parallelism; i++) {
+    for (int i = 0; i < env->read_parallelism; i++) {
 
         mins[i] = INT32_MAX;
         maxs[i] = INT32_MIN;
@@ -158,16 +201,16 @@ void Tester::runAnalytics() {
                                      std::ref(sums[i]), std::ref(cnts[i]), std::ref(totalcnts[i]));
     }
 
-    for (int i = 0; i < env.read_parallelism; i++) {
+    for (int i = 0; i < env->read_parallelism; i++) {
         readThreads[i].join();
     }
 
 
-    int *minValuePtr = std::min_element(mins, mins + env.read_parallelism);
-    int *maxValuePtr = std::max_element(maxs, maxs + env.read_parallelism);
-    long sum = std::accumulate(sums, sums + env.read_parallelism, 0L);
-    long cnt = std::accumulate(cnts, cnts + env.read_parallelism, 0L);
-    long totalcnt = std::accumulate(totalcnts, totalcnts + env.read_parallelism, 0L);
+    int *minValuePtr = std::min_element(mins, mins + env->read_parallelism);
+    int *maxValuePtr = std::max_element(maxs, maxs + env->read_parallelism);
+    long sum = std::accumulate(sums, sums + env->read_parallelism, 0L);
+    long cnt = std::accumulate(cnts, cnts + env->read_parallelism, 0L);
+    long totalcnt = std::accumulate(totalcnts, totalcnts + env->read_parallelism, 0L);
 
     spdlog::get("XCLIENT")->info("totalcnt: {0}", totalcnt);
     spdlog::get("XCLIENT")->info("cnt: {0}", cnt);
@@ -184,12 +227,23 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
     int cnt = 0;
     int buffsRead = 0;
     while (xclient.hasNext(thr)) {
+        // Get next read buffer and measure the waiting time
+        auto start_wait = std::chrono::high_resolution_clock::now();
+
         xdbc::buffWithId curBuffWithId = xclient.getBuffer(thr);
+
+        auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now() - start_wait).count();
+        env->read_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
+
+        // Read the buffer and measure the working time
+        auto start = std::chrono::high_resolution_clock::now();
+
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
                 auto *ptr = reinterpret_cast<Utils::shortLineitem *>(curBuffWithId.buff.data());
-                std::vector<Utils::shortLineitem> sls(ptr, ptr + env.buffer_size);
+                std::vector<Utils::shortLineitem> sls(ptr, ptr + env->buffer_size);
                 for (auto sl: sls) {
                     totalcnt++;
                     if (sl.l_orderkey < 0) {
@@ -225,16 +279,16 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
 
 
                 int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
-                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4);
-                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 2);
-                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 3);
-                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4);
-                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
-                                                        env.buffer_size * 8 * 1);
-                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
-                                                        env.buffer_size * 8 * 2);
-                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env.buffer_size * 4 * 4 +
-                                                        env.buffer_size * 8 * 3);
+                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4);
+                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 2);
+                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 3);
+                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4);
+                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
+                                                        env->buffer_size * 8 * 1);
+                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
+                                                        env->buffer_size * 8 * 2);
+                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
+                                                        env->buffer_size * 8 * 3);
 
                 if (buffsRead == 1) {
 
@@ -243,7 +297,7 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
                             v1[0], v2[0], v3[0], v4[0], v5[0], v6[0], v7[0], v8[0]);
                 }
 
-                for (int i = 0; i < env.buffer_size; i++) {
+                for (int i = 0; i < env->buffer_size; i++) {
                     totalcnt++;
                     /*if (v1[i] > 0) {
                         spdlog::get("XCLIENT")->info(
@@ -268,6 +322,11 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
             break;
         }
 
+        // add the measured time to total reading time
+        auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now() - start).count();
+        env->read_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
+
     }
 
     spdlog::get("XCLIENT")->info("Read thread {0} Total read buffers: {1}", thr, buffsRead);
@@ -279,21 +338,21 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
 void Tester::runStorage(const std::string &filename) {
 
 
-    xclient.startReceiving(env.table);
+    xclient.startReceiving(env->table);
     spdlog::get("XCLIENT")->info("#4 called receive, after: {0}ms",
                                  std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::steady_clock::now() - start).count());
 
     std::ofstream csvFile(filename, std::ios::out);
 
-    std::thread readThreads[env.read_parallelism];
+    std::thread readThreads[env->read_parallelism];
 
-    for (int i = 0; i < env.read_parallelism; i++) {
+    for (int i = 0; i < env->read_parallelism; i++) {
         readThreads[i] = std::thread(&Tester::storageThread, this, i, std::ref(csvFile));
     }
 
 
-    for (int i = 0; i < env.read_parallelism; i++) {
+    for (int i = 0; i < env->read_parallelism; i++) {
         readThreads[i].join();
     }
 
