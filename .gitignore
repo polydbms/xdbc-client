@@ -10,3 +10,4 @@ __pycache__/
 **/experiments/plots/current_analysis/*.csv*
 **/plots/*.csv
 experiments/experiment_scheduler/measurements/*
+experiments/feature_extraction_xdbc/xdbc_experiments_master.csv
