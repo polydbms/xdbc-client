@@ -11,3 +11,4 @@ __pycache__/
 **/plots/*.csv
 experiments/experiment_scheduler/measurements/*
 experiments/feature_extraction_xdbc/xdbc_experiments_master.csv
+experiments/feature_extraction_xdbc/.idea/*
