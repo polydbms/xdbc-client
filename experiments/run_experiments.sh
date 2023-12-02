@@ -28,7 +28,7 @@ echo "date,xdbcver,sys,table,scpu,ccpu,network,comp,format,npar,bpsize,bsize,sre
 
 # generate statistics file with appropriate header line
 docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo 'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time' > /tmp/xdbc_server_timings.csv"
-docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo 'transfer_id,total_time,rcv_time,rcv_wait_time,decomp_time,decomp_wait_time,read_wait_time,read_time' > /tmp/xdbc_client_timings.csv"
+docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo 'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,read_wait_time,read_time' > /tmp/xdbc_client_timings.csv"
 
 ### GENERAL
 XDBCVER=2
