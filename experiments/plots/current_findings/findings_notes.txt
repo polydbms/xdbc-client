@@ -1,0 +1,14 @@
+a- zlib zu langsam, dateigröße selten ausschlaggebend
+- nocomp bei niedriger cpu oder gutem netzwerk besser als jede comp
+- Buffersize 1000 performt bisher besser als 10000, wenn eine seite 0,2cpu hat. Idee: durch 64 teilbare buffergrößen verwenden. 1024, 2048,...
+	- mehr um den 1000er Bereich testen.
+- lzo > snappy, wenn cpu auf beiden seiten >=2, sonst snappy
+	- Dann sind beide auch schneller als 6mb pro sekunde (snappy ca. 12mb/s und lzo ca. 30mb/s)
+	- snappy erreicht mit cpu = 1 auf beiden seiten ca. 10mb/s
+	- CLIENT CPU IST BEI BEIDEN AUSSCHLAGGEBENDER FÜR DIE PERFORMANCE!
+- in general client cpu is more influencial, than server cpu.
+	- so decompression is more important than compression. For some unknown reason >.>
+	- Snappy performs quite good, it sais it has double the performance for decompression as compression. LZ4 sometimes performc better than snappy, but only marginally.
+- only in the rarest cases is a network over 50mb beneficial
+	- more tests with networks between 50mb/s and 6 mb/s
+	- most of the time, 6mb/s network is bottlenecking cpu 1, but not cpu 0.2

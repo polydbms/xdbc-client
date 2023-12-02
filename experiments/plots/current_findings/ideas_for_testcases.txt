@@ -1,0 +1,7 @@
+- Have test cases for finer network throtteling between 50mb/s  and 6 mb/s
+	- find the ratio between cpu performance and network bottleneck, for now, 1 cpu > 6mb/s and 0.2 cpu < 6mb/s
+	- find network throttle where no compression turns beneficial. Beneficial means better than compression. For example, at 50mb/s network throttle and server 7 and client 1 cpu, nocomp is already beneficial. With server 1 and client 7 cpu, nocomp is not beneficial at network throttle 6mb/s but it is at 50mb/s.
+	- Probably strongly influenced by writeout time, which currently is the limiting factor.
+	
+	
+- Buffersize 1000 is clearly better than 10000. Test with buffersizes around 1000 and maybe use multiples of 2^x for chances of beeing memory aligned. Maybe find a way to force memory alignment.
