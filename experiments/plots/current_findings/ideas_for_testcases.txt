@@ -5,3 +5,10 @@
 	
 	
 - Buffersize 1000 is clearly better than 10000. Test with buffersizes around 1000 and maybe use multiples of 2^x for chances of beeing memory aligned. Maybe find a way to force memory alignment.
+
+
+
+- Correlate runtime parameters with wait time ratios for the different tasks.
+    - Ratio can be: task_wait_time / (task_wait_time + task_active_time)
+    - Have a dynamic parameter fitting based on measured wait time ratios from past queries.
+    - For example: If last query had a network wait time ratio of 0.5, use a faster or none compression algorithm, because we still got bandwidth to use.

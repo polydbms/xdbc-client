@@ -79,13 +79,14 @@ namespace xdbc {
         for (int i = 0; i < env.read_parallelism; i++) {
             _emptyDecompThreadCtr[i] = 0;
         }
-
-
     }
 
     XClient::~XClient() {
         // Destructor implementation...
         spdlog::get("XDBC.CLIENT.FILE")->info("Client");
+        ClientEnvPredictor pre;
+        ClientRuntimeParams newParams = pre.tweakNextParams(_xdbcenv);
+        spdlog::get("XDBC.CLIENT")->info("New parameters could be: rcv_parallelism {0}, decomp_parallelism {1}, read_parallelism {2}", newParams.rcv_parallelism, newParams.decomp_parallelism, newParams.read_parallelism);
     }
 
     void XClient::finalize() {
@@ -313,7 +314,6 @@ namespace xdbc {
                     std::chrono::high_resolution_clock::now() - start_fullrcv).count();
             _xdbcenv->rcv_time.fetch_add(duration_full_microseconds, std::memory_order_relaxed);
 
-
             // check for errors in body
             //TODO: handle errors correctly
 
@@ -325,6 +325,7 @@ namespace xdbc {
                 }
                 break;
             }
+
 
 
             //printSl(reinterpret_cast<shortLineitem *>(compressed_buffer.data()));

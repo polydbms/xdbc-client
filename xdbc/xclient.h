@@ -11,6 +11,7 @@
 #include <set>
 #include "queue.h"
 #include "utils.h"
+#include "env_predictor.h"
 
 using namespace boost::asio;
 using ip::tcp;

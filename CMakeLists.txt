@@ -26,7 +26,7 @@ include(GNUInstallDirs)
 
 add_library(xdbc SHARED
         xdbc/xclient.cpp
-        xdbc/Decompression/Decompressor.cpp xdbc/Decompression/Decompressor.h)
+        xdbc/Decompression/Decompressor.cpp xdbc/Decompression/Decompressor.h xdbc/env_predictor.h xdbc/env_predictor.cpp)
 
 set_target_properties(xdbc PROPERTIES
         #VERSION ${PROJECT_VERSION}
