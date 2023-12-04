@@ -7,7 +7,7 @@ df = pd.read_csv('xdbc_experiments_master.csv')
 cols_to_check = [
     "system", "table", "compression", "format", "network_parallelism",
     "bufpool_size", "buff_size", "network", "client_readmode", "client_cpu",
-    "client_read_par", "client_decomp_par", "server_cpu", "server_read_par",
+    "client_write_par", "client_decomp_par", "server_cpu", "server_read_par",
     "server_read_partitions", "server_deser_par"
 ]
 
@@ -20,7 +20,7 @@ rows_with_time_less_than_three.to_csv('rows_with_time_less_than_three.csv', inde
 
 # Print indices of rows where time <= 3 for verification
 time_less_than_three_rows_indices = rows_with_time_less_than_three.index.tolist()
-#print(f"Indices of rows where time <= 3: {time_less_than_three_rows_indices}")
+# print(f"Indices of rows where time <= 3: {time_less_than_three_rows_indices}")
 
 # STEP 2: Remove rows where time <= 3 from the original DataFrame
 df = df[df['time'] > 3]
@@ -39,6 +39,7 @@ df_no_duplicates = df.drop_duplicates(cols_to_check, keep='first')
 df_no_duplicates.to_csv('xdbc_experiments_master_without_duplicates.csv', index=False)
 
 # Print information for verification
-print(f"Total rows (original): {len(df) + len(duplicates) + len(rows_with_time_less_than_three)}")  # Accounting for all modifications
+print(
+    f"Total rows (original): {len(df) + len(duplicates) + len(rows_with_time_less_than_three)}")  # Accounting for all modifications
 print(f"Total rows (after removing time <= 3 and duplicates): {len(df_no_duplicates)}")
 print(f"Number of duplicate rows removed: {len(duplicates)}")

@@ -24,11 +24,11 @@ fi
 #mkdir -p ${EXECLOG_DIR}
 TS=$(date +%s)
 EXECLOG=local_measurements/${TS}_runs_comp.csv
-echo "date,xdbcver,sys,table,scpu,ccpu,network,comp,format,npar,bpsize,bsize,sreadpar,sreadparts,sdeserpar,scomppar,creadpar,cdecomppar,datasize,time,avgcpuserver,avgcpuclient,run" >$EXECLOG
+echo "date,xdbcver,sys,table,scpu,ccpu,network,comp,format,npar,bpsize,bsize,sreadpar,sreadparts,sdeserpar,scomppar,cwritepar,cdecomppar,datasize,time,avgcpuserver,avgcpuclient,run" >$EXECLOG
 
 # generate statistics file with appropriate header line
 docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo 'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time' > /tmp/xdbc_server_timings.csv"
-docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo 'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,read_wait_time,read_time' > /tmp/xdbc_client_timings.csv"
+docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo 'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time' > /tmp/xdbc_client_timings.csv"
 
 ### GENERAL
 XDBCVER=2
@@ -55,8 +55,8 @@ networks=(100)
 RMODE=2
 #cpus=(.2 7)
 clientcpus=(7)
-#clientrpars=(1 2 4 8 16)
-clientrpars=(4)
+#clientwpars=(1 2 4 8 16)
+clientwpars=(4)
 #clientdecomppars=(8)
 clientdecomppars=(4)
 
@@ -81,7 +81,7 @@ for SYS in "${systems[@]}"; do
         for NETWORK in "${networks[@]}"; do
           for COMP in "${comps[@]}"; do
             for SRPAR in "${serverrpars[@]}"; do
-              for CRPAR in "${clientrpars[@]}"; do
+              for CWPAR in "${clientwpars[@]}"; do
                 for SRPARTS in "${serverreadpartitions[@]}"; do
                   for SDESERPAR in "${serverdeserpars[@]}"; do
                     for SCOMPPAR in "${servercomppars[@]}"; do
@@ -98,7 +98,7 @@ for SYS in "${systems[@]}"; do
                               for BUFFSIZE in "${buffsizes[@]}"; do
                                 for RUN in "${runs[@]}"; do
 
-                                  current_timestamp=$(date +%s)
+                                  current_timestamp=$(date +%s%N)
 
                                   echo "Running scpus: $SCPU,ccpus: $CCPU, network: $NETWORK, compression: $COMP, rparallelism: $SRPAR, rpartitions: $SRPARTS, nparallelism: $NPAR, format: $FORMAT, bufferpool_size $BUFFPOOLSIZE, buffer_size: $BUFFSIZE"
 
@@ -110,14 +110,14 @@ for SYS in "${systems[@]}"; do
                                   #SERVER_PID=$!
 
                                   sleep 1
-                                  echo "client cmd: ./test_xclient --transfer-id=$current_timestamp -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -n$NPAR -r$CRPAR -d$CDECOMPPAR -s1 -m$RMODE --table=$TBL"
+                                  echo "client cmd: ./test_xclient --transfer-id=$current_timestamp -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -n$NPAR -r$CWPAR -d$CDECOMPPAR -s1 -m$RMODE --table=$TBL"
                                   SECONDS=0
                                   DATASIZE=$(bash experiments_measure_network.sh "xdbcclient")
 
                                   touch /tmp/start_monitoring
                                   ./experiments_measure_resources.sh xdbcserver xdbcclient &
 
-                                  bash $CLIENT_PATH/build_and_start.sh xdbcclient 2 "--transfer-id=$current_timestamp -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -n$NPAR -r$CRPAR -d$CDECOMPPAR -s1 --table=$TBL -m$RMODE"
+                                  bash $CLIENT_PATH/build_and_start.sh xdbcclient 2 "--transfer-id=$current_timestamp -f$FORMAT -b$BUFFSIZE -p$BUFFPOOLSIZE -n$NPAR -r$CWPAR -d$CDECOMPPAR -s1 --table=$TBL -m$RMODE"
                                   ELAPSED_SEC=$SECONDS
                                   touch /tmp/stop_monitoring
                                   rm /tmp/start_monitoring
@@ -138,8 +138,8 @@ for SYS in "${systems[@]}"; do
                                   SCPU_UTIL_NORM=$(echo "scale=2; ($CPU_UTIL_SERVER / $SCPU_LIMIT_PERCENT) * 100" | bc)
                                   CCPU_UTIL_NORM=$(echo "scale=2; ($CPU_UTIL_CLIENT / $CCPU_LIMIT_PERCENT) * 100" | bc)
 
-                                  echo "$current_timestamp,$XDBCVER,$SYS,$TBL,$SCPU,$CCPU,$NETWORK,$COMP,$FORMAT,$NPAR,$BUFFPOOLSIZE,$BUFFSIZE,$SRPAR,$SRPARTS,$SDESERPAR,$SCOMPPAR,$CRPAR,$CDECOMPPAR,$DATASIZE,$ELAPSED_SEC,$SCPU_UTIL_NORM,$CCPU_UTIL_NORM,$RUN" >>$EXECLOG
-                                  echo "$current_timestamp,$XDBCVER,$SYS,$TBL,$SCPU,$CCPU,$NETWORK,$COMP,$FORMAT,$NPAR,$BUFFPOOLSIZE,$BUFFSIZE,$SRPAR,$SRPARTS,$SDESERPAR,$SCOMPPAR,$CRPAR,$CDECOMPPAR,$DATASIZE,$ELAPSED_SEC,$SCPU_UTIL_NORM,$CCPU_UTIL_NORM,$RUN"
+                                  echo "$current_timestamp,$XDBCVER,$SYS,$TBL,$SCPU,$CCPU,$NETWORK,$COMP,$FORMAT,$NPAR,$BUFFPOOLSIZE,$BUFFSIZE,$SRPAR,$SRPARTS,$SDESERPAR,$SCOMPPAR,$CWPAR,$CDECOMPPAR,$DATASIZE,$ELAPSED_SEC,$SCPU_UTIL_NORM,$CCPU_UTIL_NORM,$RUN" >>$EXECLOG
+                                  echo "$current_timestamp,$XDBCVER,$SYS,$TBL,$SCPU,$CCPU,$NETWORK,$COMP,$FORMAT,$NPAR,$BUFFPOOLSIZE,$BUFFSIZE,$SRPAR,$SRPARTS,$SDESERPAR,$SCOMPPAR,$CWPAR,$CDECOMPPAR,$DATASIZE,$ELAPSED_SEC,$SCPU_UTIL_NORM,$CCPU_UTIL_NORM,$RUN"
 
                                   #TODO: find correct pid
                                   #kill $SERVER_PID

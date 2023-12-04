@@ -98,11 +98,11 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
 
     env.rcv_time = 0;
     env.decomp_time = 0;
-    env.read_time = 0;
+    env.write_time = 0;
 
     env.rcv_wait_time = 0;
     env.decomp_wait_time = 0;
-    env.read_wait_time = 0;
+    env.write_wait_time = 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
     if (env.mode == 1)
         tester.runAnalytics();
     else if (env.mode == 2)
-        tester.runStorage("/dev/shm/output.csv");
+        tester.runStorage("/dev/shm/output");
 
     tester.close();
 

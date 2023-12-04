@@ -354,7 +354,7 @@ namespace xdbc {
         spdlog::get("XDBC.CLIENT.FILE")->info("Receive data");
     }
 
-    void XClient::  decompress(int thr) {
+    void XClient::decompress(int thr) {
         spdlog::get("XDBC.CLIENT.FILE")->info("Decompress data");
 
         int readThrId = 0;

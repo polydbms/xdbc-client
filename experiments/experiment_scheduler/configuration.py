@@ -66,29 +66,29 @@ hosts = [
 ]
 
 params = {
-    "client_cpu": [7, 1, .2],
-    "server_cpu": [7, 1, .2],
-    "network": [6, 50, 100],
+    "client_cpu": [.2, 1, 8],
+    "server_cpu": [.2, 1, 8],
+    "network": [6, 100],
     "system": ["csv"],
     "table": ["test_10000000"],
     "bufpool_size": [1000],
-    "buff_size": [1000],
-    "compression": ["nocomp", "zstd", "snappy", "lzo", "lz4", "zlib", "cols"],
-    "format": [1, 2],
-    "network_parallelism": [1, 2, 4],
+    "buff_size": [10000],
+    "compression": ["nocomp"],
+    "format": [1],
+    "network_parallelism": [1],
     "client_readmode": [2],
-    "client_read_par": [1, 2, 4],
-    "client_decomp_par": [1, 2, 4],
-    "server_read_par": [1, 2, 4],
-    "server_read_partitions": [1, 2, 4],
-    "server_deser_par": [1, 2, 4],
-    "server_comp_par": [1, 2, 4]
+    "client_write_par": [1],
+    "client_decomp_par": [1],
+    "server_read_par": [1, 2, 4, 8],
+    "server_read_partitions": [1, 2, 4, 8],
+    "server_deser_par": [4],
+    "server_comp_par": [4]
 }
 
 
 def get_experiment_queue(filename=None):
     # Columns that should not be considered when comparing combinations
-    exclude_columns = ["run", "date", "host", "time", "datasize"]  # Add more columns if needed
+    exclude_columns = ["xdbc_version", "run", "date", "host", "time", "datasize", "avg_cpu_server", "avg_cpu_client"]
 
     recorded_experiments = []
 

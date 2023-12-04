@@ -23,7 +23,7 @@ private:
 
     int analyticsThread(int thr, int &mins, int &maxs, long &sums, long &cnts, long &totalctns);
 
-    int storageThread(int thr, std::ofstream& csvFile);
+    int storageThread(int thr, const std::string &filename);
 
 
 };

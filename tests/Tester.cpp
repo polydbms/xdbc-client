@@ -31,13 +31,13 @@ void Tester::close() {
             "xdbc client | receive time: {0} ms, decompress time: {1} ms, read time {2} ms",
             env->rcv_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
             env->decomp_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
-            env->read_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
+            env->write_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
 
     spdlog::get("XCLIENT")->info(
             "xdbc client | receive wait time: {0} ms, decompress wait time: {1} ms, read wait time {2} ms",
             env->rcv_wait_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
             env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
-            env->read_wait_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
+            env->write_wait_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
 
     std::ofstream csv_file("/tmp/xdbc_client_timings.csv",
                            std::ios::out | std::ios::app);
@@ -48,8 +48,8 @@ void Tester::close() {
              << env->rcv_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism << ","
              << env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism << ","
              << env->decomp_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism << ","
-             << env->read_wait_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << ","
-             << env->read_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << "\n";
+             << env->write_wait_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << ","
+             << env->write_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << "\n";
     csv_file.close();
 
     xclient.finalize();
@@ -67,7 +67,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
 
         auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::high_resolution_clock::now() - start_wait).count();
-        env->read_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
+        env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
 
         // Read the buffer and measure the working time
         auto start = std::chrono::high_resolution_clock::now();
@@ -165,7 +165,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
         // add the measured time to total reading time
         auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::high_resolution_clock::now() - start).count();
-        env->read_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
+        env->write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
 
     }
 
@@ -219,9 +219,10 @@ void Tester::runAnalytics() {
     spdlog::get("XCLIENT")->info("avg: {0}", (sum / (double) cnt));
 }
 
-int Tester::storageThread(int thr, std::ofstream &csvFile) {
+int Tester::storageThread(int thr, const std::string &filename) {
 
-    std::mutex mtx;
+    std::ofstream csvFile(filename + std::to_string(thr) + ".csv", std::ios::out);
+
     std::ostringstream csvBuffer;
     int totalcnt = 0;
     int cnt = 0;
@@ -234,7 +235,7 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
 
         auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::high_resolution_clock::now() - start_wait).count();
-        env->read_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
+        env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
 
         // Read the buffer and measure the working time
         auto start = std::chrono::high_resolution_clock::now();
@@ -266,7 +267,6 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
                             sl.l_orderkey, sl.l_partkey, sl.l_suppkey, sl.l_linenumber, sl.l_quantity,
                             sl.l_extendedprice, sl.l_discount, sl.l_tax);*/
                 }
-                std::lock_guard<std::mutex> lock(mtx);
                 csvFile << csvBuffer.str();
 
                 csvBuffer.str("");
@@ -308,7 +308,7 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
                     csvBuffer << v1[i] << "," << v2[i] << "," << v3[i] << "," << v4[i] << "," << v5[i] << ","
                               << v6[i] << "," << v7[i] << "," << v8[i] << std::endl;
                 }
-                std::lock_guard<std::mutex> lock(mtx);
+
                 csvFile << csvBuffer.str();
 
                 csvBuffer.str("");
@@ -325,11 +325,12 @@ int Tester::storageThread(int thr, std::ofstream &csvFile) {
         // add the measured time to total reading time
         auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::high_resolution_clock::now() - start).count();
-        env->read_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
+        env->write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
 
     }
 
     spdlog::get("XCLIENT")->info("Read thread {0} Total read buffers: {1}", thr, buffsRead);
+    csvFile.close();
 
     return buffsRead;
 }
@@ -343,12 +344,10 @@ void Tester::runStorage(const std::string &filename) {
                                  std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::steady_clock::now() - start).count());
 
-    std::ofstream csvFile(filename, std::ios::out);
-
     std::thread readThreads[env->read_parallelism];
 
     for (int i = 0; i < env->read_parallelism; i++) {
-        readThreads[i] = std::thread(&Tester::storageThread, this, i, std::ref(csvFile));
+        readThreads[i] = std::thread(&Tester::storageThread, this, i, std::ref(filename));
     }
 
 
@@ -356,17 +355,12 @@ void Tester::runStorage(const std::string &filename) {
         readThreads[i].join();
     }
 
-
+    //TODO: combine multiple files or maybe do in external bash script
+    /*std::ofstream csvFile(filename, std::ios::out);
     csvFile.seekp(0, std::ios::end);
     std::streampos fileSize = csvFile.tellp();
     spdlog::get("XCLIENT")->info("fileSize: {0}", fileSize);
-    csvFile.close();
+    csvFile.close();*/
 
 
 }
-
-
-
-
-
-

@@ -44,10 +44,10 @@ namespace xdbc {
         int read_parallelism;
         std::atomic<long long> rcv_wait_time;
         std::atomic<long long> decomp_wait_time;
-        std::atomic<long long> read_wait_time;
+        std::atomic<long long> write_wait_time;
         std::atomic<long long> rcv_time;
         std::atomic<long long> decomp_time;
-        std::atomic<long long> read_time;
+        std::atomic<long long> write_time;
         std::string table;
         std::string server_host;
         std::string server_port;
