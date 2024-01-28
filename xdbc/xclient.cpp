@@ -20,7 +20,6 @@ using namespace boost::asio;
 using ip::tcp;
 
 namespace xdbc {
-
     XClient::XClient(RuntimeEnv &env) :
             _xdbcenv(&env),
             _bufferPool(),
@@ -86,7 +85,9 @@ namespace xdbc {
         spdlog::get("XDBC.CLIENT.FILE")->info("Client");
         ClientEnvPredictor pre;
         ClientRuntimeParams newParams = pre.tweakNextParams(_xdbcenv);
-        spdlog::get("XDBC.CLIENT")->info("New parameters could be: rcv_parallelism {0}, decomp_parallelism {1}, read_parallelism {2}", newParams.rcv_parallelism, newParams.decomp_parallelism, newParams.read_parallelism);
+        spdlog::get("XDBC.CLIENT")->info(
+                "New parameters could be: rcv_parallelism {0}, decomp_parallelism {1}, read_parallelism {2}",
+                newParams.rcv_parallelism, newParams.decomp_parallelism, newParams.read_parallelism);
     }
 
     void XClient::finalize() {
@@ -178,7 +179,8 @@ namespace xdbc {
         spdlog::get("XDBC.CLIENT")->info("Basesocket: trying to connect");
 
         _baseSocket.connect(endpoint);
-        spdlog::get("XDBC.CLIENT")->info("Basesocket: connected");
+        spdlog::get("XDBC.CLIENT")->info("Basesocket: connected to {0}:{1}",
+                                         endpoint.address().to_string(), endpoint.port());
 
         const std::string msg = tableName + "\n";
         boost::system::error_code error;
@@ -202,156 +204,162 @@ namespace xdbc {
         boost::asio::io_service io_service;
         ip::tcp::socket socket(io_service);
         boost::asio::ip::tcp::resolver resolver(io_service);
-        boost::asio::ip::tcp::resolver::query query(_xdbcenv->server_host,
+        boost::asio::ip::tcp::resolver::query query(_baseSocket.remote_endpoint().address().to_string(),
                                                     std::to_string(stoi(_xdbcenv->server_port) + thr + 1));
         boost::asio::ip::tcp::resolver::iterator iter = resolver.resolve(query);
         boost::asio::ip::tcp::endpoint endpoint = iter->endpoint();
 
+        bool connected = false;
 
         try {
             socket.connect(endpoint);
+            connected = true;
+            spdlog::get("XDBC.CLIENT")->info("Receive thread {0} connected to {1}:{2}",
+                                             thr, endpoint.address().to_string(), endpoint.port());
 
         } catch (const boost::system::system_error &error) {
             spdlog::get("XDBC.CLIENT")->warn("Server error: {0}", error.what());
             //std::this_thread::sleep_for(_xdbcenv->sleep_time);
         }
 
+        if (connected) {
 
-        spdlog::get("XDBC.CLIENT")->info("Receive thread {0} connected to {1}:{2}",
-                                         thr, endpoint.address().to_string(), endpoint.port());
+            const std::string msg = std::to_string(thr) + "\n";
+            boost::system::error_code error;
 
-        const std::string msg = std::to_string(thr) + "\n";
-        boost::system::error_code error;
-
-        try {
-            size_t b = boost::asio::write(socket, boost::asio::buffer(msg), error);
-        } catch (const boost::system::system_error &e) {
-            spdlog::get("XDBC.CLIENT")->warn("Could not write thread no, error: {0}", e.what());
-        }
-
-        //partition read threads
-        //int minBId = thr * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
-        //int maxBId = (thr + 1) * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
-
-        //spdlog::get("XDBC.CLIENT")->info("Read thread {0} assigned ({1},{2})", thr, minBId, maxBId);
-
-        int bpi;
-        int buffers = 0;
-
-        spdlog::get("XDBC.CLIENT")->info("Receive thread {0} started", thr);
-
-        size_t headerBytes;
-        size_t readBytes;
-
-        int decompThreadId = 0;
-        while (error != boost::asio::error::eof) {
-
-            // Wait for next free buffer. Measure wait time and set appropriate readstates while wating and when starting after the wait.
-            _readState.store(0);
-            auto start_wait = std::chrono::high_resolution_clock::now();
-
-            bpi = _xdbcenv->freeBufferIds[thr]->pop();
-
-            auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::high_resolution_clock::now() - start_wait).count();
-            _xdbcenv->rcv_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
-            _readState.store(1);
-
-            // getting response from server. Start with reading header and measuring header receive time.
-
-            auto start_hdrrcv = std::chrono::high_resolution_clock::now();
-
-            Header header{};
-            headerBytes = boost::asio::read(socket, boost::asio::buffer(&header, sizeof(Header)),
-                                            boost::asio::transfer_exactly(sizeof(Header)), error);
-
-            auto duration_hdr_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::high_resolution_clock::now() - start_hdrrcv).count();
-            _xdbcenv->rcv_time.fetch_add(duration_hdr_microseconds, std::memory_order_relaxed);
-
-            //uint16_t checksum = header.crc;
-
-            //TODO: handle error types (e.g., EOF)
-            if (error) {
-                spdlog::get("XDBC.CLIENT")->error("Receive thread {0}: boost error while reading header: {1}", thr,
-                                                  error.message());
-                spdlog::get("XDBC.CLIENT")->error("header comp: {0}, size: {1}, headerBytes: {2}",
-                                                  header.compressionType,
-                                                  header.totalSize,
-                                                  headerBytes);
-
-                if (error == boost::asio::error::eof) {
-
-                }
-                break;
+            try {
+                size_t b = boost::asio::write(socket, boost::asio::buffer(msg), error);
+            } catch (const boost::system::system_error &e) {
+                spdlog::get("XDBC.CLIENT")->warn("Could not write thread no, error: {0}", e.what());
             }
 
-            _readState.store(2);
+            //partition read threads
+            //int minBId = thr * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
+            //int maxBId = (thr + 1) * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
 
-            // check for errors in header
-            if (header.compressionType > 6)
-                spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
-                                                  header.compressionType, header.totalSize, headerBytes);
-            if (header.totalSize > _xdbcenv->buffer_size * _xdbcenv->tuple_size)
-                spdlog::get("XDBC.CLIENT")->error(
-                        "Client: corrupt body: comp: {0}, size: {1}/{2}, headerbytes: {3}",
-                        header.compressionType, header.totalSize, _xdbcenv->buffer_size * _xdbcenv->tuple_size,
-                        headerBytes);
+            //spdlog::get("XDBC.CLIENT")->info("Read thread {0} assigned ({1},{2})", thr, minBId, maxBId);
 
-            // all good, read incoming body and measure time
-            std::vector<std::byte> compressed_buffer(sizeof(Header) + header.totalSize);
+            int bpi;
+            int buffers = 0;
 
-            auto start_fullrcv = std::chrono::high_resolution_clock::now();
+            spdlog::get("XDBC.CLIENT")->info("Receive thread {0} started", thr);
 
-            //TODO: read header directly into the compressed buffer
-            std::memcpy(_bufferPool[bpi].data(), &header, sizeof(Header));
+            size_t headerBytes;
+            size_t readBytes;
 
-            readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi].data() + sizeof(Header),
-                                                                      header.totalSize),
-                                          boost::asio::transfer_exactly(header.totalSize), error);
+            int decompThreadId = 0;
+            while (error != boost::asio::error::eof) {
 
-            auto duration_full_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::high_resolution_clock::now() - start_fullrcv).count();
-            _xdbcenv->rcv_time.fetch_add(duration_full_microseconds, std::memory_order_relaxed);
+                // Wait for next free buffer. Measure wait time and set appropriate readstates while wating and when starting after the wait.
+                _readState.store(0);
+                auto start_wait = std::chrono::high_resolution_clock::now();
 
-            // check for errors in body
-            //TODO: handle errors correctly
+                bpi = _xdbcenv->freeBufferIds[thr]->pop();
 
-            if (error) {
-                spdlog::get("XDBC.CLIENT")->error("Client: boost error while reading body: readBytes {0}, error: {1}",
-                                                  readBytes, error.message());
-                if (error == boost::asio::error::eof) {
+                auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::high_resolution_clock::now() - start_wait).count();
+                _xdbcenv->rcv_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
+                _readState.store(1);
 
+                // getting response from server. Start with reading header and measuring header receive time.
+
+                auto start_hdrrcv = std::chrono::high_resolution_clock::now();
+
+                Header header{};
+                headerBytes = boost::asio::read(socket, boost::asio::buffer(&header, sizeof(Header)),
+                                                boost::asio::transfer_exactly(sizeof(Header)), error);
+
+                auto duration_hdr_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::high_resolution_clock::now() - start_hdrrcv).count();
+                _xdbcenv->rcv_time.fetch_add(duration_hdr_microseconds, std::memory_order_relaxed);
+
+                //uint16_t checksum = header.crc;
+
+                //TODO: handle error types (e.g., EOF)
+                if (error) {
+                    spdlog::get("XDBC.CLIENT")->error("Receive thread {0}: boost error while reading header: {1}", thr,
+                                                      error.message());
+                    spdlog::get("XDBC.CLIENT")->error("header comp: {0}, size: {1}, headerBytes: {2}",
+                                                      header.compressionType,
+                                                      header.totalSize,
+                                                      headerBytes);
+
+                    if (error == boost::asio::error::eof) {
+
+                    }
+                    break;
                 }
-                break;
+
+                _readState.store(2);
+
+                // check for errors in header
+                if (header.compressionType > 6)
+                    spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
+                                                      header.compressionType, header.totalSize, headerBytes);
+                if (header.totalSize > _xdbcenv->buffer_size * _xdbcenv->tuple_size)
+                    spdlog::get("XDBC.CLIENT")->error(
+                            "Client: corrupt body: comp: {0}, size: {1}/{2}, headerbytes: {3}",
+                            header.compressionType, header.totalSize, _xdbcenv->buffer_size * _xdbcenv->tuple_size,
+                            headerBytes);
+
+                // all good, read incoming body and measure time
+                std::vector<std::byte> compressed_buffer(sizeof(Header) + header.totalSize);
+
+                auto start_fullrcv = std::chrono::high_resolution_clock::now();
+
+                //TODO: read header directly into the compressed buffer
+                std::memcpy(_bufferPool[bpi].data(), &header, sizeof(Header));
+
+                readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi].data() + sizeof(Header),
+                                                                          header.totalSize),
+                                              boost::asio::transfer_exactly(header.totalSize), error);
+
+                auto duration_full_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::high_resolution_clock::now() - start_fullrcv).count();
+                _xdbcenv->rcv_time.fetch_add(duration_full_microseconds, std::memory_order_relaxed);
+
+                // check for errors in body
+                //TODO: handle errors correctly
+
+                if (error) {
+                    spdlog::get("XDBC.CLIENT")->error(
+                            "Client: boost error while reading body: readBytes {0}, error: {1}",
+                            readBytes, error.message());
+                    if (error == boost::asio::error::eof) {
+
+                    }
+                    break;
+                }
+
+
+
+                //printSl(reinterpret_cast<shortLineitem *>(compressed_buffer.data()));
+
+                _totalBuffersRead.fetch_add(1);
+                _xdbcenv->compressedBufferIds[decompThreadId]->push(bpi);
+                decompThreadId++;
+                if (decompThreadId == _xdbcenv->decomp_parallelism)
+                    decompThreadId = 0;
+
+                buffers++;
+                _readState.store(3);
             }
 
+            /*for (auto x: _bufferPool[bpi])
+                printSl(&x);*/
 
+            _readState.store(4);
 
-            //printSl(reinterpret_cast<shortLineitem *>(compressed_buffer.data()));
+            for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
+                _xdbcenv->compressedBufferIds[i]->push(-1);
 
-            _totalBuffersRead.fetch_add(1);
-            _xdbcenv->compressedBufferIds[decompThreadId]->push(bpi);
-            decompThreadId++;
-            if (decompThreadId == _xdbcenv->decomp_parallelism)
-                decompThreadId = 0;
+            socket.close();
 
-            buffers++;
-            _readState.store(3);
-        }
+            spdlog::get("XDBC.CLIENT")->info("Receive thread {0} #buffers: {1}", thr, buffers);
+            spdlog::get("XDBC.CLIENT.FILE")->info("Receive data");
+        } else
+            spdlog::get("XDBC.CLIENT")->error("Receive thread {0} could not connect", thr);
 
-        /*for (auto x: _bufferPool[bpi])
-            printSl(&x);*/
-
-        _readState.store(4);
-
-        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
-            _xdbcenv->compressedBufferIds[i]->push(-1);
-
-        socket.close();
-
-        spdlog::get("XDBC.CLIENT")->info("Receive thread {0} #buffers: {1}", thr, buffers);
-        spdlog::get("XDBC.CLIENT.FILE")->info("Receive data");
     }
 
     void XClient::decompress(int thr) {

@@ -18,6 +18,8 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
             ("help,h", "Produce this help message.")
             ("table,e", po::value<string>()->default_value("test_10000000"),
              "Set table: \nDefault:\n  test_10000000")
+            ("server-host,a", po::value<string>()->default_value("xdbcserver"),
+             "Set server host address: \nDefault:\n  xdbcserver")
             ("intermediate-format,f", po::value<int>()->default_value(1),
              "Set intermediate-format: \nDefault:\n  1 (row)\nOther:\n  2 (col)")
             ("buffer-size,b", po::value<int>()->default_value(1000),
@@ -27,8 +29,8 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
             ("tuple-size,t", po::value<int>()->default_value(48), "Set the tuple size.\nDefault: 48")
             ("sleep-time,s", po::value<int>()->default_value(5), "Set a sleep-time in milli seconds.\nDefault: 5ms")
             ("mode,m", po::value<int>()->default_value(1), "1: Analytics, 2: Storage.\nDefault: 1")
-            ("net-parallelism,n", po::value<int>()->default_value(4), "Set the network parallelism grade.\nDefault: 1")
-            ("read-parallelism,r", po::value<int>()->default_value(4), "Set the read parallelism grade.\nDefault: 1")
+            ("net-parallelism,n", po::value<int>()->default_value(1), "Set the network parallelism grade.\nDefault: 1")
+            ("write-parallelism,r", po::value<int>()->default_value(1), "Set the read parallelism grade.\nDefault: 1")
             ("decomp-parallelism,d", po::value<int>()->default_value(4),
              "Set the decompression parallelism grade.\nDefault: 1")
             ("transfer-id,tid", po::value<long>()->default_value(0),
@@ -75,9 +77,9 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
         spdlog::get("XCLIENT")->info("Network parallelism: {0}", vm["net-parallelism"].as<int>());
         env.rcv_parallelism = vm["net-parallelism"].as<int>();
     }
-    if (vm.count("read-parallelism")) {
-        spdlog::get("XCLIENT")->info("Read parallelism: {0}", vm["read-parallelism"].as<int>());
-        env.read_parallelism = vm["read-parallelism"].as<int>();
+    if (vm.count("write-parallelism")) {
+        spdlog::get("XCLIENT")->info("Write parallelism: {0}", vm["write-parallelism"].as<int>());
+        env.read_parallelism = vm["write-parallelism"].as<int>();
     }
     if (vm.count("decomp-parallelism")) {
         spdlog::get("XCLIENT")->info("Decompression parallelism: {0}", vm["decomp-parallelism"].as<int>());
@@ -91,9 +93,13 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
         spdlog::get("XCLIENT")->info("Transfer id: {0}", vm["transfer-id"].as<long>());
         env.transfer_id = vm["transfer-id"].as<long>();
     }
+    if (vm.count("server-host")) {
+        spdlog::get("XCLIENT")->info("Server host: {0}", vm["server-host"].as<string>());
+        env.server_host = vm["server-host"].as<string>();
+    }
 
 
-    env.server_host = "xdbcserver";
+    //env.server_host = "xdbcserver";
     env.server_port = "1234";
 
     env.rcv_time = 0;
