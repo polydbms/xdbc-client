@@ -5,13 +5,15 @@ services:
     image: xdbc-server
     container_name: xdbcserver
     restart: always
+    volumes:
+      - /dev/shm:/dev/shm
     ports:
       - 1234:1234
       - 1235:1235
       - 1236:1236
       - 1237:1237
       - 1238:1238
-    shm_size: '2gb'
+    shm_size: '4gb'
     labels:
       com.docker-tc.enabled: 1
 
@@ -20,7 +22,9 @@ services:
     image: xdbc-client
     container_name: xdbcclient
     restart: always
-    shm_size: '2gb'
+    volumes:
+      - /dev/shm:/dev/shm
+    shm_size: '4gb'
     labels:
       com.docker-tc.enabled: 1
 
@@ -36,8 +40,7 @@ services:
     shm_size: '2gb'
 
 #  clickhouse:
-#    image: clickhouse/clickhouse-server
-#    #image: clickhousedb
+#    image: clickhousedb
 #    container_name: ch
 #    privileged: true
 #    ports:
@@ -45,8 +48,8 @@ services:
 #      - 18123:8123
 #    volumes:
 #      - test-data:/data
-#     - chdbvol:/var/lib/clickhouse
-#   shm_size: '2gb'
+#      - chdbvol:/var/lib/clickhouse
+#    shm_size: '2gb'
 
 volumes:
   test-data:

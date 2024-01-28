@@ -8,7 +8,7 @@ RUN apt-get upgrade -qy
 
 #-------------------------------------------- Install XDBC and prerequisites -------------------------------------------
 
-RUN apt install -qy cmake git
+RUN apt install -qy cmake git gdb
 
 RUN apt install -qy clang libboost-all-dev build-essential libspdlog-dev
 
