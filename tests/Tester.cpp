@@ -28,13 +28,13 @@ void Tester::close() {
                                  total_time);
 
     spdlog::get("XCLIENT")->info(
-            "xdbc client | receive time: {0} ms, decompress time: {1} ms, read time {2} ms",
+            "xdbc client | receive time: {0} ms, decompress time: {1} ms, write time {2} ms",
             env->rcv_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
             env->decomp_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
             env->write_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
 
     spdlog::get("XCLIENT")->info(
-            "xdbc client | receive wait time: {0} ms, decompress wait time: {1} ms, read wait time {2} ms",
+            "xdbc client | receive wait time: {0} ms, decompress wait time: {1} ms, write wait time {2} ms",
             env->rcv_wait_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
             env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
             env->write_wait_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
@@ -75,6 +75,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
+                //TODO replace vector copying with direct access like  in storage thread
                 auto *ptr = reinterpret_cast<Utils::shortLineitem *>(curBuffWithId.buff.data());
                 std::vector<Utils::shortLineitem> sls(ptr, ptr + env->buffer_size);
 
@@ -244,20 +245,19 @@ int Tester::storageThread(int thr, const std::string &filename) {
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
                 auto *ptr = reinterpret_cast<Utils::shortLineitem *>(curBuffWithId.buff.data());
-                std::vector<Utils::shortLineitem> sls(ptr, ptr + env->buffer_size);
-                for (auto sl: sls) {
+
+                for (int i = 0; i < env->buffer_size; ++i) {
+                    Utils::shortLineitem &sl = ptr[i];
                     totalcnt++;
                     if (sl.l_orderkey < 0) {
                         spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}, tuple: [{2}]",
                                                      curBuffWithId.id, cnt, Utils::slStr(&sl));
-
                         break;
                     } else {
                         cnt++;
                         csvBuffer << sl.l_orderkey << "," << sl.l_partkey << "," << sl.l_suppkey
                                   << "," << sl.l_linenumber << "," << sl.l_quantity << "," << sl.l_extendedprice
-                                  << "," << sl.l_discount << "," << sl.l_tax << std::endl;
-
+                                  << "," << sl.l_discount << "," << sl.l_tax << "\n";
                     }
                 }
                 if (buffsRead == 1) {
@@ -273,10 +273,10 @@ int Tester::storageThread(int thr, const std::string &filename) {
             }
             if (curBuffWithId.iformat == 2) {
                 // Create a byte pointer to the starting address of the vector
-                std::byte *dataPtr = curBuffWithId.buff.data();
+                //std::byte *dataPtr = curBuffWithId.buff.data();
 
                 // Construct the first four vectors of type int at the dataPtr address
-
+                //TODO: use schema info instead of hardcoded pointers
 
                 int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
                 int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4);
@@ -306,7 +306,7 @@ int Tester::storageThread(int thr, const std::string &filename) {
                     }*/
                     //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
                     csvBuffer << v1[i] << "," << v2[i] << "," << v3[i] << "," << v4[i] << "," << v5[i] << ","
-                              << v6[i] << "," << v7[i] << "," << v8[i] << std::endl;
+                              << v6[i] << "," << v7[i] << "," << v8[i] << "\n";
                 }
 
                 csvFile << csvBuffer.str();
