@@ -21,38 +21,43 @@ Tester::Tester(std::string name, xdbc::RuntimeEnv &env,
 
 void Tester::close() {
 
+    xclient.finalize();
+    
     auto end = std::chrono::steady_clock::now();
     auto total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    spdlog::get("XCLIENT")->info("Total elapsed time: {0} ms",
-                                 total_time);
+    spdlog::get("XCLIENT")->info("Total elapsed time: {0} ms", total_time);
 
-    spdlog::get("XCLIENT")->info(
-            "xdbc client | receive time: {0} ms, decompress time: {1} ms, write time {2} ms",
-            env->rcv_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
-            env->decomp_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
-            env->write_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
+    long long rcv_wait_time = env->rcv_wait_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism;
+    long long rcv_time = (env->rcv_time.load(std::memory_order_relaxed) / 1000 - rcv_wait_time);
+
+    long long decomp_wait_time = env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism;
+    long long decomp_time = (env->decomp_time.load(std::memory_order_relaxed) / 1000 - decomp_wait_time);
+
+    long long write_wait_time = env->write_wait_time.load(std::memory_order_relaxed) / 1000 / env->write_parallelism;
+    long long write_time = (env->write_time.load(std::memory_order_relaxed) / 1000 - write_wait_time);
+
+
+    spdlog::get("XCLIENT")->info("xdbc client | receive time: {0} ms, decompress time: {1} ms, write time {2} ms",
+                                 rcv_time, decomp_time, write_time);
 
     spdlog::get("XCLIENT")->info(
             "xdbc client | receive wait time: {0} ms, decompress wait time: {1} ms, write wait time {2} ms",
-            env->rcv_wait_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism,
-            env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism,
-            env->write_wait_time.load(std::memory_order_relaxed) / 1000 / env->read_parallelism);
+            rcv_wait_time, decomp_wait_time, write_wait_time);
 
     std::ofstream csv_file("/tmp/xdbc_client_timings.csv",
                            std::ios::out | std::ios::app);
 
     csv_file << std::fixed << std::setprecision(2)
              << std::to_string(env->transfer_id) << "," << total_time << ","
-             << env->rcv_wait_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism << ","
-             << env->rcv_time.load(std::memory_order_relaxed) / 1000 / env->rcv_parallelism << ","
-             << env->decomp_wait_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism << ","
-             << env->decomp_time.load(std::memory_order_relaxed) / 1000 / env->decomp_parallelism << ","
-             << env->write_wait_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << ","
-             << env->write_time.load(std::memory_order_relaxed) / 1000.0 / env->read_parallelism << "\n";
+             << rcv_wait_time << ","
+             << rcv_time << ","
+             << decomp_wait_time << ","
+             << decomp_time << ","
+             << write_wait_time << ","
+             << write_time << "\n";
     csv_file.close();
 
-    xclient.finalize();
 }
 
 int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, long &totalcnt) {
@@ -70,7 +75,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
         env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
 
         // Read the buffer and measure the working time
-        auto start = std::chrono::high_resolution_clock::now();
+
 
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
@@ -164,9 +169,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
         }
 
         // add the measured time to total reading time
-        auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now() - start).count();
-        env->write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
+
 
     }
 
@@ -182,15 +185,15 @@ void Tester::runAnalytics() {
                                  std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::steady_clock::now() - start).count());
 
-    int mins[env->read_parallelism];
-    int maxs[env->read_parallelism];
-    long sums[env->read_parallelism];
-    long cnts[env->read_parallelism];
-    long totalcnts[env->read_parallelism];
+    int mins[env->write_parallelism];
+    int maxs[env->write_parallelism];
+    long sums[env->write_parallelism];
+    long cnts[env->write_parallelism];
+    long totalcnts[env->write_parallelism];
 
-    std::thread readThreads[env->read_parallelism];
+    std::thread writeThreads[env->write_parallelism];
 
-    for (int i = 0; i < env->read_parallelism; i++) {
+    for (int i = 0; i < env->write_parallelism; i++) {
 
         mins[i] = INT32_MAX;
         maxs[i] = INT32_MIN;
@@ -198,20 +201,20 @@ void Tester::runAnalytics() {
         sums[i] = 0L;
         cnts[i] = 0L;
         totalcnts[i] = 0L;
-        readThreads[i] = std::thread(&Tester::analyticsThread, this, i, std::ref(mins[i]), std::ref(maxs[i]),
-                                     std::ref(sums[i]), std::ref(cnts[i]), std::ref(totalcnts[i]));
+        writeThreads[i] = std::thread(&Tester::analyticsThread, this, i, std::ref(mins[i]), std::ref(maxs[i]),
+                                      std::ref(sums[i]), std::ref(cnts[i]), std::ref(totalcnts[i]));
     }
 
-    for (int i = 0; i < env->read_parallelism; i++) {
-        readThreads[i].join();
+    for (int i = 0; i < env->write_parallelism; i++) {
+        writeThreads[i].join();
     }
 
 
-    int *minValuePtr = std::min_element(mins, mins + env->read_parallelism);
-    int *maxValuePtr = std::max_element(maxs, maxs + env->read_parallelism);
-    long sum = std::accumulate(sums, sums + env->read_parallelism, 0L);
-    long cnt = std::accumulate(cnts, cnts + env->read_parallelism, 0L);
-    long totalcnt = std::accumulate(totalcnts, totalcnts + env->read_parallelism, 0L);
+    int *minValuePtr = std::min_element(mins, mins + env->write_parallelism);
+    int *maxValuePtr = std::max_element(maxs, maxs + env->write_parallelism);
+    long sum = std::accumulate(sums, sums + env->write_parallelism, 0L);
+    long cnt = std::accumulate(cnts, cnts + env->write_parallelism, 0L);
+    long totalcnt = std::accumulate(totalcnts, totalcnts + env->write_parallelism, 0L);
 
     spdlog::get("XCLIENT")->info("totalcnt: {0}", totalcnt);
     spdlog::get("XCLIENT")->info("cnt: {0}", cnt);
@@ -238,8 +241,6 @@ int Tester::storageThread(int thr, const std::string &filename) {
                 std::chrono::high_resolution_clock::now() - start_wait).count();
         env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
 
-        // Read the buffer and measure the working time
-        auto start = std::chrono::high_resolution_clock::now();
 
         //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
@@ -322,14 +323,9 @@ int Tester::storageThread(int thr, const std::string &filename) {
             break;
         }
 
-        // add the measured time to total reading time
-        auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now() - start).count();
-        env->write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
-
     }
 
-    spdlog::get("XCLIENT")->info("Read thread {0} Total read buffers: {1}", thr, buffsRead);
+    spdlog::get("XCLIENT")->info("Write thread {0} Total written buffers: {1}", thr, buffsRead);
     csvFile.close();
 
     return buffsRead;
@@ -344,15 +340,15 @@ void Tester::runStorage(const std::string &filename) {
                                  std::chrono::duration_cast<std::chrono::milliseconds>(
                                          std::chrono::steady_clock::now() - start).count());
 
-    std::thread readThreads[env->read_parallelism];
+    std::thread writeThreads[env->write_parallelism];
 
-    for (int i = 0; i < env->read_parallelism; i++) {
-        readThreads[i] = std::thread(&Tester::storageThread, this, i, std::ref(filename));
+    for (int i = 0; i < env->write_parallelism; i++) {
+        writeThreads[i] = std::thread(&Tester::storageThread, this, i, std::ref(filename));
     }
 
 
-    for (int i = 0; i < env->read_parallelism; i++) {
-        readThreads[i].join();
+    for (int i = 0; i < env->write_parallelism; i++) {
+        writeThreads[i].join();
     }
 
     //TODO: combine multiple files or maybe do in external bash script

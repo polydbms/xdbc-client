@@ -8,7 +8,7 @@ cols_to_check = [
     "system", "table", "compression", "format", "network_parallelism",
     "bufpool_size", "buff_size", "network", "client_readmode", "client_cpu",
     "client_write_par", "client_decomp_par", "server_cpu", "server_read_par",
-    "server_read_partitions", "server_deser_par"
+    "server_read_partitions", "server_deser_par", "server_comp_par"
 ]
 
 # STEP 1: Extract rows where time <= 3

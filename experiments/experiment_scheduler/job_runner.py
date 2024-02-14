@@ -23,13 +23,15 @@ def run_job(ssh, host, config):
 
         if config['system'] == 'csv':
             total_lines = execute_ssh_cmd(ssh,
-                                          f"echo $(docker exec xdbcserver bash -c 'wc -l </dev/shm/{config['table']}.csv')")
+                                          # f"echo $(docker exec xdbcserver bash -c 'wc -l </dev/shm/{config['table']}.csv')")
+                                          f"echo $(wc -l </dev/shm/{config['table']}.csv)")
 
             lines_per_file = execute_ssh_cmd(ssh,
-                                             f"echo $((({total_lines} + {config['server_deser_par']} - 1) / {config['server_deser_par']}))")
+                                             f"echo $((({total_lines} + {config['server_read_par']} - 1) / {config['server_read_par']}))")
 
             execute_ssh_cmd(ssh,
-                            f"docker exec xdbcserver bash -c 'cd /dev/shm/ && split -d --lines={lines_per_file} {config['table']}.csv --additional-suffix=.csv {config['table']}_'")
+                            # f"docker exec xdbcserver bash -c 'cd /dev/shm/ && split -d --lines={lines_per_file} {config['table']}.csv --additional-suffix=.csv {config['table']}_'")
+                            f"cd /dev/shm/ && split -d --lines={lines_per_file} {config['table']}.csv --additional-suffix=.csv {config['table']}_")
 
         execute_ssh_cmd(ssh, f"docker update --cpus {config['server_cpu']} xdbcserver")
         execute_ssh_cmd(ssh, f"docker update --cpus {config['client_cpu']} xdbcclient")
@@ -40,14 +42,18 @@ def run_job(ssh, host, config):
                         f"bash {server_path}/build_and_start.sh xdbcserver 2 \"--transfer-id={current_timestamp} -c{config['compression']} --read-parallelism={config['server_read_par']} --read-partitions={config['server_read_partitions']} --deser-parallelism={config['server_deser_par']} --compression-parallelism={config['server_comp_par']} --network-parallelism={config['network_parallelism']} -f{config['format']} -b{config['buff_size']} -p{config['bufpool_size']} -s1 --system={config['system']}\"",
                         True)
         # TODO: fix? maybe check when server has started instead of sleeping
-        time.sleep(2)
+
+        sleep_time = 2
+        if config['server_cpu'] == 0.2:
+            sleep_time *= 8
+        time.sleep(sleep_time)
 
         start_data_size = execute_ssh_cmd(ssh,
                                           f"echo $(bash {client_path}/experiments_measure_network.sh 'xdbcclient')")
 
-        execute_ssh_cmd(ssh, f"rm -rf /tmp/stop_monitoring")
-        execute_ssh_cmd(ssh, f"touch /tmp/start_monitoring")
-        execute_ssh_cmd(ssh, f"bash {client_path}/experiments_measure_resources.sh xdbcserver xdbcclient", True)
+        # execute_ssh_cmd(ssh, f"rm -rf /tmp/stop_monitoring")
+        # execute_ssh_cmd(ssh, f"touch /tmp/start_monitoring")
+        # execute_ssh_cmd(ssh, f"bash {client_path}/experiments_measure_resources.sh xdbcserver xdbcclient", True)
 
         start_time = time.time()
         execute_ssh_cmd(ssh,
@@ -56,11 +62,15 @@ def run_job(ssh, host, config):
         elapsed_time = time.time() - start_time
         formatted_time = "{:.2f}".format(elapsed_time)
 
-        execute_ssh_cmd(ssh, f"touch /tmp/stop_monitoring")
+        # execute_ssh_cmd(ssh, f"touch /tmp/stop_monitoring")
         # server_pid = execute_ssh_cmd(ssh, "docker exec xdbcserver pgrep xdbc-server")
         # if server_pid.strip():
         execute_ssh_cmd(ssh,
                         """docker exec xdbcserver bash -c 'pids=$(pgrep xdbc-server); if [ "$pids" ]; then kill $pids; fi'""")
+        execute_ssh_cmd(ssh,
+                        """docker exec xdbcclient bash -c 'pids=$(pgrep xdbc-client); if [ "$pids" ]; then kill $pids; fi'""")
+        # execute_ssh_cmd(ssh, "cd ~/xdbc/xdbc-client && docker-compose -f docker-xdbc.yml restart xdbc-server")
+        # execute_ssh_cmd(ssh, "cd ~/xdbc/xdbc-client && docker-compose -f docker-xdbc.yml restart xdbc-client")
 
         time.sleep(3)
         resource_metrics_json = execute_ssh_cmd(ssh,
@@ -97,6 +107,11 @@ def run_job(ssh, host, config):
             "avg_cpu_server": avg_cpu_server,
             "avg_cpu_client": avg_cpu_client
         }
+
+        # clean up input/output files
+
+        execute_ssh_cmd(ssh, f"rm -f /dev/shm/{config['table']}_*.csv")
+        execute_ssh_cmd(ssh, f"docker exec xdbcclient bash -c 'rm -f /dev/shm/output*.csv'")
 
         # print(f"Complete run on host: {host}, config: {config}, result {result}")
 

@@ -68,7 +68,7 @@ def execute_ssh_cmd(ssh, cmd, background=False):
     return stdout.read().decode().strip()
 
 
-def create_ssh_connections(hosts):
+def create_ssh_connections(hosts, exp_num=0):
     """
     Create SSH connections for a list of hosts without username/password.
 
@@ -79,14 +79,17 @@ def create_ssh_connections(hosts):
         dict: A dictionary with hostnames as keys and SSH connections as values.
     """
     ssh_connections = {}
-
+    i = 0
     for host in hosts:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        if i == exp_num:
+            break
         try:
             ssh.connect(host, username='harry-ldap')
             ssh_connections[host] = ssh
+            i += 1
         except Exception as e:
             print(f"Failed to establish SSH connection to {host}: {str(e)}")
 

@@ -1,6 +1,6 @@
 import sys
 from configuration import get_experiment_queue
-from configuration import params
+#from configuration import params
 from configuration import hosts
 from job_runner import run_job
 from ssh_handler import create_ssh_connections, execute_ssh_cmd
@@ -13,6 +13,7 @@ from tqdm import tqdm
 import os
 import glob
 import pandas as pd
+import shutil
 
 
 def close_ssh_connections(signum, frame):
@@ -34,14 +35,14 @@ pbar = tqdm(total=total_jobs_size, position=0, leave=True)
 pbar.update(total_jobs_size - jobs_to_run)
 print(f"Starting experiments, jobs to run: {jobs_to_run}")
 
-ssh_connections = create_ssh_connections(hosts)
+ssh_connections = create_ssh_connections(hosts, jobs_to_run)
 signal.signal(signal.SIGINT, close_ssh_connections)
-
+print(f"Active ssh connections: {len(ssh_connections)}")
 # print(ssh_connections)
 xdbc_version = 2
 
 
-def write_csv_header(filename, config):
+def write_csv_header(filename, config=None):
     header = ['date', 'xdbc_version', 'host', 'run', 'system', 'table', 'compression', 'format', 'network_parallelism',
               'bufpool_size',
               'buff_size', 'network', 'client_readmode', 'client_cpu', 'client_write_par', 'client_decomp_par',
@@ -91,36 +92,65 @@ def worker(host, filename):
         # break
 
 
-def concatenate_timings_files(input_dir):
-    # Get a list of all _server_timings.csv and _client_timings.csv files in the input directory
-    server_files = glob.glob(os.path.join(input_dir, '*_server_timings.csv'))
-    client_files = glob.glob(os.path.join(input_dir, '*_client_timings.csv'))
+def append_if_not_duplicate(file_path, df, unique_id_column, existing_ids):
+    # Find rows in df that have IDs not present in existing_ids
+    df_to_append = df[~df[unique_id_column].isin(existing_ids)]
 
-    # Initialize empty DataFrames to hold the concatenated data for server and client
-    concatenated_server_data = pd.DataFrame()
-    concatenated_client_data = pd.DataFrame()
+    # Append non-duplicate data to the file
+    df_to_append.to_csv(file_path, mode='a', index=False, header=not os.path.exists(file_path))
+
+
+def load_existing_ids(file_path, unique_id_column):
+    if os.path.exists(file_path):
+        existing_df = pd.read_csv(file_path, usecols=[unique_id_column])
+        return existing_df[unique_id_column].tolist()
+    else:
+        return []
+
+
+def concatenate_timings_files(base_dir, ssh_connections):
+    current_directory = os.getcwd()
+    local_dir = os.path.join(current_directory, base_dir, "local")
+
+    if os.path.exists(local_dir):
+        shutil.rmtree(local_dir)
+    os.makedirs(local_dir)
+
+    for host, ssh in ssh_connections.items():
+        execute_ssh_cmd(ssh, f"docker cp xdbcserver:/tmp/xdbc_server_timings.csv {local_dir}/{host}_server_timings.csv")
+        execute_ssh_cmd(ssh, f"docker cp xdbcclient:/tmp/xdbc_client_timings.csv {local_dir}/{host}_client_timings.csv")
+
+    server_files = glob.glob(os.path.join(local_dir, '*_server_timings.csv'))
+    client_files = glob.glob(os.path.join(local_dir, '*_client_timings.csv'))
+
+    output_server_file = os.path.join(base_dir, 'concatenated_server_timings.csv')
+    output_client_file = os.path.join(base_dir, 'concatenated_client_timings.csv')
+
+    # Load existing unique IDs
+    existing_server_ids = load_existing_ids(output_server_file, 'transfer_id')
+    existing_client_ids = load_existing_ids(output_client_file, 'transfer_id')
 
     # Concatenate data from server files
     for server_file in server_files:
-        df = pd.read_csv(server_file)
-        concatenated_server_data = pd.concat([concatenated_server_data, df], ignore_index=True)
+        try:
+            df = pd.read_csv(server_file)
+            append_if_not_duplicate(output_server_file, df, 'transfer_id', existing_server_ids)
+        except Exception as e:
+            print(f'Problem with file:{server_file}. Exception:{e}')
 
     # Concatenate data from client files
     for client_file in client_files:
-        df = pd.read_csv(client_file)
-        concatenated_client_data = pd.concat([concatenated_client_data, df], ignore_index=True)
+        try:
+            df = pd.read_csv(client_file)
+            append_if_not_duplicate(output_client_file, df, 'transfer_id', existing_client_ids)
+        except Exception as e:
+            print(f'Problem with file:{client_file}. Exception:{e}')
 
-    # Save the concatenated data to the output files in the input directory
-    output_server_file = os.path.join(input_dir, 'concatenated_server_timings.csv')
-    output_client_file = os.path.join(input_dir, 'concatenated_client_timings.csv')
-    concatenated_server_data.to_csv(output_server_file, index=False)
-    concatenated_client_data.to_csv(output_client_file, index=False)
+    for file_path in glob.glob(os.path.join(local_dir, '*_timings.csv')):
+        os.remove(file_path)
 
-    # Remove individual files
-    for server_file in server_files:
-        os.remove(server_file)
-    for client_file in client_files:
-        os.remove(client_file)
+    # Optionally, remove the local_dir if it's no longer needed
+    shutil.rmtree(local_dir)
 
 
 def main():
@@ -130,7 +160,7 @@ def main():
     if not os.path.exists(directory):
         os.makedirs(directory)
     if not os.path.exists(filename):
-        write_csv_header(filename, params)
+        write_csv_header(filename)
 
     # create the internal statistics files
     for host, ssh in ssh_connections.items():
@@ -146,7 +176,7 @@ def main():
 
     threads = []
     for i in range(num_workers):
-        thread = threading.Thread(target=worker, args=(hosts[i], filename,))
+        thread = threading.Thread(target=worker, args=(hosts[i], filename))
         thread.start()
         threads.append(thread)
 
@@ -154,17 +184,18 @@ def main():
     for thread in threads:
         thread.join()
 
+    # clean up csv files if any
+    #for host, ssh in ssh_connections.items():
+    #    for tbl in params['table']:
+    #        print(tbl)
+    #        execute_ssh_cmd(ssh, f"rm -f /dev/shm/{tbl}_*.csv")
+    #        execute_ssh_cmd(ssh, f"docker exec xdbcclient bash -c 'rm -f /dev/shm/output*.csv'")
+
     print("All threads have finished. Collecting internal statistics files")
-    current_directory = os.getcwd()
-    for host, ssh in ssh_connections.items():
-        execute_ssh_cmd(ssh,
-                        f"docker cp xdbcserver:/tmp/xdbc_server_timings.csv {current_directory}/measurements/{host}_server_timings.csv")
 
-        execute_ssh_cmd(ssh,
-                        f"docker cp xdbcclient:/tmp/xdbc_client_timings.csv {current_directory}/measurements/{host}_client_timings.csv")
-
-    concatenate_timings_files("measurements")
+    concatenate_timings_files("measurements", ssh_connections)
     # TODO: proper ssh connection handling
+
     for host, ssh in ssh_connections.items():
         print(f"Closing ssh connection to: {host}")
         ssh.close()

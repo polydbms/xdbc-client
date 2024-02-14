@@ -79,7 +79,7 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
     }
     if (vm.count("write-parallelism")) {
         spdlog::get("XCLIENT")->info("Write parallelism: {0}", vm["write-parallelism"].as<int>());
-        env.read_parallelism = vm["write-parallelism"].as<int>();
+        env.write_parallelism = vm["write-parallelism"].as<int>();
     }
     if (vm.count("decomp-parallelism")) {
         spdlog::get("XCLIENT")->info("Decompression parallelism: {0}", vm["decomp-parallelism"].as<int>());
@@ -109,6 +109,7 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
     env.rcv_wait_time = 0;
     env.decomp_wait_time = 0;
     env.write_wait_time = 0;
+
 }
 
 int main(int argc, char *argv[]) {
@@ -134,10 +135,15 @@ int main(int argc, char *argv[]) {
 
     Tester tester("Cpp Client", env, schema);
 
+    auto start = std::chrono::high_resolution_clock::now();
     if (env.mode == 1)
         tester.runAnalytics();
     else if (env.mode == 2)
         tester.runStorage("/dev/shm/output");
+
+    auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::high_resolution_clock::now() - start).count();
+    env.write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
 
     tester.close();
 

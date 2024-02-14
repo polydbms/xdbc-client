@@ -41,7 +41,9 @@ namespace xdbc {
         std::chrono::milliseconds sleep_time;
         int rcv_parallelism;
         int decomp_parallelism;
-        int read_parallelism;
+        int write_parallelism;
+        std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> start_rcv_time;
+        std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> start_decomp_time;
         std::atomic<long long> rcv_wait_time;
         std::atomic<long long> decomp_wait_time;
         std::atomic<long long> write_wait_time;
