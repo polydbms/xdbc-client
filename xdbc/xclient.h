@@ -31,6 +31,12 @@ namespace xdbc {
     };
     typedef std::shared_ptr<queue<int>> FBQ_ptr;
 
+    struct SchemaAttribute {
+        std::string name;
+        std::string tpe;
+        int size;
+    };
+
     struct RuntimeEnv {
         long transfer_id;
         std::string env_name;
@@ -53,7 +59,7 @@ namespace xdbc {
         std::string table;
         std::string server_host;
         std::string server_port;
-        std::vector<std::tuple<std::string, std::string, int>> schema;
+        std::vector<SchemaAttribute> schema;
         std::vector<FBQ_ptr> freeBufferIds;
         std::vector<FBQ_ptr> compressedBufferIds;
         std::vector<FBQ_ptr> decompressedBufferIds;

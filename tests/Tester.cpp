@@ -11,18 +11,19 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 
 Tester::Tester(std::string name, xdbc::RuntimeEnv &env,
-               std::vector<std::tuple<std::string, std::string, int>> schema)
-        : name(std::move(name)), env(&env), schema(std::move(schema)), xclient(env) {
+               const std::vector<xdbc::SchemaAttribute> &schema)
+        : name(std::move(name)), env(&env), schema(schema), xclient(env) {
 
     start = std::chrono::steady_clock::now();
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", xclient.get_name());
 
 }
 
+
 void Tester::close() {
 
+
     xclient.finalize();
-    
     auto end = std::chrono::steady_clock::now();
     auto total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
@@ -64,6 +65,11 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
 
     int buffsRead = 0;
 
+    size_t tupleSize = 0;
+    for (const auto &attr: schema) {
+        tupleSize += attr.size;
+    }
+
     while (xclient.hasNext(thr)) {
         // Get next read buffer and measure the wait time
         auto start_wait = std::chrono::high_resolution_clock::now();
@@ -74,96 +80,50 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
                 std::chrono::high_resolution_clock::now() - start_wait).count();
         env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
 
-        // Read the buffer and measure the working time
 
-
-        //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
-                //TODO replace vector copying with direct access like  in storage thread
-                auto *ptr = reinterpret_cast<Utils::shortLineitem *>(curBuffWithId.buff.data());
-                std::vector<Utils::shortLineitem> sls(ptr, ptr + env->buffer_size);
+                auto dataPtr = curBuffWithId.buff.data();
 
-                for (auto sl: sls) {
+                for (int i = 0; i < env->buffer_size; ++i) {
                     totalcnt++;
-                    //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
-                    if (sl.l_orderkey < 0) {
-                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}, tuple: [{2}]",
-                                                     curBuffWithId.id, cnt, Utils::slStr(&sl));
 
+                    int *firstAttribute = reinterpret_cast<int *>(dataPtr);
+
+                    if (*firstAttribute < 0) {
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}", curBuffWithId.id, i);
                         break;
-                    } else {
-                        cnt++;
-
-                        sum += sl.l_orderkey;
-                        if (sl.l_orderkey < min)
-                            min = sl.l_orderkey;
-                        if (sl.l_orderkey > max)
-                            max = sl.l_orderkey;
                     }
+                    cnt++;
+                    sum += *firstAttribute;
+                    if (*firstAttribute < min) min = *firstAttribute;
+                    if (*firstAttribute > max) max = *firstAttribute;
 
+                    dataPtr += tupleSize;
                 }
-                if (buffsRead == 1) {
 
-                    /*spdlog::get("XCLIENT")->info(
-                            "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
-                            sl.l_orderkey, sl.l_partkey, sl.l_suppkey, sl.l_linenumber, sl.l_quantity,
-                            sl.l_extendedprice, sl.l_discount, sl.l_tax);*/
-                }
 
             } else if (curBuffWithId.iformat == 2) {
-                // Create a byte pointer to the starting address of the vector
-                std::byte *dataPtr = curBuffWithId.buff.data();
-
-                // Construct the first four vectors of type int at the dataPtr address
 
                 int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
-                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4);
-                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 2);
-                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 3);
-                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4);
-                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
-                                                        env->buffer_size * 8 * 1);
-                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
-                                                        env->buffer_size * 8 * 2);
-                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
-                                                        env->buffer_size * 8 * 3);
-
-                if (buffsRead == 1) {
-
-                    spdlog::get("XCLIENT")->info("first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
-                                                 v1[0], v2[0], v3[0], v4[0], v5[0], v6[0], v7[0], v8[0]);
-                }
-
                 for (int i = 0; i < env->buffer_size; i++) {
                     totalcnt++;
-                    /*if (v1[i] > 0) {
-                        spdlog::get("XCLIENT")->info(
-                                "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
-                                v1[i], v2[i], v3[i], v4[i], v5[i], v6[i], v7[i], v8[i]);
-                    }*/
-                    //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
                     if (v1[i] < 0) {
-                        //spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple_no: {1}, l_orderkey: {2}",
-                        //                            curBuffWithId.id, cnt, v1[i]);
-                        //c.printSl(&sl);
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple_no: {1}", curBuffWithId.id, i);
                         break;
-                    } else {
-                        cnt++;
-                        sum += v1[i];
-                        if (v1[i] < min)
-                            min = v1[i];
-                        if (v1[i] > max)
-                            max = v1[i];
                     }
 
+                    sum += v1[i];
+                    if (v1[i] < min) min = v1[i];
+                    if (v1[i] > max) max = v1[i];
+                    cnt++;
                 }
 
             }
             buffsRead++;
             xclient.markBufferAsRead(curBuffWithId.id);
         } else {
-            spdlog::get("XCLIENT")->warn("Read thread {0} found invalid buffer with id: {1}, buff_no: {2}",
+            spdlog::get("XCLIENT")->warn("Write thread {0} found invalid buffer with id: {1}, buff_no: {2}",
                                          thr, curBuffWithId.id, buffsRead);
             break;
         }
@@ -227,10 +187,27 @@ int Tester::storageThread(int thr, const std::string &filename) {
 
     std::ofstream csvFile(filename + std::to_string(thr) + ".csv", std::ios::out);
 
-    std::ostringstream csvBuffer;
+    std::ostringstream csvBuffer(std::ios::out | std::ios::ate);
+    csvBuffer.str(std::string(env->buffer_size * schema.size() * 20, '\0'));
+    csvBuffer.clear();
+
     int totalcnt = 0;
     int cnt = 0;
     int buffsRead = 0;
+
+
+    std::vector<size_t> offsets(schema.size());
+    size_t baseOffset = 0;
+    for (size_t i = 0; i < schema.size(); ++i) {
+        offsets[i] = baseOffset;
+        if (schema[i].tpe == "INT") {
+            baseOffset += env->buffer_size * sizeof(int);
+        } else if (schema[i].tpe == "DOUBLE") {
+            baseOffset += env->buffer_size * sizeof(double);
+        }
+    }
+
+
     while (xclient.hasNext(thr)) {
         // Get next read buffer and measure the waiting time
         auto start_wait = std::chrono::high_resolution_clock::now();
@@ -241,77 +218,74 @@ int Tester::storageThread(int thr, const std::string &filename) {
                 std::chrono::high_resolution_clock::now() - start_wait).count();
         env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
 
-
-        //cout << "Iteration at tuple:" << cnt << " and buffer " << buffsRead << endl;
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
-                auto *ptr = reinterpret_cast<Utils::shortLineitem *>(curBuffWithId.buff.data());
 
-                for (int i = 0; i < env->buffer_size; ++i) {
-                    Utils::shortLineitem &sl = ptr[i];
-                    totalcnt++;
-                    if (sl.l_orderkey < 0) {
-                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}, tuple: [{2}]",
-                                                     curBuffWithId.id, cnt, Utils::slStr(&sl));
+                auto dataPtr = curBuffWithId.buff.data();
+                for (size_t i = 0; i < env->buffer_size; ++i) {
+                    size_t offset = 0;
+
+                    // Check the first attribute before proceeding
+                    //TODO: fix empty tuples by not writing them on the server side
+                    if (schema.front().tpe == "INT" && *reinterpret_cast<int *>(dataPtr) < 0) {
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}",
+                                                     curBuffWithId.id, cnt);
                         break;
-                    } else {
-                        cnt++;
-                        csvBuffer << sl.l_orderkey << "," << sl.l_partkey << "," << sl.l_suppkey
-                                  << "," << sl.l_linenumber << "," << sl.l_quantity << "," << sl.l_extendedprice
-                                  << "," << sl.l_discount << "," << sl.l_tax << "\n";
                     }
-                }
-                if (buffsRead == 1) {
 
-                    /*spdlog::get("XCLIENT")->info(
-                            "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
-                            sl.l_orderkey, sl.l_partkey, sl.l_suppkey, sl.l_linenumber, sl.l_quantity,
-                            sl.l_extendedprice, sl.l_discount, sl.l_tax);*/
+                    for (const auto &attr: schema) {
+                        if (attr.tpe == "INT") {
+                            csvBuffer << *reinterpret_cast<int *>(dataPtr + offset);
+                            offset += sizeof(int);
+                        } else if (attr.tpe == "DOUBLE") {
+                            csvBuffer << *reinterpret_cast<double *>(dataPtr + offset);
+                            offset += sizeof(double);
+                        }
+
+                        csvBuffer << (&attr != &schema.back() ? "," : "\n");
+                    }
+
+                    cnt++;
+                    dataPtr += offset;
                 }
+
                 csvFile << csvBuffer.str();
-
                 csvBuffer.str("");
             }
             if (curBuffWithId.iformat == 2) {
-                // Create a byte pointer to the starting address of the vector
-                //std::byte *dataPtr = curBuffWithId.buff.data();
 
-                // Construct the first four vectors of type int at the dataPtr address
-                //TODO: use schema info instead of hardcoded pointers
+                std::vector<void *> pointers(schema.size());
+                std::vector<int *> intPointers(schema.size());
+                std::vector<double *> doublePointers(schema.size());
+                std::byte *dataPtr = curBuffWithId.buff.data();
 
-                int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
-                int *v2 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4);
-                int *v3 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 2);
-                int *v4 = reinterpret_cast<int *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 3);
-                double *v5 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4);
-                double *v6 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
-                                                        env->buffer_size * 8 * 1);
-                double *v7 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
-                                                        env->buffer_size * 8 * 2);
-                double *v8 = reinterpret_cast<double *>(curBuffWithId.buff.data() + env->buffer_size * 4 * 4 +
-                                                        env->buffer_size * 8 * 3);
-
-                if (buffsRead == 1) {
-
-                    spdlog::get("XCLIENT")->info(
-                            "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
-                            v1[0], v2[0], v3[0], v4[0], v5[0], v6[0], v7[0], v8[0]);
+                // Initialize pointers for the current buffer
+                for (size_t j = 0; j < schema.size(); ++j) {
+                    pointers[j] = static_cast<void *>(dataPtr + offsets[j]);
+                    if (schema[j].tpe == "INT") {
+                        intPointers[j] = reinterpret_cast<int *>(pointers[j]);
+                    } else if (schema[j].tpe == "DOUBLE") {
+                        doublePointers[j] = reinterpret_cast<double *>(pointers[j]);
+                    }
                 }
 
-                for (int i = 0; i < env->buffer_size; i++) {
-                    totalcnt++;
-                    /*if (v1[i] > 0) {
-                        spdlog::get("XCLIENT")->info(
-                                "first shortLineitem: {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} ",
-                                v1[i], v2[i], v3[i], v4[i], v5[i], v6[i], v7[i], v8[i]);
-                    }*/
-                    //cout << "Buffer with Id: " << curBuffWithId.id << " l_orderkey: " << sl.l_orderkey << endl;
-                    csvBuffer << v1[i] << "," << v2[i] << "," << v3[i] << "," << v4[i] << "," << v5[i] << ","
-                              << v6[i] << "," << v7[i] << "," << v8[i] << "\n";
+                // Loop over rows
+                for (int i = 0; i < env->buffer_size; ++i) {
+                    if (*(intPointers[0] + i) < 0) {
+                        spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}", curBuffWithId.id, i);
+                        break;  // Exit the loop if the first element is less than zero
+                    }
+                    for (size_t j = 0; j < schema.size(); ++j) {
+                        if (schema[j].tpe == "INT") {
+                            csvBuffer << *(intPointers[j] + i);
+                        } else if (schema[j].tpe == "DOUBLE") {
+                            csvBuffer << *(doublePointers[j] + i);
+                        }
+                        csvBuffer << (j < schema.size() - 1 ? "," : "\n");
+                    }
                 }
 
                 csvFile << csvBuffer.str();
-
                 csvBuffer.str("");
 
             }

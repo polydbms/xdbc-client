@@ -20,6 +20,8 @@ using namespace boost::asio;
 using ip::tcp;
 
 namespace xdbc {
+
+
     XClient::XClient(RuntimeEnv &env) :
             _xdbcenv(&env),
             _bufferPool(),
@@ -95,7 +97,12 @@ namespace xdbc {
                 "Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads",
                 _xdbcenv->env_name, _xdbcenv->rcv_parallelism, _xdbcenv->decomp_parallelism);
 
-
+        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
+            _rcvThreads[i].join();
+        }
+        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) {
+            _decompThreads[i].join();
+        }
 
         auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::high_resolution_clock::now() -
@@ -166,12 +173,6 @@ namespace xdbc {
 
         spdlog::get("XDBC.CLIENT")->info("#3 Initialized");
 
-        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
-            _rcvThreads[i].join();
-        }
-        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) {
-            _decompThreads[i].join();
-        }
 
         return 1;
     }
@@ -197,7 +198,18 @@ namespace xdbc {
 
         spdlog::get("XDBC.CLIENT")->info("Basesocket: trying to connect");
 
-        _baseSocket.connect(endpoint);
+        boost::system::error_code ec;
+        _baseSocket.connect(endpoint, ec);
+
+        int tries = 0;
+        while (ec && tries < 3) {
+            spdlog::get("XDBC.CLIENT")->warn("Basesocket not connecting, trying to reconnect...");
+            tries++;
+            _baseSocket.close();
+            std::this_thread::sleep_for(_xdbcenv->sleep_time * 100);
+            _baseSocket.connect(endpoint, ec);
+
+        }
         spdlog::get("XDBC.CLIENT")->info("Basesocket: connected to {0}:{1}",
                                          endpoint.address().to_string(), endpoint.port());
 
@@ -411,20 +423,20 @@ namespace xdbc {
                         size_t posInReadBuffer = 0;
                         int i = 0;
 
-                        for (auto attribute: _xdbcenv->schema) {
+                        for (const auto &attribute: _xdbcenv->schema) {
 
                             //spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}", std::get<0>(attribute));
 
-                            if (std::get<1>(attribute) == "INT") {
+                            if (attribute.tpe == "INT") {
 
                                 decompError = Decompressor::decompress_int_col(
                                         reinterpret_cast<const uint32_t *>(compressed_buffer) +
-                                        posInReadBuffer / std::get<2>(attribute),
-                                        header->attributeSize[i] / std::get<2>(attribute),
+                                        posInReadBuffer / attribute.size,
+                                        header->attributeSize[i] / attribute.size,
                                         decompressed_buffer.data() + posInWriteBuffer,
                                         _xdbcenv->buffer_size);
 
-                            } else if (std::get<1>(attribute) == "DOUBLE") {
+                            } else if (attribute.tpe == "DOUBLE") {
                                 /*spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}, compressed_size: {1}",
                                                                  std::get<0>(attribute), attSize);*/
 
@@ -441,7 +453,7 @@ namespace xdbc {
                                         _xdbcenv->buffer_size);
 
                             }
-                            posInWriteBuffer += _xdbcenv->buffer_size * std::get<2>(attribute);
+                            posInWriteBuffer += _xdbcenv->buffer_size * attribute.size;
                             posInReadBuffer += header->attributeSize[i];
                             i++;
                         }
@@ -459,21 +471,31 @@ namespace xdbc {
                                                              checksum, computed_checksum);
                         }*/
 
+                        size_t offset = 0;
+                        int m2i = -2;
+                        double m2d = -2.0;
+
                         //TODO: remove hardcoded by adding schema
                         if (header->intermediateFormat == 1) {
-                            Utils::shortLineitem sl = {-2, -2, -2, -2, -2, -2, -2, -2};
-                            std::memcpy(decompressed_buffer.data(), &sl, sizeof(sl));
+                            for (const auto &attr: _xdbcenv->schema) {
+                                if (attr.tpe == "INT") {
+                                    std::memcpy(decompressed_buffer.data() + offset, &m2i, attr.size);
+                                    offset += attr.size;
+                                } else if (attr.tpe == "DOUBLE") {
+                                    std::memcpy(decompressed_buffer.data() + offset, &m2d, attr.size);
+                                    offset += attr.size;
+                                }
+                            }
                         } else if (header->intermediateFormat == 2) {
-                            int m2 = -2;
-                            int bs = _xdbcenv->buffer_size;
-                            std::memcpy(decompressed_buffer.data(), &m2, 4);
-                            std::memcpy(decompressed_buffer.data() + bs * 4, &m2, 4);
-                            std::memcpy(decompressed_buffer.data() + bs * 4 * 2, &m2, 4);
-                            std::memcpy(decompressed_buffer.data() + bs * 4 * 3, &m2, 4);
-                            std::memcpy(decompressed_buffer.data() + bs * 4 * 4, &m2, 8);
-                            std::memcpy(decompressed_buffer.data() + bs * 16 + bs * 8, &m2, 8);
-                            std::memcpy(decompressed_buffer.data() + bs * 16 + bs * 8 * 2, &m2, 8);
-                            std::memcpy(decompressed_buffer.data() + bs * 16 + bs * 8 * 3, &m2, 8);
+                            for (const auto &attr: _xdbcenv->schema) {
+                                if (attr.tpe == "INT") {
+                                    std::memcpy(decompressed_buffer.data() + offset, &m2i, attr.size);
+                                    offset += _xdbcenv->buffer_size * attr.size;
+                                } else if (attr.tpe == "DOUBLE") {
+                                    std::memcpy(decompressed_buffer.data() + offset, &m2d, attr.size);
+                                    offset += _xdbcenv->buffer_size * attr.size;
+                                }
+                            }
 
                         }
 
