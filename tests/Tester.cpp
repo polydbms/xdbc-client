@@ -10,9 +10,8 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
-Tester::Tester(std::string name, xdbc::RuntimeEnv &env,
-               const std::vector<xdbc::SchemaAttribute> &schema)
-        : name(std::move(name)), env(&env), schema(schema), xclient(env) {
+Tester::Tester(std::string name, xdbc::RuntimeEnv &env)
+        : name(std::move(name)), env(&env), xclient(env) {
 
     start = std::chrono::steady_clock::now();
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", xclient.get_name());
@@ -66,7 +65,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
     int buffsRead = 0;
 
     size_t tupleSize = 0;
-    for (const auto &attr: schema) {
+    for (const auto &attr: env->schema) {
         tupleSize += attr.size;
     }
 
@@ -79,7 +78,6 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
         auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::high_resolution_clock::now() - start_wait).count();
         env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
-
 
         if (curBuffWithId.id >= 0) {
             if (curBuffWithId.iformat == 1) {
@@ -101,8 +99,6 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
 
                     dataPtr += tupleSize;
                 }
-
-
             } else if (curBuffWithId.iformat == 2) {
 
                 int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
@@ -127,9 +123,6 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
                                          thr, curBuffWithId.id, buffsRead);
             break;
         }
-
-        // add the measured time to total reading time
-
 
     }
 
@@ -188,7 +181,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
     std::ofstream csvFile(filename + std::to_string(thr) + ".csv", std::ios::out);
 
     std::ostringstream csvBuffer(std::ios::out | std::ios::ate);
-    csvBuffer.str(std::string(env->buffer_size * schema.size() * 20, '\0'));
+    //TODO: make generic
+    //csvBuffer.str(std::string(env->buffer_size * schema.size() * 20, '\0'));
     csvBuffer.clear();
 
     int totalcnt = 0;
@@ -196,13 +190,13 @@ int Tester::storageThread(int thr, const std::string &filename) {
     int buffsRead = 0;
 
 
-    std::vector<size_t> offsets(schema.size());
+    std::vector<size_t> offsets(env->schema.size());
     size_t baseOffset = 0;
-    for (size_t i = 0; i < schema.size(); ++i) {
+    for (size_t i = 0; i < env->schema.size(); ++i) {
         offsets[i] = baseOffset;
-        if (schema[i].tpe == "INT") {
+        if (env->schema[i].tpe == "INT") {
             baseOffset += env->buffer_size * sizeof(int);
-        } else if (schema[i].tpe == "DOUBLE") {
+        } else if (env->schema[i].tpe == "DOUBLE") {
             baseOffset += env->buffer_size * sizeof(double);
         }
     }
@@ -227,13 +221,13 @@ int Tester::storageThread(int thr, const std::string &filename) {
 
                     // Check the first attribute before proceeding
                     //TODO: fix empty tuples by not writing them on the server side
-                    if (schema.front().tpe == "INT" && *reinterpret_cast<int *>(dataPtr) < 0) {
+                    if (env->schema.front().tpe == "INT" && *reinterpret_cast<int *>(dataPtr) < 0) {
                         spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}",
                                                      curBuffWithId.id, cnt);
                         break;
                     }
 
-                    for (const auto &attr: schema) {
+                    for (const auto &attr: env->schema) {
                         if (attr.tpe == "INT") {
                             csvBuffer << *reinterpret_cast<int *>(dataPtr + offset);
                             offset += sizeof(int);
@@ -242,7 +236,7 @@ int Tester::storageThread(int thr, const std::string &filename) {
                             offset += sizeof(double);
                         }
 
-                        csvBuffer << (&attr != &schema.back() ? "," : "\n");
+                        csvBuffer << (&attr != &env->schema.back() ? "," : "\n");
                     }
 
                     cnt++;
@@ -254,17 +248,17 @@ int Tester::storageThread(int thr, const std::string &filename) {
             }
             if (curBuffWithId.iformat == 2) {
 
-                std::vector<void *> pointers(schema.size());
-                std::vector<int *> intPointers(schema.size());
-                std::vector<double *> doublePointers(schema.size());
+                std::vector<void *> pointers(env->schema.size());
+                std::vector<int *> intPointers(env->schema.size());
+                std::vector<double *> doublePointers(env->schema.size());
                 std::byte *dataPtr = curBuffWithId.buff.data();
 
                 // Initialize pointers for the current buffer
-                for (size_t j = 0; j < schema.size(); ++j) {
+                for (size_t j = 0; j < env->schema.size(); ++j) {
                     pointers[j] = static_cast<void *>(dataPtr + offsets[j]);
-                    if (schema[j].tpe == "INT") {
+                    if (env->schema[j].tpe == "INT") {
                         intPointers[j] = reinterpret_cast<int *>(pointers[j]);
-                    } else if (schema[j].tpe == "DOUBLE") {
+                    } else if (env->schema[j].tpe == "DOUBLE") {
                         doublePointers[j] = reinterpret_cast<double *>(pointers[j]);
                     }
                 }
@@ -275,13 +269,13 @@ int Tester::storageThread(int thr, const std::string &filename) {
                         spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}", curBuffWithId.id, i);
                         break;  // Exit the loop if the first element is less than zero
                     }
-                    for (size_t j = 0; j < schema.size(); ++j) {
-                        if (schema[j].tpe == "INT") {
+                    for (size_t j = 0; j < env->schema.size(); ++j) {
+                        if (env->schema[j].tpe == "INT") {
                             csvBuffer << *(intPointers[j] + i);
-                        } else if (schema[j].tpe == "DOUBLE") {
+                        } else if (env->schema[j].tpe == "DOUBLE") {
                             csvBuffer << *(doublePointers[j] + i);
                         }
-                        csvBuffer << (j < schema.size() - 1 ? "," : "\n");
+                        csvBuffer << (j < env->schema.size() - 1 ? "," : "\n");
                     }
                 }
 

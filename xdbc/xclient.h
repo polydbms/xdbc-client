@@ -114,7 +114,6 @@ namespace xdbc {
         void finalize();
 
         void markBufferAsRead(int buffId);
-
     };
 
 }

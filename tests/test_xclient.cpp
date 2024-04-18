@@ -1,5 +1,6 @@
 #include <iostream>
 #include <thread>
+#include <numeric>
 #include "../xdbc/xclient.h"
 #include <iomanip>
 #include "spdlog/spdlog.h"
@@ -14,6 +15,25 @@ static xdbc::SchemaAttribute createSchemaAttribute(std::string name, std::string
     att.tpe = std::move(tpe);
     att.size = size;
     return att;
+}
+
+std::string formatSchema(const std::vector<xdbc::SchemaAttribute> schema) {
+    std::stringstream ss;
+
+    // Header line
+    ss << std::setw(20) << std::left << "Name"
+       << std::setw(15) << std::left << "Type"
+       << std::setw(10) << std::left << "Size"
+       << '\n';
+
+    for (const auto &tuple: schema) {
+        ss << std::setw(20) << std::left << tuple.name
+           << std::setw(15) << std::left << tuple.tpe
+           << std::setw(10) << std::left << tuple.size
+           << '\n';
+    }
+
+    return ss.str();
 }
 
 using namespace std;
@@ -34,7 +54,7 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
              "Set buffer-size of buffers used to read data from the database.\nDefault: 1000")
             ("bufferpool-size,p", po::value<int>()->default_value(1000),
              "Set the amount of buffers used.\nDefault: 1000")
-            ("tuple-size,t", po::value<int>()->default_value(48), "Set the tuple size.\nDefault: 48")
+            //("tuple-size,t", po::value<int>()->default_value(48), "Set the tuple size.\nDefault: 48")
             ("sleep-time,s", po::value<int>()->default_value(5), "Set a sleep-time in milli seconds.\nDefault: 5ms")
             ("mode,m", po::value<int>()->default_value(1), "1: Analytics, 2: Storage.\nDefault: 1")
             ("net-parallelism,n", po::value<int>()->default_value(1), "Set the network parallelism grade.\nDefault: 1")
@@ -73,10 +93,10 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
         spdlog::get("XCLIENT")->info("Bufferpool size: {0}", vm["bufferpool-size"].as<int>());
         env.bufferpool_size = vm["bufferpool-size"].as<int>();
     }
-    if (vm.count("tuple-size")) {
+    /*if (vm.count("tuple-size")) {
         spdlog::get("XCLIENT")->info("Tuple size: {0}", vm["tuple-size"].as<int>());
         env.tuple_size = vm["tuple-size"].as<int>();
-    }
+    }*/
     if (vm.count("sleep-time")) {
         spdlog::get("XCLIENT")->info("Sleep time: {0} ms", vm["sleep-time"].as<int>());
         env.sleep_time = std::chrono::milliseconds(vm["sleep-time"].as<int>());
@@ -131,7 +151,7 @@ int main(int argc, char *argv[]) {
     //create schema
     std::vector<xdbc::SchemaAttribute> schema;
 
-    if(env.table.find("lineitem") != std::string::npos) {
+    if (env.table.find("lineitem") != std::string::npos) {
         schema.emplace_back(createSchemaAttribute("l_orderkey", "INT", 4));
         schema.emplace_back(createSchemaAttribute("l_partkey", "INT", 4));
         schema.emplace_back(createSchemaAttribute("l_suppkey", "INT", 4));
@@ -140,9 +160,7 @@ int main(int argc, char *argv[]) {
         schema.emplace_back(createSchemaAttribute("l_extendedprice", "DOUBLE", 8));
         schema.emplace_back(createSchemaAttribute("l_discount", "DOUBLE", 8));
         schema.emplace_back(createSchemaAttribute("l_tax", "DOUBLE", 8));
-    }
-
-    else if (env.table.find("ss13") != std::string::npos) {
+    } else if (env.table.find("ss13") != std::string::npos) {
         schema.emplace_back(createSchemaAttribute("SERIALNO", "INT", 4));
         schema.emplace_back(createSchemaAttribute("DIVISION", "INT", 4));
         schema.emplace_back(createSchemaAttribute("PUMA", "INT", 4));
@@ -375,8 +393,15 @@ int main(int argc, char *argv[]) {
         schema.emplace_back(createSchemaAttribute("wgtp80", "INT", 4));
     }
     env.schema = schema;
+    env.tuple_size = std::accumulate(env.schema.begin(), env.schema.end(), 0,
+                                     [](int acc, const xdbc::SchemaAttribute &attr) {
+                                         return acc + attr.size;
+                                     });
 
-    Tester tester("Cpp Client", env, schema);
+    spdlog::get("XCLIENT")->info("Input table: {0} with tuple size {1} and schema:\n{2}",
+                                 env.table, env.tuple_size, formatSchema(env.schema));
+
+    Tester tester("Cpp Client", env);
 
     auto start = std::chrono::high_resolution_clock::now();
     if (env.mode == 1)
@@ -389,7 +414,6 @@ int main(int argc, char *argv[]) {
     env.write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
 
     tester.close();
-
 
     return 0;
 }

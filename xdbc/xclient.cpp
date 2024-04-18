@@ -1,13 +1,10 @@
 #include "xclient.h"
-#include <iostream>
 #include <boost/asio.hpp>
 #include <boost/asio/deadline_timer.hpp>
 #include <thread>
 #include <chrono>
 #include <algorithm>
 #include <iterator>
-#include <utility>
-#include <numeric>
 
 #include "spdlog/spdlog.h"
 #include "spdlog/stopwatch.h"
@@ -531,7 +528,6 @@ namespace xdbc {
 
     //TODO: handle parallelism internally
     bool XClient::hasNext(int readThreadId) {
-
         if (_emptyDecompThreadCtr[readThreadId] == _xdbcenv->decomp_parallelism)
             return false;
 
@@ -556,7 +552,7 @@ namespace xdbc {
             curBuf.iformat = _xdbcenv->iformat;
             //std::copy(std::begin(_bufferPool[i]), std::end(_bufferPool[i]), std::begin(curBuf.buff));
         }
-
+        //spdlog::get("XDBC.CLIENT")->warn("Sending buffer {0} to read thread {1}", buffId, readThreadId);
 
         return curBuf;
     }

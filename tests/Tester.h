@@ -5,8 +5,7 @@ class Tester {
 
 public:
 
-    Tester(std::string name, xdbc::RuntimeEnv &env,
-           const std::vector<xdbc::SchemaAttribute>& schema);
+    Tester(std::string name, xdbc::RuntimeEnv &env);
 
     void runAnalytics();
 
@@ -16,7 +15,6 @@ public:
 
 private:
     xdbc::RuntimeEnv *env;
-    std::vector<xdbc::SchemaAttribute> schema;
     xdbc::XClient xclient;
     std::string name;
     std::chrono::steady_clock::time_point start;
