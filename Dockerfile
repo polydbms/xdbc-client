@@ -43,10 +43,10 @@ COPY tests/ /xdbc-client/tests/
 COPY CMakeLists.txt /xdbc-client/
 
 # build xdbc
-RUN mkdir /xdbc-client/build && cd /xdbc-client/build && cmake .. && make -j8 && make install
+RUN mkdir /xdbc-client/build && cd /xdbc-client/build && cmake .. -D CMAKE_BUILD_TYPE=Release && make -j8 && make install
 
 # build test
-RUN mkdir /xdbc-client/tests/build && cd /xdbc-client/tests/build && cmake .. && make -j8
+RUN mkdir /xdbc-client/tests/build && cd /xdbc-client/tests/build && cmake .. -D CMAKE_BUILD_TYPE=Release && make -j8
 #WORKDIR /xdbc-client/build
 
 #RUN cmake ..

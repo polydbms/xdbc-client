@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 project(testxdbc VERSION 0.1 DESCRIPTION "test xdbc")
 
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 add_executable(test_xclient test_xclient.cpp Tester.cpp Tester.h)
 
 find_package(spdlog REQUIRED)

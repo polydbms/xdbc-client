@@ -1,71 +1,65 @@
 import paramiko
 import time
 import socket
+import warnings
+import threading
 
 
-class SSHExecutionError(Exception):
+def simple_warning_format(message, category, filename, lineno, file=None, line=None):
+    return f"{category.__name__}: {message}\n"
+
+
+# Assign custom function to handle warning outputs
+warnings.showwarning = simple_warning_format
+
+
+class SSHExecutionWarning(UserWarning):
     """Raised when there's an error executing a command over SSH."""
     pass
 
 
-def establish_ssh_connection(hostname, username=None, password=None, private_key_path=None):
-    """
-    Establish an SSH connection to a remote host.
+class SSHConnectionError(Exception):
+    """Raised when an SSH connection is not active or command execution fails."""
 
-    Args:
-        hostname (str): The hostname or IP address of the remote host.
-        username (str): The SSH username.
-        password (str, optional): The SSH password. Use key-based authentication if not provided.
-        private_key_path (str, optional): The path to the private key file for key-based authentication.
+    def __init__(self, message, host=None):
+        super().__init__(message)
+        self.host = host
 
-    Returns:
-        paramiko.SSHClient: An established SSH connection.
-    """
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-    try:
-        if password:
-            ssh.connect(hostname, username=username, password=password)
+class SSHConnection:
+    def __init__(self, host, username, password=""):
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(host, username=username, password=password)
+        self.ssh.get_transport().set_keepalive(60)
+        self.lock = threading.Lock()
+        ip_address = self.ssh.get_transport().getpeername()[0]
+        self.hostname = socket.gethostbyaddr(ip_address)[0]
+
+    def execute_cmd(self, cmd, background=False):
+
+        if not self.ssh.get_transport() or not self.ssh.get_transport().is_active():
+            raise SSHConnectionError(f"SSH connection is not active for {self.hostname}: ${cmd}", self.hostname)
+
+        if background:
+            background_command = f"nohup {cmd} &"
+            self.ssh.exec_command(background_command)
+            return None
         else:
-            ssh.connect(hostname, username=username, key_filename=private_key_path)
+            stdin, stdout, stderr = self.ssh.exec_command(cmd)
+            error_output = stderr.read().decode().strip()
+            if error_output:
+                warnings.warn(f"error on host: {self.hostname}, cmd: {cmd}, error: {error_output}", SSHExecutionWarning)
+            return stdout.read().decode().strip()
 
-        return ssh
-    except Exception as e:
-        print(f"Failed to establish SSH connection: {str(e)}")
-        return None
-
-
-def close_ssh_connection(ssh):
-    """
-    Close an SSH connection.
-
-    Args:
-        ssh (paramiko.SSHClient): The SSH connection to close.
-    """
-    if ssh:
-        ssh.close()
-
-
-def execute_ssh_cmd(ssh, cmd, background=False):
-    if not ssh.get_transport() or not ssh.get_transport().is_active():
-        raise SSHExecutionError(f"SSH connection is not active for cmd: {cmd}")
-    if background:
-        background_command = f"nohup {cmd} &"
-        ssh.exec_command(background_command)
-        return None
-    else:
-        stdin, stdout, stderr = ssh.exec_command(cmd)
-
-        error_output = stderr.read().decode().strip()
-        if error_output:
-            ip_address = ssh.get_transport().getpeername()[0]
-            try:
-                hostname = socket.gethostbyaddr(ip_address)[0]
-            except socket.herror:
-                hostname = ip_address
-            raise SSHExecutionError(f"error on host: {hostname}, cmd: {cmd}, error: {error_output}")
-    return stdout.read().decode().strip()
+    def close(self):
+        with self.lock:
+            if self.ssh.get_transport() and self.ssh.get_transport().is_active():
+                self.execute_cmd(
+                    """docker exec xdbcserver bash -c 'pids=$(pgrep xdbc-server); if [ "$pids" ]; then kill $pids; fi'""")
+                self.execute_cmd(
+                    """docker exec xdbcclient bash -c 'pids=$(pgrep xdbc-client); if [ "$pids" ]; then kill $pids; fi'""")
+                self.ssh.close()
 
 
 def create_ssh_connections(hosts, exp_num=0):
@@ -81,14 +75,11 @@ def create_ssh_connections(hosts, exp_num=0):
     ssh_connections = {}
     i = 0
     for host in hosts:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
         if i == exp_num:
             break
         try:
-            ssh.connect(host, username='harry-ldap')
-            ssh_connections[host] = ssh
+            ssh_connection = SSHConnection(host, "harry-ldap")
+            ssh_connections[host] = ssh_connection
             i += 1
         except Exception as e:
             print(f"Failed to establish SSH connection to {host}: {str(e)}")

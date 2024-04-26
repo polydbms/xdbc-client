@@ -1,7 +1,7 @@
 import os
 
 from main import concatenate_timings_files
-from ssh_handler import create_ssh_connections, execute_ssh_cmd
+from ssh_handler import create_ssh_connections
 from configuration import hosts
 
 ssh_connections = create_ssh_connections(hosts, 58)

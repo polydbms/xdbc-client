@@ -13,7 +13,7 @@ services:
       - 1236:1236
       - 1237:1237
       - 1238:1238
-    shm_size: '4gb'
+    shm_size: '16gb'
     labels:
       com.docker-tc.enabled: 1
 
@@ -24,7 +24,7 @@ services:
     restart: always
     volumes:
       - /dev/shm:/dev/shm
-    shm_size: '4gb'
+    shm_size: '16gb'
     labels:
       com.docker-tc.enabled: 1
 

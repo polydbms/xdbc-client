@@ -30,7 +30,9 @@ if [ $OPTION == 1 ] || [ $OPTION == 3 ]; then
 
 fi
 
+rm /tmp/client_exec.log
 # run
 if [[ $OPTION != 3 ]]; then
-  docker exec $IT $CONTAINER bash -c "cd xdbc-client/tests/build && ./test_xclient ${RUNPARAMS}"
+  #docker exec $IT $CONTAINER bash -c "cd xdbc-client/tests/build && ./test_xclient ${RUNPARAMS}"
+  docker exec $IT $CONTAINER bash -c "cd xdbc-client/tests/build && ./test_xclient ${RUNPARAMS}" 2>&1 | tee /tmp/client_exec.log
 fi

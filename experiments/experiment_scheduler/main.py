@@ -1,9 +1,9 @@
 import sys
 from configuration import get_experiment_queue
-#from configuration import params
+# from configuration import params
 from configuration import hosts
 from job_runner import run_job
-from ssh_handler import create_ssh_connections, execute_ssh_cmd
+from ssh_handler import create_ssh_connections, SSHConnection
 import queue
 import threading
 import csv
@@ -19,12 +19,7 @@ import shutil
 def close_ssh_connections(signum, frame):
     global ssh_connections
     for host, ssh in ssh_connections.items():
-        transport = ssh.get_transport()
-        if transport is not None and transport.is_active():
-            print(f"Closing ssh connection to: {host}")
-            ssh.close()
-        else:
-            print(f"SSH connection to {host} is already closed or not active.")
+        ssh.close()
     exit(0)
 
 
@@ -38,8 +33,9 @@ print(f"Starting experiments, jobs to run: {jobs_to_run}")
 ssh_connections = create_ssh_connections(hosts, jobs_to_run)
 signal.signal(signal.SIGINT, close_ssh_connections)
 print(f"Active ssh connections: {len(ssh_connections)}")
+
+
 # print(ssh_connections)
-xdbc_version = 2
 
 
 def write_csv_header(filename, config=None):
@@ -59,16 +55,19 @@ def write_to_csv(filename, host, config, result):
     with open(filename, mode="a", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            [result['date']] + [xdbc_version, host] + [1, config['system'], config['table'], config['compression'],
-                                                       config['format'], config['network_parallelism'],
-                                                       config['bufpool_size'],
-                                                       config['buff_size'], config['network'],
-                                                       config['client_readmode'],
-                                                       config['client_cpu'], config['client_write_par'],
-                                                       config['client_decomp_par'],
-                                                       config['server_cpu'], config['server_read_par'],
-                                                       config['server_read_partitions'], config['server_deser_par'],
-                                                       config['server_comp_par']] +
+            [result['date']] + [config['xdbc_version'], host] +
+            [1, config['system'], config['table'],
+             config['compression'],
+             config['format'], config['network_parallelism'],
+             config['bufpool_size'],
+             config['buff_size'], config['network'],
+             config['client_readmode'],
+             config['client_cpu'], config['client_write_par'],
+             config['client_decomp_par'],
+             config['server_cpu'], config['server_read_par'],
+             config['server_read_partitions'],
+             config['server_deser_par'],
+             config['server_comp_par']] +
             [result['time'], result['size'], result['avg_cpu_server'], result['avg_cpu_client']])
 
 
@@ -80,12 +79,13 @@ def worker(host, filename):
         except queue.Empty:
             break
         else:
-            result = run_job(ssh_connections[host], host, config)
-            experiment_queue.task_done()
-            pbar.update()
+            result = run_job(ssh_connections[host], config)
             if result is not None:
+                experiment_queue.task_done()
+                pbar.update()
                 write_to_csv(filename, host, config, result)
-            elif not ssh_connections[host].get_transport() or not ssh_connections[host].get_transport().is_active():
+            elif not ssh_connections[host].ssh.get_transport() or not ssh_connections[
+                host].ssh.get_transport().is_active():
                 # print(f"Adding back to queue: {config}")
                 # experiment_queue.put(config)
                 break
@@ -117,8 +117,8 @@ def concatenate_timings_files(base_dir, ssh_connections):
     os.makedirs(local_dir)
 
     for host, ssh in ssh_connections.items():
-        execute_ssh_cmd(ssh, f"docker cp xdbcserver:/tmp/xdbc_server_timings.csv {local_dir}/{host}_server_timings.csv")
-        execute_ssh_cmd(ssh, f"docker cp xdbcclient:/tmp/xdbc_client_timings.csv {local_dir}/{host}_client_timings.csv")
+        ssh.execute_cmd(f"docker cp xdbcserver:/tmp/xdbc_server_timings.csv {local_dir}/{host}_server_timings.csv")
+        ssh.execute_cmd(f"docker cp xdbcclient:/tmp/xdbc_client_timings.csv {local_dir}/{host}_client_timings.csv")
 
     server_files = glob.glob(os.path.join(local_dir, '*_server_timings.csv'))
     client_files = glob.glob(os.path.join(local_dir, '*_client_timings.csv'))
@@ -165,10 +165,10 @@ def main():
     # create the internal statistics files
     for host, ssh in ssh_connections.items():
         # Execute the command on each SSH connection
-        execute_ssh_cmd(ssh,
-                        'docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo \'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time\' > /tmp/xdbc_server_timings.csv"')
-        execute_ssh_cmd(ssh,
-                        'docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
+        ssh.execute_cmd(
+            'docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo \'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time\' > /tmp/xdbc_server_timings.csv"')
+        ssh.execute_cmd(
+            'docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
 
     # Create and start the threads
     num_workers = len(hosts)
@@ -185,7 +185,7 @@ def main():
         thread.join()
 
     # clean up csv files if any
-    #for host, ssh in ssh_connections.items():
+    # for host, ssh in ssh_connections.items():
     #    for tbl in params['table']:
     #        print(tbl)
     #        execute_ssh_cmd(ssh, f"rm -f /dev/shm/{tbl}_*.csv")
