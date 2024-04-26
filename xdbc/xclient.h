@@ -42,6 +42,7 @@ namespace xdbc {
         std::string env_name;
         int bufferpool_size;
         int buffer_size;
+        int tuples_per_buffer;
         int tuple_size;
         int iformat;
         std::chrono::milliseconds sleep_time;

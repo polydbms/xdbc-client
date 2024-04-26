@@ -87,7 +87,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
             if (curBuffWithId.iformat == 1) {
                 auto dataPtr = curBuffWithId.buff.data();
 
-                for (int i = 0; i < env->buffer_size; ++i) {
+                for (int i = 0; i < env->tuples_per_buffer; ++i) {
                     totalcnt++;
 
                     int *firstAttribute = reinterpret_cast<int *>(dataPtr);
@@ -106,7 +106,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
             } else if (curBuffWithId.iformat == 2) {
 
                 int *v1 = reinterpret_cast<int *>(curBuffWithId.buff.data());
-                for (int i = 0; i < env->buffer_size; i++) {
+                for (int i = 0; i < env->tuples_per_buffer; i++) {
                     totalcnt++;
                     if (v1[i] < 0) {
                         spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tuple_no: {1}", curBuffWithId.id, i);
@@ -189,14 +189,17 @@ int Tester::storageThread(int thr, const std::string &filename) {
     int buffsRead = 0;
 
 
+    //TODO: refactor to call only when columnar format (2)
     std::vector<size_t> offsets(env->schema.size());
     size_t baseOffset = 0;
     for (size_t i = 0; i < env->schema.size(); ++i) {
         offsets[i] = baseOffset;
         if (env->schema[i].tpe == "INT") {
-            baseOffset += env->buffer_size * sizeof(int);
+            baseOffset += env->tuples_per_buffer * sizeof(int);
         } else if (env->schema[i].tpe == "DOUBLE") {
-            baseOffset += env->buffer_size * sizeof(double);
+            baseOffset += env->tuples_per_buffer * sizeof(double);
+        } else if (env->schema[i].tpe == "CHAR") {
+            baseOffset += env->tuples_per_buffer * sizeof(char);
         }
     }
 
@@ -215,7 +218,7 @@ int Tester::storageThread(int thr, const std::string &filename) {
             if (curBuffWithId.iformat == 1) {
 
                 auto dataPtr = curBuffWithId.buff.data();
-                for (size_t i = 0; i < env->buffer_size; ++i) {
+                for (size_t i = 0; i < env->tuples_per_buffer; ++i) {
                     size_t offset = 0;
 
                     // Check the first attribute before proceeding
@@ -233,6 +236,9 @@ int Tester::storageThread(int thr, const std::string &filename) {
                         } else if (attr.tpe == "DOUBLE") {
                             csvBuffer << *reinterpret_cast<double *>(dataPtr + offset);
                             offset += sizeof(double);
+                        } else if (attr.tpe == "CHAR") {
+                            csvBuffer << *reinterpret_cast<char *>(dataPtr + offset);
+                            offset += sizeof(char);
                         }
 
                         csvBuffer << (&attr != &env->schema.back() ? "," : "\n");
@@ -250,6 +256,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
                 std::vector<void *> pointers(env->schema.size());
                 std::vector<int *> intPointers(env->schema.size());
                 std::vector<double *> doublePointers(env->schema.size());
+                std::vector<char *> charPointers(env->schema.size());
+
                 std::byte *dataPtr = curBuffWithId.buff.data();
 
                 // Initialize pointers for the current buffer
@@ -259,11 +267,13 @@ int Tester::storageThread(int thr, const std::string &filename) {
                         intPointers[j] = reinterpret_cast<int *>(pointers[j]);
                     } else if (env->schema[j].tpe == "DOUBLE") {
                         doublePointers[j] = reinterpret_cast<double *>(pointers[j]);
+                    } else if (env->schema[j].tpe == "CHAR") {
+                        charPointers[j] = reinterpret_cast<char *>(pointers[j]);
                     }
                 }
 
                 // Loop over rows
-                for (int i = 0; i < env->buffer_size; ++i) {
+                for (int i = 0; i < env->tuples_per_buffer; ++i) {
                     if (*(intPointers[0] + i) < 0) {
                         spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}", curBuffWithId.id, i);
                         break;  // Exit the loop if the first element is less than zero
@@ -273,6 +283,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
                             csvBuffer << *(intPointers[j] + i);
                         } else if (env->schema[j].tpe == "DOUBLE") {
                             csvBuffer << *(doublePointers[j] + i);
+                        } else if (env->schema[j].tpe == "CHAR") {
+                            csvBuffer << *(charPointers[j] + i);
                         }
                         csvBuffer << (j < env->schema.size() - 1 ? "," : "\n");
                     }

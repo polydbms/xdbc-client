@@ -50,8 +50,8 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
              "Set server host address: \nDefault:\n  xdbcserver")
             ("intermediate-format,f", po::value<int>()->default_value(1),
              "Set intermediate-format: \nDefault:\n  1 (row)\nOther:\n  2 (col)")
-            ("buffer-size,b", po::value<int>()->default_value(1000),
-             "Set buffer-size of buffers used to read data from the database.\nDefault: 1000")
+            ("buffer-size,b", po::value<int>()->default_value(64),
+             "Set buffer-size of buffers used to read data from storage (in bytes).\nDefault: 64")
             ("bufferpool-size,p", po::value<int>()->default_value(1000),
              "Set the amount of buffers used.\nDefault: 1000")
             //("tuple-size,t", po::value<int>()->default_value(48), "Set the tuple size.\nDefault: 48")
@@ -86,8 +86,8 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
     }
 
     if (vm.count("buffer-size")) {
-        spdlog::get("XCLIENT")->info("Buffer size: {0}", vm["buffer-size"].as<int>());
-        env.buffer_size = vm["buffer-size"].as<int>();
+        spdlog::get("XCLIENT")->info("Buffer-size: {0} kilobytes", vm["buffer-size"].as<int>());
+        env.buffer_size = vm["buffer-size"].as<int>() * 1000;
     }
     if (vm.count("bufferpool-size")) {
         spdlog::get("XCLIENT")->info("Bufferpool size: {0}", vm["bufferpool-size"].as<int>());
@@ -137,6 +137,8 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
     env.rcv_wait_time = 0;
     env.decomp_wait_time = 0;
     env.write_wait_time = 0;
+    env.tuple_size = 0;
+    env.tuples_per_buffer = 0;
 
 }
 
@@ -151,7 +153,18 @@ int main(int argc, char *argv[]) {
     //create schema
     std::vector<xdbc::SchemaAttribute> schema;
 
-    if (env.table.find("lineitem") != std::string::npos) {
+    if (env.table.find("lineitem_half") != std::string::npos) {
+        schema.emplace_back(createSchemaAttribute("l_orderkey", "INT", 4));
+        schema.emplace_back(createSchemaAttribute("l_partkey", "INT", 4));
+        schema.emplace_back(createSchemaAttribute("l_suppkey", "INT", 4));
+        schema.emplace_back(createSchemaAttribute("l_linenumber", "INT", 4));
+        schema.emplace_back(createSchemaAttribute("l_quantity", "DOUBLE", 8));
+        schema.emplace_back(createSchemaAttribute("l_extendedprice", "DOUBLE", 8));
+        schema.emplace_back(createSchemaAttribute("l_discount", "DOUBLE", 8));
+        schema.emplace_back(createSchemaAttribute("l_tax", "DOUBLE", 8));
+        schema.emplace_back(createSchemaAttribute("l_returnflag", "CHAR", 1));
+        schema.emplace_back(createSchemaAttribute("l_linestatus", "CHAR", 1));
+    } else if (env.table.find("lineitem") != std::string::npos) {
         schema.emplace_back(createSchemaAttribute("l_orderkey", "INT", 4));
         schema.emplace_back(createSchemaAttribute("l_partkey", "INT", 4));
         schema.emplace_back(createSchemaAttribute("l_suppkey", "INT", 4));
@@ -397,6 +410,8 @@ int main(int argc, char *argv[]) {
                                      [](int acc, const xdbc::SchemaAttribute &attr) {
                                          return acc + attr.size;
                                      });
+
+    env.tuples_per_buffer = env.buffer_size / env.bufferpool_size;
 
     spdlog::get("XCLIENT")->info("Input table: {0} with tuple size {1} and schema:\n{2}",
                                  env.table, env.tuple_size, formatSchema(env.schema));

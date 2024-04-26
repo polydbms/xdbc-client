@@ -71,7 +71,7 @@ namespace xdbc {
 
         // populate bufferpool with empty vectors (header + payload)
         _bufferPool.resize(env.bufferpool_size,
-                           std::vector<std::byte>(sizeof(Header) + env.buffer_size * env.tuple_size));
+                           std::vector<std::byte>(sizeof(Header) + env.tuples_per_buffer * env.tuple_size));
 
 
         for (int i = 0; i < env.write_parallelism; i++) {
@@ -203,7 +203,7 @@ namespace xdbc {
             spdlog::get("XDBC.CLIENT")->warn("Basesocket not connecting, trying to reconnect...");
             tries++;
             _baseSocket.close();
-            std::this_thread::sleep_for(_xdbcenv->sleep_time * 100);
+            std::this_thread::sleep_for(_xdbcenv->sleep_time * 10);
             _baseSocket.connect(endpoint, ec);
 
         }
@@ -321,11 +321,11 @@ namespace xdbc {
                 if (header.compressionType > 6)
                     spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
                                                       header.compressionType, header.totalSize, headerBytes);
-                if (header.totalSize > _xdbcenv->buffer_size * _xdbcenv->tuple_size)
+                if (header.totalSize > _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size)
                     spdlog::get("XDBC.CLIENT")->error(
                             "Client: corrupt body: comp: {0}, size: {1}/{2}, headerbytes: {3}",
-                            header.compressionType, header.totalSize, _xdbcenv->buffer_size * _xdbcenv->tuple_size,
-                            headerBytes);
+                            header.compressionType, header.totalSize,
+                            _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size, headerBytes);
 
                 // all good, read incoming body and measure time
                 std::vector<std::byte> compressed_buffer(sizeof(Header) + header.totalSize);
@@ -389,7 +389,7 @@ namespace xdbc {
         int readThrId = 0;
         int emptyCtr = 0;
         int decompError;
-        std::vector<char> decompressed_buffer(_xdbcenv->buffer_size * _xdbcenv->tuple_size);
+        std::vector<char> decompressed_buffer(_xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
         while (emptyCtr < _xdbcenv->rcv_parallelism) {
 
             // Wait for next buffer to decompress and measure the waiting time
@@ -431,7 +431,7 @@ namespace xdbc {
                                         posInReadBuffer / attribute.size,
                                         header->attributeSize[i] / attribute.size,
                                         decompressed_buffer.data() + posInWriteBuffer,
-                                        _xdbcenv->buffer_size);
+                                        _xdbcenv->tuples_per_buffer);
 
                             } else if (attribute.tpe == "DOUBLE") {
                                 /*spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}, compressed_size: {1}",
@@ -447,10 +447,11 @@ namespace xdbc {
                                         compressed_buffer + posInReadBuffer,
                                         header->attributeSize[i],
                                         decompressed_buffer.data() + posInWriteBuffer,
-                                        _xdbcenv->buffer_size);
+                                        _xdbcenv->tuples_per_buffer);
 
                             }
-                            posInWriteBuffer += _xdbcenv->buffer_size * attribute.size;
+                            //TODO: add char decompression
+                            posInWriteBuffer += _xdbcenv->tuples_per_buffer * attribute.size;
                             posInReadBuffer += header->attributeSize[i];
                             i++;
                         }
@@ -458,7 +459,7 @@ namespace xdbc {
                     } else
                         decompError = Decompressor::decompress(header->compressionType, decompressed_buffer.data(),
                                                                compressed_buffer, header->totalSize,
-                                                               _xdbcenv->buffer_size * _xdbcenv->tuple_size);
+                                                               _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
 
                     if (decompError == 1) {
 
@@ -471,8 +472,8 @@ namespace xdbc {
                         size_t offset = 0;
                         int m2i = -2;
                         double m2d = -2.0;
+                        char m2c = ' ';
 
-                        //TODO: remove hardcoded by adding schema
                         if (header->intermediateFormat == 1) {
                             for (const auto &attr: _xdbcenv->schema) {
                                 if (attr.tpe == "INT") {
@@ -481,16 +482,22 @@ namespace xdbc {
                                 } else if (attr.tpe == "DOUBLE") {
                                     std::memcpy(decompressed_buffer.data() + offset, &m2d, attr.size);
                                     offset += attr.size;
+                                } else if (attr.tpe == "CHAR") {
+                                    std::memcpy(decompressed_buffer.data() + offset, &m2c, attr.size);
+                                    offset += attr.size;
                                 }
                             }
                         } else if (header->intermediateFormat == 2) {
                             for (const auto &attr: _xdbcenv->schema) {
                                 if (attr.tpe == "INT") {
                                     std::memcpy(decompressed_buffer.data() + offset, &m2i, attr.size);
-                                    offset += _xdbcenv->buffer_size * attr.size;
+                                    offset += _xdbcenv->tuples_per_buffer * attr.size;
                                 } else if (attr.tpe == "DOUBLE") {
                                     std::memcpy(decompressed_buffer.data() + offset, &m2d, attr.size);
-                                    offset += _xdbcenv->buffer_size * attr.size;
+                                    offset += _xdbcenv->tuples_per_buffer * attr.size;
+                                } else if (attr.tpe == "CHAR") {
+                                    std::memcpy(decompressed_buffer.data() + offset, &m2c, attr.size);
+                                    offset += _xdbcenv->tuples_per_buffer * attr.size;
                                 }
                             }
 
@@ -503,7 +510,7 @@ namespace xdbc {
                     }
 
                     memcpy(_bufferPool[compBuffId].data(), decompressed_buffer.data(),
-                           _xdbcenv->tuple_size * _xdbcenv->buffer_size);
+                           _xdbcenv->tuple_size * _xdbcenv->tuples_per_buffer);
 
                 } else if (header->compressionType == 0) {
 
@@ -543,7 +550,7 @@ namespace xdbc {
             _emptyDecompThreadCtr[readThreadId]++;
 
         buffWithId curBuf{};
-        curBuf.buff.resize(_xdbcenv->buffer_size * _xdbcenv->tuple_size);
+        curBuf.buff.resize(_xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
         curBuf.id = buffId;
 
         if (buffId > -1) {
