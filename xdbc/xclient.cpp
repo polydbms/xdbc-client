@@ -94,13 +94,13 @@ namespace xdbc {
                 "Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads",
                 _xdbcenv->env_name, _xdbcenv->rcv_parallelism, _xdbcenv->decomp_parallelism);
 
-        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
-            _rcvThreads[i].join();
-        }
         for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) {
             _decompThreads[i].join();
         }
 
+        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
+            _rcvThreads[i].join();
+        }
         auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::high_resolution_clock::now() -
                 _xdbcenv->start_rcv_time.load(std::memory_order_relaxed)).count();
@@ -563,7 +563,7 @@ namespace xdbc {
 
     void XClient::markBufferAsRead(int buffId) {
         //TODO: ensure equal distribution
-        //spdlog::get("XDBC.CLIENT")->warn("freeing {0}", _markedFreeCounter % _xdbcenv->rcv_parallelism);
+        //spdlog::get("XDBC.CLIENT")->warn("freeing {0} for {1}", buffId, _markedFreeCounter % _xdbcenv->rcv_parallelism);
         _xdbcenv->freeBufferIds[_markedFreeCounter % _xdbcenv->rcv_parallelism]->push(buffId);
         _markedFreeCounter.fetch_add(1);
     }

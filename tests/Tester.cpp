@@ -16,11 +16,15 @@ Tester::Tester(std::string name, xdbc::RuntimeEnv &env)
     start = std::chrono::steady_clock::now();
     spdlog::get("XCLIENT")->info("#1 Constructed XClient called: {0}", xclient.get_name());
 
+    xclient.startReceiving(env.table);
+    spdlog::get("XCLIENT")->info("#4 called receive, after: {0}ms",
+                                 std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::steady_clock::now() - start).count());
+
 }
 
 
 void Tester::close() {
-
 
     xclient.finalize();
     auto end = std::chrono::steady_clock::now();
@@ -132,11 +136,6 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
 
 
 void Tester::runAnalytics() {
-
-    xclient.startReceiving(env->table);
-    spdlog::get("XCLIENT")->info("#4 called receive, after: {0}ms",
-                                 std::chrono::duration_cast<std::chrono::milliseconds>(
-                                         std::chrono::steady_clock::now() - start).count());
 
     int mins[env->write_parallelism];
     int maxs[env->write_parallelism];
@@ -301,12 +300,6 @@ int Tester::storageThread(int thr, const std::string &filename) {
 
 
 void Tester::runStorage(const std::string &filename) {
-
-
-    xclient.startReceiving(env->table);
-    spdlog::get("XCLIENT")->info("#4 called receive, after: {0}ms",
-                                 std::chrono::duration_cast<std::chrono::milliseconds>(
-                                         std::chrono::steady_clock::now() - start).count());
 
     std::thread writeThreads[env->write_parallelism];
 
