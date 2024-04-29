@@ -194,15 +194,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
     size_t baseOffset = 0;
     for (size_t i = 0; i < env->schema.size(); ++i) {
         offsets[i] = baseOffset;
-        if (env->schema[i].tpe == "INT") {
-            baseOffset += env->tuples_per_buffer * sizeof(int);
-        } else if (env->schema[i].tpe == "DOUBLE") {
-            baseOffset += env->tuples_per_buffer * sizeof(double);
-        } else if (env->schema[i].tpe == "CHAR") {
-            baseOffset += env->tuples_per_buffer * sizeof(char);
-        }
+        baseOffset += env->tuples_per_buffer * env->schema[i].size;
     }
-
 
     while (xclient.hasNext(thr)) {
         // Get next read buffer and measure the waiting time
@@ -239,6 +232,9 @@ int Tester::storageThread(int thr, const std::string &filename) {
                         } else if (attr.tpe == "CHAR") {
                             csvBuffer << *reinterpret_cast<char *>(dataPtr + offset);
                             offset += sizeof(char);
+                        } else if (attr.tpe == "STRING") {
+                            csvBuffer << reinterpret_cast<char *>(dataPtr + offset);;
+                            offset += attr.size;
                         }
 
                         csvBuffer << (&attr != &env->schema.back() ? "," : "\n");
@@ -257,6 +253,7 @@ int Tester::storageThread(int thr, const std::string &filename) {
                 std::vector<int *> intPointers(env->schema.size());
                 std::vector<double *> doublePointers(env->schema.size());
                 std::vector<char *> charPointers(env->schema.size());
+                std::vector<char *> stringPointers(env->schema.size());
 
                 std::byte *dataPtr = curBuffWithId.buff.data();
 
@@ -269,6 +266,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
                         doublePointers[j] = reinterpret_cast<double *>(pointers[j]);
                     } else if (env->schema[j].tpe == "CHAR") {
                         charPointers[j] = reinterpret_cast<char *>(pointers[j]);
+                    } else if (env->schema[j].tpe == "STRING") {
+                        stringPointers[j] = reinterpret_cast<char *>(pointers[j]);
                     }
                 }
 
@@ -285,6 +284,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
                             csvBuffer << *(doublePointers[j] + i);
                         } else if (env->schema[j].tpe == "CHAR") {
                             csvBuffer << *(charPointers[j] + i);
+                        } else if (env->schema[j].tpe == "STRING") {
+                            csvBuffer << stringPointers[j] + i * env->schema[j].size;
                         }
                         csvBuffer << (j < env->schema.size() - 1 ? "," : "\n");
                     }

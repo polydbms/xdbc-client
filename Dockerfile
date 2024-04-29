@@ -8,9 +8,7 @@ RUN apt-get upgrade -qy
 
 #-------------------------------------------- Install XDBC and prerequisites -------------------------------------------
 
-RUN apt install -qy cmake git gdb
-
-RUN apt install -qy clang libboost-all-dev build-essential libspdlog-dev
+RUN apt install -qy cmake git gdb nlohmann-json3-dev clang libboost-all-dev build-essential libspdlog-dev
 
 #RUN git clone https://github.com/gabime/spdlog.git && cd spdlog && mkdir build && cd build &&  cmake .. && make -j8 && make install
 
@@ -40,6 +38,7 @@ RUN rm -rf xdbc-client && mkdir /xdbc-client
 
 COPY xdbc/ /xdbc-client/xdbc/
 COPY tests/ /xdbc-client/tests/
+COPY tests/schemas/ /xdbc-client/tests/schemas/
 COPY CMakeLists.txt /xdbc-client/
 
 # build xdbc

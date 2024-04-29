@@ -61,6 +61,7 @@ namespace xdbc {
         std::string server_host;
         std::string server_port;
         std::vector<SchemaAttribute> schema;
+        std::string schemaJSON;
         std::vector<FBQ_ptr> freeBufferIds;
         std::vector<FBQ_ptr> compressedBufferIds;
         std::vector<FBQ_ptr> decompressedBufferIds;

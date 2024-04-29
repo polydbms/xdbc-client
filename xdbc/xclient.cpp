@@ -214,6 +214,13 @@ namespace xdbc {
         boost::system::error_code error;
         boost::asio::write(_baseSocket, boost::asio::buffer(msg), error);
 
+        std::uint32_t data_size = _xdbcenv->schemaJSON.size();
+        std::vector<boost::asio::const_buffer> buffers;
+        buffers.emplace_back(boost::asio::buffer(&data_size, sizeof(data_size)));
+        buffers.emplace_back(boost::asio::buffer(_xdbcenv->schemaJSON));
+
+        boost::asio::write(_baseSocket, buffers, error);
+
         //std::this_thread::sleep_for(_xdbcenv->sleep_time*10);
         std::string ready = read_(_baseSocket);
 
@@ -450,7 +457,7 @@ namespace xdbc {
                                         _xdbcenv->tuples_per_buffer);
 
                             }
-                            //TODO: add char decompression
+                            //TODO: add CHAR, STRING decompression
                             posInWriteBuffer += _xdbcenv->tuples_per_buffer * attribute.size;
                             posInReadBuffer += header->attributeSize[i];
                             i++;
@@ -463,6 +470,7 @@ namespace xdbc {
 
                     if (decompError == 1) {
 
+                        //TODO: check if we can just skip the buffer
                         /*size_t computed_checksum = compute_crc(boost::asio::buffer(_bufferPool[bpi]));
                         if (computed_checksum != checksum) {
                             spdlog::get("XDBC.CLIENT")->warn("CHECKSUM MISMATCH expected: {0}, got: {1}",
@@ -485,6 +493,11 @@ namespace xdbc {
                                 } else if (attr.tpe == "CHAR") {
                                     std::memcpy(decompressed_buffer.data() + offset, &m2c, attr.size);
                                     offset += attr.size;
+                                } else if (attr.tpe == "STRING") {
+                                    std::string m2s(attr.size, ' ');
+                                    m2s.back() = '\0';
+                                    std::memcpy(decompressed_buffer.data() + offset, m2s.data(), attr.size);
+                                    offset += attr.size;
                                 }
                             }
                         } else if (header->intermediateFormat == 2) {
@@ -498,6 +511,11 @@ namespace xdbc {
                                 } else if (attr.tpe == "CHAR") {
                                     std::memcpy(decompressed_buffer.data() + offset, &m2c, attr.size);
                                     offset += _xdbcenv->tuples_per_buffer * attr.size;
+                                } else if (attr.tpe == "STRING") {
+                                    std::string m2s(attr.size, ' ');
+                                    m2s.back() = '\0';
+                                    std::memcpy(decompressed_buffer.data() + offset, m2s.data(), attr.size);
+                                    offset += attr.size;
                                 }
                             }
 
