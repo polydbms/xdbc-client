@@ -40,7 +40,7 @@ namespace xdbc {
     struct RuntimeEnv {
         long transfer_id;
         std::string env_name;
-        int bufferpool_size;
+        int buffers_in_bufferpool;
         int buffer_size;
         int tuples_per_buffer;
         int tuple_size;

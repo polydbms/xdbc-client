@@ -19,7 +19,7 @@ static xdbc::SchemaAttribute createSchemaAttribute(std::string name, std::string
     return att;
 }
 
-std::string formatSchema(const std::vector <xdbc::SchemaAttribute> schema) {
+std::string formatSchema(const std::vector<xdbc::SchemaAttribute> schema) {
     std::stringstream ss;
 
     // Header line
@@ -41,7 +41,7 @@ std::string formatSchema(const std::vector <xdbc::SchemaAttribute> schema) {
 using namespace std;
 namespace po = boost::program_options;
 
-vector <xdbc::SchemaAttribute> createSchemaFromConfig(const string &configFile) {
+vector<xdbc::SchemaAttribute> createSchemaFromConfig(const string &configFile) {
     ifstream file(configFile);
     if (!file.is_open()) {
         spdlog::get("XCLIENT")->error("Failed to open schema: {0}", configFile);
@@ -50,7 +50,7 @@ vector <xdbc::SchemaAttribute> createSchemaFromConfig(const string &configFile) 
     nlohmann::json schemaJson;
     file >> schemaJson;
 
-    vector <xdbc::SchemaAttribute> schema;
+    vector<xdbc::SchemaAttribute> schema;
     for (const auto &item: schemaJson) {
         schema.emplace_back(xdbc::SchemaAttribute{
                 item["name"],
@@ -87,9 +87,9 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
             ("intermediate-format,f", po::value<int>()->default_value(1),
              "Set intermediate-format: \nDefault:\n  1 (row)\nOther:\n  2 (col)")
             ("buffer-size,b", po::value<int>()->default_value(64),
-             "Set buffer-size of buffers used to read data from storage (in bytes).\nDefault: 64")
-            ("bufferpool-size,p", po::value<int>()->default_value(1000),
-             "Set the amount of buffers used.\nDefault: 1000")
+             "Set buffer-size of buffers (in KiB).\nDefault: 64")
+            ("bufferpool-size,p", po::value<int>()->default_value(4096),
+             "Set bufferpool memory size (in KiB).\nDefault: 4096")
             //("tuple-size,t", po::value<int>()->default_value(48), "Set the tuple size.\nDefault: 48")
             ("sleep-time,s", po::value<int>()->default_value(5), "Set a sleep-time in milli seconds.\nDefault: 5ms")
             ("mode,m", po::value<int>()->default_value(1), "1: Analytics, 2: Storage.\nDefault: 1")
@@ -122,12 +122,13 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
     }
 
     if (vm.count("buffer-size")) {
-        spdlog::get("XCLIENT")->info("Buffer-size: {0} kilobytes", vm["buffer-size"].as<int>());
-        env.buffer_size = vm["buffer-size"].as<int>() * 1000;
+        spdlog::get("XCLIENT")->info("Buffer-size: {0} KiB", vm["buffer-size"].as<int>());
+        env.buffer_size = vm["buffer-size"].as<int>();
     }
     if (vm.count("bufferpool-size")) {
-        spdlog::get("XCLIENT")->info("Bufferpool size: {0}", vm["bufferpool-size"].as<int>());
-        env.bufferpool_size = vm["bufferpool-size"].as<int>();
+        spdlog::get("XCLIENT")->info("Bufferpool size: {0} KiB", vm["bufferpool-size"].as<int>());
+        env.buffers_in_bufferpool = vm["bufferpool-size"].as<int>() / vm["buffer-size"].as<int>();
+        spdlog::get("XCLIENT")->info("Buffers in Bufferpool: {0}", env.buffers_in_bufferpool);
     }
     /*if (vm.count("tuple-size")) {
         spdlog::get("XCLIENT")->info("Tuple size: {0}", vm["tuple-size"].as<int>());
@@ -188,16 +189,10 @@ int main(int argc, char *argv[]) {
     env.env_name = "Cpp Client";
 
     //create schema
-    std::vector <xdbc::SchemaAttribute> schema;
+    std::vector<xdbc::SchemaAttribute> schema;
 
-    string schemaFile;
-    if (env.table.find("lineitem_full") != std::string::npos) {
-        schemaFile = "/xdbc-client/tests/schemas/lineitem_full.json";
-    } else if (env.table.find("lineitem") != std::string::npos) {
-        schemaFile = "/xdbc-client/tests/schemas/lineitem_sf10.json";
-    } else if (env.table.find("ss13") != std::string::npos) {
-        schemaFile = "/xdbc-client/tests/schemas/ss13_husall.json";
-    }
+    string schemaFile = "/xdbc-client/tests/schemas/" + env.table + ".json";
+
 
     schema = createSchemaFromConfig(schemaFile);
     env.schemaJSON = readJsonFileIntoString(schemaFile);
@@ -207,7 +202,7 @@ int main(int argc, char *argv[]) {
                                          return acc + attr.size;
                                      });
 
-    env.tuples_per_buffer = env.buffer_size / env.bufferpool_size;
+    env.tuples_per_buffer = env.buffer_size * 1024 / env.tuple_size;
 
     spdlog::get("XCLIENT")->info("Input table: {0} with tuple size {1} and schema:\n{2}",
                                  env.table, env.tuple_size, formatSchema(env.schema));

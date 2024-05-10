@@ -100,6 +100,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
                     sum += *firstAttribute;
                     if (*firstAttribute < min) min = *firstAttribute;
                     if (*firstAttribute > max) max = *firstAttribute;
+                    //spdlog::get("XCLIENT")->warn("Cnt {0}", cnt);
 
                     dataPtr += tupleSize;
                 }
@@ -180,6 +181,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
     std::ofstream csvFile(filename + std::to_string(thr) + ".csv", std::ios::out);
 
     std::ostringstream csvBuffer(std::ios::out | std::ios::ate);
+    //csvBuffer << std::setprecision(std::numeric_limits<double>::max_digits10);
+    csvBuffer << std::setprecision(10);
     //TODO: make generic
     //csvBuffer.str(std::string(env->buffer_size * schema.size() * 20, '\0'));
     csvBuffer.clear();

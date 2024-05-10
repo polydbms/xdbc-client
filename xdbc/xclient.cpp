@@ -66,11 +66,11 @@ namespace xdbc {
 
 
         spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2}, TS: {3}, iformat: {4} ",
-                                         _xdbcenv->env_name, env.bufferpool_size, env.buffer_size, env.tuple_size,
+                                         _xdbcenv->env_name, env.buffers_in_bufferpool, env.buffer_size, env.tuple_size,
                                          env.iformat);
 
         // populate bufferpool with empty vectors (header + payload)
-        _bufferPool.resize(env.bufferpool_size,
+        _bufferPool.resize(env.buffers_in_bufferpool,
                            std::vector<std::byte>(sizeof(Header) + env.tuples_per_buffer * env.tuple_size));
 
 
@@ -147,8 +147,8 @@ namespace xdbc {
             FBQ_ptr q(new queue<int>);
             _xdbcenv->freeBufferIds.push_back(q);
             //initially all buffers are free to write into
-            for (int j = i * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
-                 j < (i + 1) * (_xdbcenv->bufferpool_size / _xdbcenv->rcv_parallelism);
+            for (int j = i * (_xdbcenv->buffers_in_bufferpool / _xdbcenv->rcv_parallelism);
+                 j < (i + 1) * (_xdbcenv->buffers_in_bufferpool / _xdbcenv->rcv_parallelism);
                  j++)
                 q->push(j);
 
@@ -210,9 +210,16 @@ namespace xdbc {
         spdlog::get("XDBC.CLIENT")->info("Basesocket: connected to {0}:{1}",
                                          endpoint.address().to_string(), endpoint.port());
 
-        const std::string msg = tableName + "\n";
         boost::system::error_code error;
-        boost::asio::write(_baseSocket, boost::asio::buffer(msg), error);
+        const std::string &msg = tableName;
+        std::uint32_t tableNameSize = msg.size();
+        std::vector<boost::asio::const_buffer> tableNameBuffers;
+
+        tableNameBuffers.emplace_back(boost::asio::buffer(&tableNameSize, sizeof(tableNameSize)));
+        tableNameBuffers.emplace_back(boost::asio::buffer(msg));
+
+        boost::asio::write(_baseSocket, tableNameBuffers, error);
+
 
         std::uint32_t data_size = _xdbcenv->schemaJSON.size();
         std::vector<boost::asio::const_buffer> buffers;
@@ -297,8 +304,6 @@ namespace xdbc {
                 _readState.store(1);
 
                 // getting response from server. Start with reading header and measuring header receive time.
-
-
 
                 Header header{};
                 headerBytes = boost::asio::read(socket, boost::asio::buffer(&header, sizeof(Header)),
@@ -583,7 +588,7 @@ namespace xdbc {
     }
 
     int XClient::getBufferPoolSize() const {
-        return _xdbcenv->bufferpool_size;
+        return _xdbcenv->buffers_in_bufferpool;
     }
 
     void XClient::markBufferAsRead(int buffId) {

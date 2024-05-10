@@ -26,7 +26,7 @@ namespace xdbc {
         nextParams.read_parallelism = changeByCalculatedRatio<>(pastEnv->write_time.load(),
                                                                 pastEnv->write_wait_time.load(),
                                                                 pastEnv->write_parallelism, 0.8);
-        nextParams.bufferpool_size = pastEnv->bufferpool_size;
+        nextParams.bufferpool_size = pastEnv->buffers_in_bufferpool;
         nextParams.buffer_size = pastEnv->buffer_size;
         return nextParams;
     }
