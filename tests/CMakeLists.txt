@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.21)
 project(testxdbc VERSION 0.1 DESCRIPTION "test xdbc")
 
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -g")
+#[[SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")]]
 
 add_executable(test_xclient test_xclient.cpp Tester.cpp Tester.h)
 
