@@ -36,7 +36,23 @@ def run_job(ssh, config):
         ssh.execute_cmd(f"docker update --cpus {config['server_cpu']} xdbcserver")
         ssh.execute_cmd(f"docker update --cpus {config['client_cpu']} xdbcclient")
 
-        ssh.execute_cmd(f"curl -s -d 'rate={config['network']}mbps' localhost:4080/xdbcclient")
+        ssh.execute_cmd(f"curl -X DELETE localhost:4080/xdbcserver && curl -X PUT localhost:4080/xdbcserver")
+        ssh.execute_cmd(f"curl -X DELETE localhost:4080/xdbcclient && curl -X PUT localhost:4080/xdbcclient")
+
+        # ssh.execute_cmd(
+        #    f"curl -s -d 'rate={config['network']}mbps&delay={config['network_latency']}ms&loss={config['network_loss']}%' localhost:4080/xdbcserver")
+
+        ssh.execute_cmd(
+            #    f"curl -s -d'limit={config['network']}mbps&delay={config['network_latency']}ms&loss={config['network_loss']}%' localhost:4080/xdbcclient")
+            f"curl -s -d 'rate={config['network']}mbps' localhost:4080/xdbcclient")
+        # f"curl -s -d 'rate={config['network']}mbps&delay={config['network_latency']}ms' localhost:4080/xdbcclient")
+        #   f"curl -s -d 'rate={config['network']}mbps&loss={config['network_loss']}%' localhost:4080/xdbcclient")
+        # ssh.execute_cmd("docker exec -it xdbcclient /bin/bash -c 'tc qdisc del dev eth0 root'")
+
+        #ssh.execute_cmd(f"curl -s -d 'rate={config['network']}mbps' localhost:4080/xdbcserver")
+        # ssh.execute_cmd(
+        #    f"docker exec -it xdbcclient /bin/bash -c 'tc qdisc add dev eth0 root handle 1: htb default 10 && tc class add dev eth0 parent 1: classid 1:1 htb rate ${config['network']}mbps && tc qdisc add dev eth0 parent 1:1 handle 10: netem delay ${config['network_latency']}ms loss ${config['network_loss']}%'"
+        # )
 
         ssh.execute_cmd(
             f"bash {server_path}/build_and_start.sh xdbcserver 2 \"--transfer-id={current_timestamp} -c{config['compression']} --read-parallelism={config['server_read_par']} --read-partitions={config['server_read_partitions']} --deser-parallelism={config['server_deser_par']} --compression-parallelism={config['server_comp_par']} --network-parallelism={config['network_parallelism']} -f{config['format']} -b{config['buff_size']} -p{config['bufpool_size']} -s1 --system={config['system']}\""
@@ -52,9 +68,9 @@ def run_job(ssh, config):
         start_data_size = ssh.execute_cmd(
             f"echo $(bash {client_path}/experiments_measure_network.sh 'xdbcclient')")
 
-        # execute_ssh_cmd(ssh, f"rm -rf /tmp/stop_monitoring")
-        # execute_ssh_cmd(ssh, f"touch /tmp/start_monitoring")
-        # execute_ssh_cmd(ssh, f"bash {client_path}/experiments_measure_resources.sh xdbcserver xdbcclient", True)
+        ssh.execute_cmd(f"rm -rf /tmp/stop_monitoring")
+        ssh.execute_cmd(f"touch /tmp/start_monitoring")
+        ssh.execute_cmd(f"bash {client_path}/experiments_measure_resources.sh xdbcserver xdbcclient", True)
 
         start_time = time.time()
         ssh.execute_cmd(
@@ -63,7 +79,23 @@ def run_job(ssh, config):
         elapsed_time = time.time() - start_time
         formatted_time = "{:.2f}".format(elapsed_time)
 
-        # execute_ssh_cmd(ssh, f"touch /tmp/stop_monitoring")
+        ssh.execute_cmd(f"touch /tmp/stop_monitoring")
+        # Polling for the JSON file
+        json_file_path = "/tmp/resource_metrics.json"
+        timeout = 10
+        poll_interval = 1  # second
+        total_time = 0
+
+        while total_time < timeout:
+            time.sleep(poll_interval)
+            total_time += poll_interval
+            stdout = ssh.execute_cmd(f"test -f {json_file_path} && echo 'exists' || echo 'not exists'")
+            if 'exists' == stdout:
+                break
+
+        ssh.execute_cmd(f"pkill -f experiments_measure_resources.sh")
+        ssh.execute_cmd(f"rm -rf /tmp/stop_monitoring")
+        ssh.execute_cmd(f"rm -rf /tmp/start_monitoring")
 
         ssh.execute_cmd(
             """docker exec xdbcserver bash -c 'pids=$(pgrep xdbc-server); if [ "$pids" ]; then kill $pids; fi'""")
@@ -72,7 +104,7 @@ def run_job(ssh, config):
         # execute_ssh_cmd(ssh, "cd ~/xdbc/xdbc-client && docker-compose -f docker-xdbc.yml restart xdbc-server")
         # execute_ssh_cmd(ssh, "cd ~/xdbc/xdbc-client && docker-compose -f docker-xdbc.yml restart xdbc-client")
 
-        time.sleep(3)
+        # time.sleep(3)
         resource_metrics_json = ssh.execute_cmd(
             '[ -f /tmp/resource_metrics.json ] && cat /tmp/resource_metrics.json || echo "{}" 2>/dev/null')
 

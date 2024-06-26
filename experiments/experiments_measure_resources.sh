@@ -12,10 +12,6 @@ CONTAINER2="$2"
 # Initialize variables to store CPU utilization and sample count
 TOTAL_CPU_CONTAINER1=0
 TOTAL_CPU_CONTAINER2=0
-CPU_CONTAINER1=0
-CPU_CONTAINER2=0
-AVERAGE_CPU_CONTAINER1=0
-AVERAGE_CPU_CONTAINER2=0
 SAMPLE_COUNT=0
 
 # Check if the start control file exists in /tmp
@@ -28,12 +24,8 @@ fi
 # Continuously monitor CPU utilization while the stop control file is not present
 while [ ! -f /tmp/stop_monitoring ]; do
   # Get CPU utilization for both containers
-  CPU_CONTAINER1=$(docker stats --no-stream --format "{{.CPUPerc}}" "$CONTAINER1" | tail -n 1)
-  CPU_CONTAINER2=$(docker stats --no-stream --format "{{.CPUPerc}}" "$CONTAINER2" | tail -n 1)
-
-  # Remove the '%' sign from CPU percentages
-  CPU_CONTAINER1=${CPU_CONTAINER1%%%}
-  CPU_CONTAINER2=${CPU_CONTAINER2%%%}
+  CPU_CONTAINER1=$(docker stats --no-stream --format "{{.CPUPerc}}" "$CONTAINER1" | tr -d '%')
+  CPU_CONTAINER2=$(docker stats --no-stream --format "{{.CPUPerc}}" "$CONTAINER2" | tr -d '%')
 
   # Check if CPU values are numeric (non-empty) before adding to totals
   if [[ "$CPU_CONTAINER1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
@@ -46,12 +38,17 @@ while [ ! -f /tmp/stop_monitoring ]; do
 
   SAMPLE_COUNT=$((SAMPLE_COUNT + 1))
   # Sleep for a specified interval (e.g., 1 second)
-  sleep 1
+  sleep 0.5
 done
 
 # Calculate the average CPU utilization for both containers
-AVERAGE_CPU_CONTAINER1=$(awk "BEGIN {if ($SAMPLE_COUNT > 0) print $TOTAL_CPU_CONTAINER1 / $SAMPLE_COUNT; else print 0}")
-AVERAGE_CPU_CONTAINER2=$(awk "BEGIN {if ($SAMPLE_COUNT > 0) print $TOTAL_CPU_CONTAINER2 / $SAMPLE_COUNT; else print 0}")
+if [ "$SAMPLE_COUNT" -gt 0 ]; then
+  AVERAGE_CPU_CONTAINER1=$(awk "BEGIN {print $TOTAL_CPU_CONTAINER1 / $SAMPLE_COUNT}")
+  AVERAGE_CPU_CONTAINER2=$(awk "BEGIN {print $TOTAL_CPU_CONTAINER2 / $SAMPLE_COUNT}")
+else
+  AVERAGE_CPU_CONTAINER1=0
+  AVERAGE_CPU_CONTAINER2=0
+fi
 
 # Output average CPU utilization in JSON format
 echo '{

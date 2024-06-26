@@ -14,6 +14,8 @@ services:
       - 1237:1237
       - 1238:1238
     shm_size: '16gb'
+    cap_add:
+      - NET_ADMIN
     labels:
       com.docker-tc.enabled: 1
 
@@ -25,19 +27,21 @@ services:
     volumes:
       - /dev/shm:/dev/shm
     shm_size: '16gb'
+    cap_add:
+      - NET_ADMIN
     labels:
       com.docker-tc.enabled: 1
 
-  postgres-1:
-    image: postgresdb
-    container_name: pg1
-    restart: always
-    volumes:
-      - test-data:/data
-      - pgvolume1:/var/lib/postgresql/
-    ports:
-      - 15432:5432
-    shm_size: '2gb'
+  #postgres-1:
+  #  image: postgresdb
+  #  container_name: pg1
+  #  restart: always
+  #  volumes:
+  #    - test-data:/data
+  #    - pgvolume1:/var/lib/postgresql/
+  #  ports:
+  #    - 15432:5432
+  #  shm_size: '2gb'
 
 #  clickhouse:
 #    image: clickhousedb

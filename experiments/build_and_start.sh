@@ -25,8 +25,8 @@ if [ $OPTION == 1 ] || [ $OPTION == 3 ]; then
   docker cp ${DIR}/CMakeLists.txt $CONTAINER:/xdbc-client/
 
   #build & install
-  docker exec $IT $CONTAINER bash -c "cd xdbc-client/ && rm -rf build/ && mkdir build && cd build && cmake .. && make -j8 && make install"
-  docker exec $IT $CONTAINER bash -c "cd xdbc-client/tests && rm -rf build/ && mkdir build && cd build && cmake .. && make -j8"
+  docker exec $IT $CONTAINER bash -c "cd xdbc-client/ && rm -rf build/ && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j8 && make install"
+  docker exec $IT $CONTAINER bash -c "cd xdbc-client/tests && rm -rf build/ && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j8"
 
 fi
 

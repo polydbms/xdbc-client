@@ -11,40 +11,44 @@ hosts_file_path = '../hostsfile.txt'
 with open(hosts_file_path, 'r') as file:
     hosts = file.read().splitlines()
 
-    # table = "lineitem_sf10"
-
-# params = {
-#    "client_readmode": [1, 2],
-#    "client_cpu": [8],
-#    "server_cpu": [8],
-#    "network": [6, 100],
-#    "system": ["csv"],
-#    "table": [table],
-#    "bufpool_size": [1000],
-#    "buff_size": [1000, 10000],
-#    "compression": ["nocomp", "snappy", "zstd", "lz4", "lzo"],
-#    "format": [1, 2],
-#    "network_parallelism": [1],
-#    "client_write_par": [1, 8],
-#    "client_decomp_par": [1, 8],
-#    "server_read_partitions": [1],
-#    "server_read_par": [1, 8],
-#    "server_deser_par": [1, 8],
-#    "server_comp_par": [1, 8]
-# }
+    # lan: 1000mbit, 0.3ms latency, 0% loss, wan: 100mbit, 25ms latency, 5% loss
+    # "network": [1, 10, 50, 100, 250, 500, 1000],
+params = {
+    "xdbc_version": [8],
+    "run": [1],
+    "client_readmode": [1],
+    "client_cpu": [16],
+    "server_cpu": [16],
+    "network": [1000],
+    "network_latency": [0],
+    "network_loss": [0],
+    "system": ["csv"],
+    "table": ["lineitem_sf10"],
+    "bufpool_size": [2048, 4098, 8192, 16384, 32768],
+    "buff_size": [32, 64, 128, 256, 512, 1024],
+    "compression": ["nocomp", "zstd", "lz4", "lzo", "snappy"],  # "zstd", "lz4", "lzo", "snappy"
+    "format": [1],
+    "network_parallelism": [1],
+    "client_write_par": [1],
+    "client_decomp_par": [1],
+    "server_read_partitions": [1],
+    "server_read_par": [1],
+    "server_deser_par": [1],
+    "server_comp_par": [1]
+}
 
 base_configs = [
 
-    {"system": "csv", "bufpool_size": 1000, "buff_size": 1000, "compression": "nocomp",
-     "format": 2, "network_parallelism": 1, "client_write_par": 2, "client_decomp_par": 1, "server_read_partitions": 1,
-     "server_read_par": 2, "server_deser_par": 2, "server_comp_par": 4, "client_readmode": 1},
-    {"system": "csv", "bufpool_size": 1000, "buff_size": 10000, "compression": "nocomp",
-     "format": 1, "network_parallelism": 1, "client_write_par": 1, "client_decomp_par": 1, "server_read_partitions": 1,
-     "server_read_par": 1, "server_deser_par": 4, "server_comp_par": 4, "client_readmode": 1},
-    {"system": "csv", "bufpool_size": 1000, "buff_size": 1000, "compression": "snappy",
-     "format": 2, "network_parallelism": 2, "client_write_par": 4, "client_decomp_par": 4, "server_read_partitions": 1,
-     "server_read_par": 1, "server_deser_par": 1, "server_comp_par": 1, "client_readmode": 2}
-
+    # {"system": "csv", "bufpool_size": 8192, "buff_size": 128, "compression": "nocomp",
+    # "format": 1, "network_parallelism": 1, "client_write_par": 1, "client_decomp_par": 1, "server_read_partitions": 1,
+    # "server_read_par": 1, "server_deser_par": 1, "server_comp_par": 1, "client_readmode": 1},
+    #    {"system": "csv", "bufpool_size": 1000, "buff_size": 10000, "compression": "nocomp",
+    #     "format": 1, "network_parallelism": 1, "client_write_par": 1, "client_decomp_par": 1, "server_read_partitions": 1,
+    #     "server_read_par": 1, "server_deser_par": 4, "server_comp_par": 4, "client_readmode": 1},
+    #    {"system": "csv", "bufpool_size": 1000, "buff_size": 1000, "compression": "snappy",
+    #     "format": 2, "network_parallelism": 2, "client_write_par": 4, "client_decomp_par": 4, "server_read_partitions": 1,
+    #     "server_read_par": 1, "server_deser_par": 1, "server_comp_par": 1, "client_readmode": 2}
+    #
 ]
 
 environment_configs = [
@@ -68,40 +72,40 @@ environment_configs = [
     # {"client_cpu": 1.0, "server_cpu": 8.0, "network": 25},
     # {"client_cpu": 1.0, "server_cpu": 8.0, "network": 50},
     # {"client_cpu": 1.0, "server_cpu": 8.0, "network": 100},
-    {"client_cpu": 0.2, "server_cpu": 0.2, "network": 6},
+    # {"client_cpu": 0.2, "server_cpu": 0.2, "network": 6},
     # {"client_cpu": 0.2, "server_cpu": 0.2, "network": 12},
     # {"client_cpu": 0.2, "server_cpu": 0.2, "network": 25},
-    {"client_cpu": 0.2, "server_cpu": 0.2, "network": 50},
-    {"client_cpu": 0.2, "server_cpu": 0.2, "network": 100},
-    {"client_cpu": 1.0, "server_cpu": 1.0, "network": 6},
+    # {"client_cpu": 0.2, "server_cpu": 0.2, "network": 50},
+    # {"client_cpu": 0.2, "server_cpu": 0.2, "network": 100},
+    # {"client_cpu": 1.0, "server_cpu": 1.0, "network": 6},
     # {"client_cpu": 1.0, "server_cpu": 1.0, "network": 12},
     # {"client_cpu": 1.0, "server_cpu": 1.0, "network": 25},
-    {"client_cpu": 1.0, "server_cpu": 1.0, "network": 50},
-    {"client_cpu": 1.0, "server_cpu": 1.0, "network": 100},
-    {"client_cpu": 8.0, "server_cpu": 8.0, "network": 6},
+    # {"client_cpu": 1.0, "server_cpu": 1.0, "network": 50},
+    # {"client_cpu": 1.0, "server_cpu": 1.0, "network": 100},
+    # {"client_cpu": 8.0, "server_cpu": 8.0, "network": 6},
     # {"client_cpu": 8.0, "server_cpu": 8.0, "network": 12},
     # {"client_cpu": 8.0, "server_cpu": 8.0, "network": 25},
-    {"client_cpu": 8.0, "server_cpu": 8.0, "network": 50},
-    {"client_cpu": 8.0, "server_cpu": 8.0, "network": 100}
+    # {"client_cpu": 8.0, "server_cpu": 8.0, "network": 50},
+    # {"client_cpu": 16.0, "server_cpu": 16.0, "network": 100}
 ]
 
-vary_params = {
-    "table": ["ss13husallm", "lineitem_sf10"],
-    "xdbc_version": [4],
-    # "server_comp_par": [1, 2, 4, 8],
-    # "client_decomp_par": [1, 2, 4, 8],
-    # "buff_size": [1000, 10000],
-    # "server_read_par": [1, 2],
-    # "compression": ["nocomp", "snappy", "lz4", "lzo", "zstd"],
-    # "format": [1, 2],
-    # "client_write_par": [4, 8],
-    "client_readmode": [1, 2]
-}
 
+# vary_params = {
+#    "table": ["ss13husallm", "lineitem_sf10"],
+#    "xdbc_version": [4],
+# "server_comp_par": [1, 2, 4, 8],
+# "client_decomp_par": [1, 2, 4, 8],
+# "buff_size": [1000, 10000],
+# "server_read_par": [1, 2],
+# "compression": ["nocomp", "snappy", "lz4", "lzo", "zstd"],
+# "format": [1, 2],
+# "client_write_par": [4, 8],
+# "client_readmode": [1, 2]
+# }
 
 def get_experiment_queue(filename=None):
     # exclude_columns = ["date", "xdbc_version", "host", "run", "time", "datasize", "avg_cpu_server", "avg_cpu_client"]
-    exclude_columns = ["date", "host", "run", "time", "datasize", "avg_cpu_server", "avg_cpu_client"]
+    exclude_columns = ["date", "host", "time", "datasize", "avg_cpu_server", "avg_cpu_client"]
 
     recorded_experiments = []
 

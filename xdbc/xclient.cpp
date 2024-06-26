@@ -293,7 +293,7 @@ namespace xdbc {
             while (error != boost::asio::error::eof) {
 
                 // Wait for next free buffer. Measure wait time and set appropriate readstates while wating and when starting after the wait.
-                _readState.store(0);
+                //_readState.store(0);
                 auto start_wait = std::chrono::high_resolution_clock::now();
 
                 bpi = _xdbcenv->freeBufferIds[thr]->pop();
@@ -301,14 +301,15 @@ namespace xdbc {
                 auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                         std::chrono::high_resolution_clock::now() - start_wait).count();
                 _xdbcenv->rcv_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
-                _readState.store(1);
+                //_readState.store(1);
 
                 // getting response from server. Start with reading header and measuring header receive time.
 
-                Header header{};
-                headerBytes = boost::asio::read(socket, boost::asio::buffer(&header, sizeof(Header)),
+                //Header header{};
+                //std::memcpy(_bufferPool[bpi].data(), &header, sizeof(Header));
+                headerBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi].data(), sizeof(Header)),
                                                 boost::asio::transfer_exactly(sizeof(Header)), error);
-
+                Header header = *reinterpret_cast<Header *>(_bufferPool[bpi].data());
 
                 //uint16_t checksum = header.crc;
 
@@ -322,12 +323,12 @@ namespace xdbc {
                                                       headerBytes);
 
                     if (error == boost::asio::error::eof) {
-
+                        spdlog::get("XDBC.CLIENT")->error("EOF");
                     }
                     break;
                 }
 
-                _readState.store(2);
+                //_readState.store(2);
 
                 // check for errors in header
                 if (header.compressionType > 6)
@@ -340,12 +341,8 @@ namespace xdbc {
                             _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size, headerBytes);
 
                 // all good, read incoming body and measure time
-                std::vector<std::byte> compressed_buffer(sizeof(Header) + header.totalSize);
+                //std::vector<std::byte> compressed_buffer(sizeof(Header) + header.totalSize);
 
-
-
-                //TODO: read header directly into the compressed buffer
-                std::memcpy(_bufferPool[bpi].data(), &header, sizeof(Header));
 
                 readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi].data() + sizeof(Header),
                                                                           header.totalSize),
@@ -375,13 +372,13 @@ namespace xdbc {
                     decompThreadId = 0;
 
                 buffers++;
-                _readState.store(3);
+                //_readState.store(3);
             }
 
             /*for (auto x: _bufferPool[bpi])
                 printSl(&x);*/
 
-            _readState.store(4);
+            //_readState.store(4);
 
             for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
                 _xdbcenv->compressedBufferIds[i]->push(-1);

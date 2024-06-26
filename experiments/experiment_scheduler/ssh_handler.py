@@ -42,7 +42,7 @@ class SSHConnection:
             raise SSHConnectionError(f"SSH connection is not active for {self.hostname}: ${cmd}", self.hostname)
 
         if background:
-            background_command = f"nohup {cmd} &"
+            background_command = f"nohup {cmd} > /dev/null 2>&1 &"
             self.ssh.exec_command(background_command)
             return None
         else:

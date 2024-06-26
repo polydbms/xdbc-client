@@ -40,10 +40,10 @@ print(f"Active ssh connections: {len(ssh_connections)}")
 
 def write_csv_header(filename, config=None):
     header = ['date', 'xdbc_version', 'host', 'run', 'system', 'table', 'compression', 'format', 'network_parallelism',
-              'bufpool_size',
-              'buff_size', 'network', 'client_readmode', 'client_cpu', 'client_write_par', 'client_decomp_par',
-              'server_cpu', 'server_read_par', 'server_read_partitions', 'server_deser_par', 'server_comp_par', 'time',
-              'datasize', 'avg_cpu_server', 'avg_cpu_client']
+              'bufpool_size', 'buff_size', 'network', 'network_latency', 'network_loss', 'client_readmode',
+              'client_cpu', 'client_write_par', 'client_decomp_par', 'server_cpu', 'server_read_par',
+              'server_read_partitions', 'server_deser_par', 'server_comp_par', 'time', 'datasize', 'avg_cpu_server',
+              'avg_cpu_client']
 
     with open(filename, mode="w", newline="") as file:
         writer = csv.writer(file)
@@ -56,11 +56,11 @@ def write_to_csv(filename, host, config, result):
         writer = csv.writer(file)
         writer.writerow(
             [result['date']] + [config['xdbc_version'], host] +
-            [1, config['system'], config['table'],
+            [config['run'], config['system'], config['table'],
              config['compression'],
              config['format'], config['network_parallelism'],
              config['bufpool_size'],
-             config['buff_size'], config['network'],
+             config['buff_size'], config['network'], config['network_latency'], config['network_loss'],
              config['client_readmode'],
              config['client_cpu'], config['client_write_par'],
              config['client_decomp_par'],
