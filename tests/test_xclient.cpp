@@ -95,10 +95,12 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
             ("mode,m", po::value<int>()->default_value(1), "1: Analytics, 2: Storage.\nDefault: 1")
             ("net-parallelism,n", po::value<int>()->default_value(1), "Set the network parallelism grade.\nDefault: 1")
             ("write-parallelism,r", po::value<int>()->default_value(1), "Set the read parallelism grade.\nDefault: 1")
-            ("decomp-parallelism,d", po::value<int>()->default_value(4),
+            ("decomp-parallelism,d", po::value<int>()->default_value(1),
              "Set the decompression parallelism grade.\nDefault: 1")
             ("transfer-id,tid", po::value<long>()->default_value(0),
-             "Set the transfer id.\nDefault: 0");
+             "Set the transfer id.\nDefault: 0")
+            ("profiling-breakpoint", po::value<int>()->default_value(100),
+             "Set profiling breakpoint.\nDefault: 100");
 
     po::positional_options_description p;
     p.add("compression-type", 1);
@@ -162,6 +164,10 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
         spdlog::get("XCLIENT")->info("Server host: {0}", vm["server-host"].as<string>());
         env.server_host = vm["server-host"].as<string>();
     }
+    if (vm.count("profiling-breakpoint")) {
+        spdlog::get("XCLIENT")->info("Profiling Breakpoint: {0}", vm["profiling-breakpoint"].as<int>());
+        env.profilingBufferCnt = vm["profiling-breakpoint"].as<int>();
+    }
 
 
     //env.server_host = "xdbcserver";
@@ -220,6 +226,8 @@ int main(int argc, char *argv[]) {
     env.write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
 
     tester.close();
+
+
 
     return 0;
 }

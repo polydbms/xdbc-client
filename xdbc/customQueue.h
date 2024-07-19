@@ -3,7 +3,7 @@
 #include <deque>
 
 template<typename T>
-class queue {
+class customQueue {
 private:
     std::mutex d_mutex;
     std::condition_variable d_condition;
@@ -23,5 +23,10 @@ public:
         T rc(std::move(this->d_queue.back()));
         this->d_queue.pop_back();
         return rc;
+    }
+
+    [[nodiscard]] size_t size() const {
+        //std::unique_lock<std::mutex> lock(this->d_mutex);
+        return d_queue.size();
     }
 };

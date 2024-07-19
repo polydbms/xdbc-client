@@ -62,7 +62,46 @@ void Tester::close() {
              << write_time << "\n";
     csv_file.close();
 
+    //Compute profiling info
+    std::map<std::string, long long> totalDurations;
+    std::map<std::string, int> countEntries;
+
+    for (const auto &entry: env->profilingInfo) {
+        totalDurations[entry.first] += entry.second;
+        countEntries[entry.first]++;
+    }
+
+    // Compute and print throughput for each component
+    for (const auto &component: totalDurations) {
+        const std::string &key = component.first;
+        long long totalDuration = component.second; // Total duration in microseconds
+        int count = countEntries[key]; // Number of entries
+
+        // Calculate total data size in bytes
+        double totalDataSizeBytes =
+                static_cast<double>(count) * env->profilingBufferCnt * (env->buffer_size * 1024);
+
+        // Convert total data size to MB
+        double totalDataSizeMB = totalDataSizeBytes / 1e6;
+
+        // Convert total duration to seconds
+        double totalDurationSeconds = totalDuration / 1e6;
+
+        // Calculate throughput in MB/s
+        double throughput = totalDataSizeMB / totalDurationSeconds;
+
+        if (key == "receive")
+            throughput *= env->rcv_parallelism;
+        else if (key == "decomp")
+            throughput *= env->decomp_parallelism;
+        else if (key == "write")
+            throughput *= env->write_parallelism;
+
+        spdlog::get("XCLIENT")->info("Component: {0}, throughput {1} MB/s", key, throughput);
+    }
+
 }
+
 
 int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, long &totalcnt) {
 
@@ -72,7 +111,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
     for (const auto &attr: env->schema) {
         tupleSize += attr.size;
     }
-
+    auto start_profiling = std::chrono::high_resolution_clock::now();
     while (xclient.hasNext(thr)) {
         // Get next read buffer and measure the wait time
         auto start_wait = std::chrono::high_resolution_clock::now();
@@ -122,6 +161,15 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
 
             }
             buffsRead++;
+
+            if (buffsRead > 0 && buffsRead % env->profilingBufferCnt == 0) {
+                auto duration_profiling = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::high_resolution_clock::now() - start_profiling).count();
+                env->profilingInfo.insert({"write", duration_profiling});
+                start_profiling = std::chrono::high_resolution_clock::now();
+                /*spdlog::get("XCLIENT")->info("Write thr {0} profiling {1} ms per {2} buffs", thr,
+                                                 duration_profiling, xdbcEnv->profilingBufferCnt);*/
+            }
             xclient.markBufferAsRead(curBuffWithId.id);
         } else {
             spdlog::get("XCLIENT")->warn("Write thread {0} found invalid buffer with id: {1}, buff_no: {2}",
@@ -178,28 +226,61 @@ void Tester::runAnalytics() {
 
 int Tester::storageThread(int thr, const std::string &filename) {
 
-    std::ofstream csvFile(filename + std::to_string(thr) + ".csv", std::ios::out);
+    //std::ofstream csvFile(filename + std::to_string(thr) + ".csv", std::ios::out);
+    //std::ostringstream csvBuffer(std::ios::out | std::ios::ate);
 
-    std::ostringstream csvBuffer(std::ios::out | std::ios::ate);
+    std::ofstream csvFile(filename + std::to_string(thr) + ".csv", std::ios::out | std::ios::binary);
+    //std::ostringstream csvBuffer;
     //csvBuffer << std::setprecision(std::numeric_limits<double>::max_digits10);
-    csvBuffer << std::setprecision(10);
+    //csvBuffer << std::setprecision(10);
     //TODO: make generic
-    //csvBuffer.str(std::string(env->buffer_size * schema.size() * 20, '\0'));
-    csvBuffer.clear();
+    //csvBuffer.str(std::string(env->buffer_size * 1024, '\0'));
+    //csvBuffer.clear();
+    std::string csvBuffer;
+    csvBuffer.reserve((env->buffer_size + 100) * 1024); // Preallocate
+    char firstSchemaAttChar = env->schema[0].tpe[0];
+
 
     int totalcnt = 0;
     int cnt = 0;
     int buffsRead = 0;
+    long long deserTime = 0;
+    long long writeTime = 0;
 
+    int schemaSize = env->schema.size();
 
     //TODO: refactor to call only when columnar format (2)
-    std::vector<size_t> offsets(env->schema.size());
+    std::vector<size_t> offsets(schemaSize);
     size_t baseOffset = 0;
-    for (size_t i = 0; i < env->schema.size(); ++i) {
+    for (size_t i = 0; i < schemaSize; ++i) {
         offsets[i] = baseOffset;
         baseOffset += env->tuples_per_buffer * env->schema[i].size;
     }
 
+    //TODO: call only when row
+    std::vector<size_t> offsetsRow(schemaSize);
+    std::vector<size_t> sizes(schemaSize);
+    std::vector<size_t> schemaChars(schemaSize);
+    size_t baseOffsetRow = 0;
+    for (size_t i = 0; i < schemaSize; ++i) {
+        offsetsRow[i] = baseOffsetRow;
+        if (env->schema[i].tpe[0] == 'I') {
+            sizes[i] = 4; // sizeof(int)
+            schemaChars[i] = 'I';
+        } else if (env->schema[i].tpe[0] == 'D') {
+            sizes[i] = 8; // sizeof(double)
+            schemaChars[i] = 'D';
+        } else if (env->schema[i].tpe[0] == 'C') {
+            sizes[i] = 1; // sizeof(char)
+            schemaChars[i] = 'C';
+        } else if (env->schema[i].tpe[0] == 'S') {
+            sizes[i] = env->schema[i].size;
+            schemaChars[i] = 'S';
+        }
+        baseOffsetRow += sizes[i];
+    }
+
+    auto start_profiling = std::chrono::high_resolution_clock::now();
     while (xclient.hasNext(thr)) {
         // Get next read buffer and measure the waiting time
         auto start_wait = std::chrono::high_resolution_clock::now();
@@ -211,6 +292,7 @@ int Tester::storageThread(int thr, const std::string &filename) {
         env->write_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
 
         if (curBuffWithId.id >= 0) {
+            auto start_deser = std::chrono::high_resolution_clock::now();
             if (curBuffWithId.iformat == 1) {
 
                 auto dataPtr = curBuffWithId.buff.data();
@@ -219,58 +301,84 @@ int Tester::storageThread(int thr, const std::string &filename) {
 
                     // Check the first attribute before proceeding
                     //TODO: fix empty tuples by not writing them on the server side
-                    if (env->schema.front().tpe == "INT" && *reinterpret_cast<int *>(dataPtr) < 0) {
+                    if (firstSchemaAttChar == 'I' && *reinterpret_cast<int *>(dataPtr) < 0) {
                         spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}",
                                                      curBuffWithId.id, cnt);
                         break;
                     }
-
-                    for (const auto &attr: env->schema) {
-                        if (attr.tpe == "INT") {
-                            csvBuffer << *reinterpret_cast<int *>(dataPtr + offset);
-                            offset += sizeof(int);
-                        } else if (attr.tpe == "DOUBLE") {
-                            csvBuffer << *reinterpret_cast<double *>(dataPtr + offset);
-                            offset += sizeof(double);
-                        } else if (attr.tpe == "CHAR") {
-                            csvBuffer << *reinterpret_cast<char *>(dataPtr + offset);
-                            offset += sizeof(char);
-                        } else if (attr.tpe == "STRING") {
-                            csvBuffer << reinterpret_cast<char *>(dataPtr + offset);;
-                            offset += attr.size;
+                    char tempBuffer[50];
+                    //TODO: char comparison works for our current type system
+                    for (size_t j = 0; j < schemaSize; ++j) {
+                        const char *dataPtrOffset = reinterpret_cast<const char *>(dataPtr + offset);
+                        switch (schemaChars[j]) {
+                            case 'I': {
+                                int value = *reinterpret_cast<const int *>(dataPtrOffset);
+                                //csvBuffer.append(std::to_string(value));
+                                csvBuffer.append(tempBuffer, sprintf(tempBuffer, "%d", value));
+                                break;
+                            }
+                            case 'D': {
+                                double value = *reinterpret_cast<const double *>(dataPtrOffset);
+                                csvBuffer.append(tempBuffer, sprintf(tempBuffer, "%.2f", value));
+                                break;
+                            }
+                            case 'C': {
+                                csvBuffer.push_back(*dataPtrOffset);
+                                break;
+                            }
+                            case 'S': {
+                                csvBuffer.append(dataPtrOffset, sizes[j]);
+                                break;
+                            }
+                            default:
+                                break;
                         }
-
-                        csvBuffer << (&attr != &env->schema.back() ? "," : "\n");
+                        offset += sizes[j];
+                        //csvBuffer.push_back(j == schemaSize - 1 ? '\n' : ',');
+                        csvBuffer.push_back(',');
                     }
+                    csvBuffer.back() = '\n';
+
 
                     cnt++;
                     dataPtr += offset;
                 }
 
-                csvFile << csvBuffer.str();
-                csvBuffer.str("");
+                /*csvFile << csvBuffer.str();
+                csvBuffer.str("");*/
             }
             if (curBuffWithId.iformat == 2) {
 
-                std::vector<void *> pointers(env->schema.size());
-                std::vector<int *> intPointers(env->schema.size());
-                std::vector<double *> doublePointers(env->schema.size());
-                std::vector<char *> charPointers(env->schema.size());
-                std::vector<char *> stringPointers(env->schema.size());
+                std::vector<void *> pointers(schemaSize);
+                std::vector<int *> intPointers(schemaSize);
+                std::vector<double *> doublePointers(schemaSize);
+                std::vector<char *> charPointers(schemaSize);
+                std::vector<char *> stringPointers(schemaSize);
 
                 std::byte *dataPtr = curBuffWithId.buff.data();
 
                 // Initialize pointers for the current buffer
-                for (size_t j = 0; j < env->schema.size(); ++j) {
-                    pointers[j] = static_cast<void *>(dataPtr + offsets[j]);
-                    if (env->schema[j].tpe == "INT") {
-                        intPointers[j] = reinterpret_cast<int *>(pointers[j]);
-                    } else if (env->schema[j].tpe == "DOUBLE") {
-                        doublePointers[j] = reinterpret_cast<double *>(pointers[j]);
-                    } else if (env->schema[j].tpe == "CHAR") {
-                        charPointers[j] = reinterpret_cast<char *>(pointers[j]);
-                    } else if (env->schema[j].tpe == "STRING") {
-                        stringPointers[j] = reinterpret_cast<char *>(pointers[j]);
+
+                for (size_t j = 0; j < schemaSize; ++j) {
+
+                    pointers[j] = dataPtr + offsets[j];
+                    switch (schemaChars[j]) {
+                        case 'I': {
+                            intPointers[j] = reinterpret_cast<int *>(pointers[j]);
+                            break;
+                        }
+                        case 'D': {
+                            doublePointers[j] = reinterpret_cast<double *>(pointers[j]);
+                            break;
+                        }
+                        case 'C': {
+                            charPointers[j] = reinterpret_cast<char *>(pointers[j]);
+                            break;
+                        }
+                        case 'S': {
+                            stringPointers[j] = reinterpret_cast<char *>(pointers[j]);
+                            break;
+                        }
                     }
                 }
 
@@ -280,25 +388,60 @@ int Tester::storageThread(int thr, const std::string &filename) {
                         spdlog::get("XCLIENT")->warn("Empty tuple at buffer: {0}, tupleNo: {1}", curBuffWithId.id, i);
                         break;  // Exit the loop if the first element is less than zero
                     }
-                    for (size_t j = 0; j < env->schema.size(); ++j) {
-                        if (env->schema[j].tpe == "INT") {
-                            csvBuffer << *(intPointers[j] + i);
-                        } else if (env->schema[j].tpe == "DOUBLE") {
-                            csvBuffer << *(doublePointers[j] + i);
-                        } else if (env->schema[j].tpe == "CHAR") {
-                            csvBuffer << *(charPointers[j] + i);
-                        } else if (env->schema[j].tpe == "STRING") {
-                            csvBuffer << stringPointers[j] + i * env->schema[j].size;
+                    char tempBuffer[50];
+                    for (size_t j = 0; j < schemaSize; ++j) {
+                        //const auto &schema = env->schema[j];
+                        switch (schemaChars[j]) {
+                            case 'I': {
+                                int value = *(intPointers[j] + i);
+
+                                csvBuffer.append(std::to_string(value));
+                                break;
+                            }
+                            case 'D': {
+                                double value = *(doublePointers[j] + i);
+                                csvBuffer.append(tempBuffer, sprintf(tempBuffer, "%.2f", value));
+                                break;
+                            }
+                            case 'C': {
+                                csvBuffer.push_back(*(charPointers[j] + i));
+                                break;
+                            }
+                            case 'S': {
+                                //csvBuffer.append(stringPointers[j] + i * schema.size, schema.size);
+                                csvBuffer.append(stringPointers[j] + i * sizes[j], sizes[j]);
+                                break;
+                            }
+                            default:
+                                break;
                         }
-                        csvBuffer << (j < env->schema.size() - 1 ? "," : "\n");
+                        csvBuffer.push_back(',');
                     }
+                    csvBuffer.back() = '\n';
                 }
-
-                csvFile << csvBuffer.str();
-                csvBuffer.str("");
-
             }
+            deserTime += std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - start_deser).count();
+
+            auto start_write = std::chrono::high_resolution_clock::now();
+
+            //spdlog::get("XCLIENT")->info("csv buffer size {0} ", csvBuffer.size());
+            csvFile.write(csvBuffer.data(), csvBuffer.size());
+            csvBuffer.clear();
+            writeTime += std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::high_resolution_clock::now() - start_write).count();
+
             buffsRead++;
+
+            if (buffsRead > 0 && buffsRead % env->profilingBufferCnt == 0) {
+                auto duration_profiling = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::high_resolution_clock::now() - start_profiling).count();
+                env->profilingInfo.insert({"write", duration_profiling});
+                start_profiling = std::chrono::high_resolution_clock::now();
+                /*spdlog::get("XCLIENT")->info("Write thr {0} profiling {1} ms per {2} buffs", thr,
+                                                 duration_profiling, xdbcEnv->profilingBufferCnt);*/
+            }
+
             xclient.markBufferAsRead(curBuffWithId.id);
         } else {
             spdlog::get("XCLIENT")->warn("found invalid buffer with id: {0}, buff_no: {1}",
@@ -307,6 +450,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
         }
 
     }
+
+    spdlog::get("XCLIENT")->info("Thr {0} DeserTime: {1}, WriteTime {2}", thr, deserTime / 1000, writeTime / 1000);
 
     spdlog::get("XCLIENT")->info("Write thread {0} Total written buffers: {1}", thr, buffsRead);
     csvFile.close();

@@ -9,7 +9,7 @@
 #include <stack>
 #include <boost/asio.hpp>
 #include <set>
-#include "queue.h"
+#include "customQueue.h"
 #include "utils.h"
 #include "env_predictor.h"
 
@@ -29,7 +29,7 @@ namespace xdbc {
         size_t attributeComp[MAX_ATTRIBUTES];
 
     };
-    typedef std::shared_ptr<queue<int>> FBQ_ptr;
+    typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
 
     struct SchemaAttribute {
         std::string name;
@@ -66,6 +66,10 @@ namespace xdbc {
         std::vector<FBQ_ptr> compressedBufferIds;
         std::vector<FBQ_ptr> decompressedBufferIds;
         int mode;
+        std::multimap<std::string, long> profilingInfo;
+        int profilingBufferCnt;
+        std::vector<std::tuple<long long, size_t, size_t, size_t>> queueSizes;
+        std::atomic<bool> monitor;
     };
 
     struct buffWithId {
@@ -90,6 +94,7 @@ namespace xdbc {
         std::vector<int> _emptyDecompThreadCtr;
         std::atomic<int> _outThreadId;
         std::atomic<int> _markedFreeCounter{};
+        std::thread _monitorThread;
 
     public:
 
@@ -116,6 +121,10 @@ namespace xdbc {
         void finalize();
 
         void markBufferAsRead(int buffId);
+
+        void monitorQueues(int interval_ms);
+
+        void printAverageLoad();
     };
 
 }
