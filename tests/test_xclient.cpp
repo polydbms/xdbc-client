@@ -1,8 +1,8 @@
 #include <iostream>
 #include <thread>
 #include <numeric>
-#include <iomanip>
 #include <fstream>
+#include <iomanip>
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <boost/program_options.hpp>
@@ -98,9 +98,7 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
             ("decomp-parallelism,d", po::value<int>()->default_value(1),
              "Set the decompression parallelism grade.\nDefault: 1")
             ("transfer-id,tid", po::value<long>()->default_value(0),
-             "Set the transfer id.\nDefault: 0")
-            ("profiling-breakpoint", po::value<int>()->default_value(100),
-             "Set profiling breakpoint.\nDefault: 100");
+             "Set the transfer id.\nDefault: 0");
 
     po::positional_options_description p;
     p.add("compression-type", 1);
@@ -164,25 +162,15 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
         spdlog::get("XCLIENT")->info("Server host: {0}", vm["server-host"].as<string>());
         env.server_host = vm["server-host"].as<string>();
     }
-    if (vm.count("profiling-breakpoint")) {
-        spdlog::get("XCLIENT")->info("Profiling Breakpoint: {0}", vm["profiling-breakpoint"].as<int>());
-        env.profilingBufferCnt = vm["profiling-breakpoint"].as<int>();
-    }
 
 
     //env.server_host = "xdbcserver";
     env.schemaJSON = "";
     env.server_port = "1234";
 
-    env.rcv_time = 0;
-    env.decomp_time = 0;
-    env.write_time = 0;
-
-    env.rcv_wait_time = 0;
-    env.decomp_wait_time = 0;
-    env.write_wait_time = 0;
     env.tuple_size = 0;
     env.tuples_per_buffer = 0;
+    env.monitor.store(false);
 
 }
 
@@ -193,6 +181,7 @@ int main(int argc, char *argv[]) {
     xdbc::RuntimeEnv env;
     handleCMDParams(argc, argv, env);
     env.env_name = "Cpp Client";
+    env.startTime = std::chrono::steady_clock::now();
 
     //create schema
     std::vector<xdbc::SchemaAttribute> schema;
@@ -208,26 +197,19 @@ int main(int argc, char *argv[]) {
                                          return acc + attr.size;
                                      });
 
-    env.tuples_per_buffer = env.buffer_size * 1024 / env.tuple_size;
+    env.tuples_per_buffer = (env.buffer_size * 1024 / env.tuple_size);
 
     spdlog::get("XCLIENT")->info("Input table: {0} with tuple size {1} and schema:\n{2}",
                                  env.table, env.tuple_size, formatSchema(env.schema));
 
     Tester tester("Cpp Client", env);
 
-    auto start = std::chrono::high_resolution_clock::now();
     if (env.mode == 1)
         tester.runAnalytics();
     else if (env.mode == 2)
         tester.runStorage("/dev/shm/output");
 
-    auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::high_resolution_clock::now() - start).count();
-    env.write_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
-
     tester.close();
-
-
 
     return 0;
 }

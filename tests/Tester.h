@@ -17,7 +17,6 @@ private:
     xdbc::RuntimeEnv *env;
     xdbc::XClient xclient;
     std::string name;
-    std::chrono::steady_clock::time_point start;
 
     int analyticsThread(int thr, int &mins, int &maxs, long &sums, long &cnts, long &totalctns);
 

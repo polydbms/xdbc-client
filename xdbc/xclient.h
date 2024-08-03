@@ -11,7 +11,6 @@
 #include <set>
 #include "customQueue.h"
 #include "utils.h"
-#include "env_predictor.h"
 
 using namespace boost::asio;
 using ip::tcp;
@@ -23,19 +22,29 @@ namespace xdbc {
 
         size_t compressionType;
         size_t totalSize;
+        size_t totalTuples;
         size_t intermediateFormat;
         size_t crc;
         size_t attributeSize[MAX_ATTRIBUTES];
         size_t attributeComp[MAX_ATTRIBUTES];
 
     };
-    typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
 
     struct SchemaAttribute {
         std::string name;
         std::string tpe;
         int size;
     };
+
+    struct ProfilingTimestamps {
+        std::chrono::high_resolution_clock::time_point timestamp;
+        int thread;
+        std::string component;
+        std::string event;
+    };
+
+    typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
+    typedef std::shared_ptr<customQueue<ProfilingTimestamps>> PTQ_ptr;
 
     struct RuntimeEnv {
         long transfer_id;
@@ -49,14 +58,7 @@ namespace xdbc {
         int rcv_parallelism;
         int decomp_parallelism;
         int write_parallelism;
-        std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> start_rcv_time;
-        std::atomic<std::chrono::time_point<std::chrono::high_resolution_clock>> start_decomp_time;
-        std::atomic<long long> rcv_wait_time;
-        std::atomic<long long> decomp_wait_time;
-        std::atomic<long long> write_wait_time;
-        std::atomic<long long> rcv_time;
-        std::atomic<long long> decomp_time;
-        std::atomic<long long> write_time;
+        std::chrono::steady_clock::time_point startTime;
         std::string table;
         std::string server_host;
         std::string server_port;
@@ -66,16 +68,17 @@ namespace xdbc {
         std::vector<FBQ_ptr> compressedBufferIds;
         std::vector<FBQ_ptr> decompressedBufferIds;
         int mode;
-        std::multimap<std::string, long> profilingInfo;
-        int profilingBufferCnt;
         std::vector<std::tuple<long long, size_t, size_t, size_t>> queueSizes;
         std::atomic<bool> monitor;
+
+        PTQ_ptr pts;
     };
 
     struct buffWithId {
         int id;
         int iformat;
-        std::vector<std::byte> buff;
+        size_t totalTuples;
+        std::byte *buff;
     };
 
     class XClient {
@@ -92,15 +95,12 @@ namespace xdbc {
         boost::asio::io_context _ioContext;
         boost::asio::ip::tcp::socket _baseSocket;
         std::vector<int> _emptyDecompThreadCtr;
-        std::atomic<int> _outThreadId;
-        std::atomic<int> _markedFreeCounter{};
+        std::atomic<int> _markedFreeCounter;
         std::thread _monitorThread;
 
     public:
 
         XClient(RuntimeEnv &xdbcenv);
-
-        ~XClient();
 
         std::string get_name() const;
 
@@ -124,7 +124,6 @@ namespace xdbc {
 
         void monitorQueues(int interval_ms);
 
-        void printAverageLoad();
     };
 
 }
