@@ -1,5 +1,3 @@
-version: '3.7'
-
 services:
   tc:
     image: "${DOCKER_IMAGE_TERMINAL:-lukaszlach/docker-tc}"
@@ -17,8 +15,3 @@ services:
       HTTP_BIND: "${HTTP_BIND:-127.0.0.1}"
       HTTP_PORT: "${HTTP_PORT:-4080}"
     network_mode: host
-
-networks:
-  default:
-    external:
-      name: host
