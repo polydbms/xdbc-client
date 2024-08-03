@@ -5,13 +5,13 @@
 #include <chrono>
 #include <algorithm>
 #include <iterator>
-
+#include <fstream>
+#include <iomanip>
 #include "spdlog/spdlog.h"
 #include "spdlog/stopwatch.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
-#include "spdlog/sinks/basic_file_sink.h"
 #include "Decompression/Decompressor.h"
-
+#include "xdbc/metrics_calculator.h"
 
 using namespace boost::asio;
 using ip::tcp;
@@ -29,40 +29,12 @@ namespace xdbc {
             _readSockets(),
             _emptyDecompThreadCtr(env.write_parallelism),
             _markedFreeCounter(0),
-            _outThreadId(0),
             _baseSocket(_ioContext) {
 
         auto console = spdlog::stdout_color_mt("XDBC.CLIENT");
-        auto file_log = spdlog::basic_logger_mt("XDBC.CLIENT.FILE", "xdbcclient.txt", true);
-        file_log->set_pattern("%t, %v, %E.%Fs");
 
-        spdlog::get("XDBC.CLIENT.FILE")->info("Client");
-
-        // Sollte eigentlich ein multithreaded logger sein, der gleichzeitig in die console und in eine Datei loggt. Gibt aber einen segmentation fault!
-        /*        std::vector<spdlog::sink_ptr> sinks;
-        sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
-        sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("xdbcclient.txt", true));
-        auto combined_logger = std::make_shared<spdlog::logger>("XDBC.CLIENT", begin(sinks), end(sinks));
-        spdlog::register_logger(combined_logger);
-
-        try
-        {
-            // Set up spdlog logger
-            auto testlogger = spdlog::get("XDBC.CLIENT");
-            if (!testlogger)
-            {
-                throw std::runtime_error("Logger not found");
-            }
-
-            // Log a message
-            testlogger->error("Hello, World!");
-        }
-        catch (const std::exception& e)
-        {
-            // Handle exception and print error message
-            std::cout << "Error: " << e.what() << std::endl;
-            //spdlog::get("XDBC.CLIENT")->error("Yep, an errror!");
-        }*/
+        PTQ_ptr pq(new customQueue<ProfilingTimestamps>);
+        env.pts = pq;
 
 
         spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2}, TS: {3}, iformat: {4} ",
@@ -79,60 +51,14 @@ namespace xdbc {
         }
     }
 
-    XClient::~XClient() {
-        // Destructor implementation...
-        spdlog::get("XDBC.CLIENT.FILE")->info("Client");
-        ClientEnvPredictor pre;
-        ClientRuntimeParams newParams = pre.tweakNextParams(_xdbcenv);
-        spdlog::get("XDBC.CLIENT")->info(
-                "New parameters could be: rcv_parallelism {0}, decomp_parallelism {1}, write_parallelism {2}",
-                newParams.rcv_parallelism, newParams.decomp_parallelism, newParams.read_parallelism);
-    }
-
-    void XClient::printAverageLoad() {
-        long long totalTimestamps = 0;
-        size_t totalFreeBufferIdsSize = 0;
-        size_t totalCompressedBufferIdsSize = 0;
-        size_t totalDecompressedBufferIdsSize = 0;
-        size_t recordCount = _xdbcenv->queueSizes.size();
-
-        for (const auto &record: _xdbcenv->queueSizes) {
-            totalTimestamps += std::get<0>(record);
-            totalFreeBufferIdsSize += std::get<1>(record);
-            totalCompressedBufferIdsSize += std::get<2>(record);
-            totalDecompressedBufferIdsSize += std::get<3>(record);
-        }
-
-        if (recordCount > 0) {
-            double avgFreeBufferIdsSize = static_cast<double>(totalFreeBufferIdsSize) / recordCount;
-            double avgCompressedBufferIdsSize = static_cast<double>(totalCompressedBufferIdsSize) / recordCount;
-            double avgDecompressedBufferIdsSize = static_cast<double>(totalDecompressedBufferIdsSize) / recordCount;
-
-            spdlog::get("XDBC.CLIENT")->info("Average Load of Queues: Receiver, Decompressor, Writer");
-            spdlog::get("XDBC.CLIENT")->info("{0}\t{1}\t{2}",
-                                             avgFreeBufferIdsSize, avgCompressedBufferIdsSize,
-                                             avgDecompressedBufferIdsSize);
-        } else {
-            spdlog::get("XDBC.CLIENT")->info("No records available to calculate averages.");
-        }
-    }
-
     void XClient::finalize() {
+
         spdlog::get("XDBC.CLIENT")->info(
                 "Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads",
                 _xdbcenv->env_name, _xdbcenv->rcv_parallelism, _xdbcenv->decomp_parallelism);
 
         _xdbcenv->monitor.store(false);
         _monitorThread.join();
-
-        /*std::cout << "Timestamp\tFreeBufferIdsSize\tCompressedBufferIdsSize\tDecompressedBufferIdsSize" << std::endl;
-        for (const auto &record: _xdbcenv->queueSizes) {
-            std::cout << std::get<0>(record) << "\t"
-                      << std::get<1>(record) << "\t"
-                      << std::get<2>(record) << "\t"
-                      << std::get<3>(record) << std::endl;
-        }*/
-        printAverageLoad();
 
         for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) {
             _decompThreads[i].join();
@@ -141,21 +67,82 @@ namespace xdbc {
         for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
             _rcvThreads[i].join();
         }
-        auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now() -
-                _xdbcenv->start_rcv_time.load(std::memory_order_relaxed)).count();
-        _xdbcenv->rcv_time.fetch_add(duration_microseconds, std::memory_order_relaxed);
-
-
-        auto duration_decomp = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now() -
-                _xdbcenv->start_decomp_time.load(std::memory_order_relaxed)).count();
-        _xdbcenv->decomp_time.fetch_add(duration_decomp, std::memory_order_relaxed);
 
         _baseSocket.close();
-
-
         spdlog::get("XDBC.CLIENT")->info("Finalizing: basesocket closed");
+
+        auto end = std::chrono::steady_clock::now();
+        auto total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - _xdbcenv->startTime).count();
+        spdlog::get("XDBC.CLIENT")->info("Total elapsed time: {0} ms", total_time);
+
+
+        auto pts = std::vector<xdbc::ProfilingTimestamps>(_xdbcenv->pts->size());
+        while (_xdbcenv->pts->size() != 0)
+            pts.push_back(_xdbcenv->pts->pop());
+
+        auto component_metrics = calculate_metrics(pts, _xdbcenv->buffer_size);
+        std::ostringstream totalTimes;
+        std::ostringstream procTimes;
+        std::ostringstream waitingTimes;
+        std::ostringstream totalThroughput;
+        std::ostringstream perBufferThroughput;
+
+        for (const auto &[component, metrics]: component_metrics) {
+
+            if (!component.empty()) {
+                totalTimes << component << ":\t" << metrics.overall_time_ms << "ms, ";
+                procTimes << component << ":\t" << metrics.processing_time_ms << "ms, ";
+                waitingTimes << component << ":\t" << metrics.waiting_time_ms << "ms, ";
+                totalThroughput << component << ":\t" << metrics.total_throughput << "mb/s, ";
+                perBufferThroughput << component << ":\t" << metrics.per_buffer_throughput << "mb/s, ";
+            }
+
+        }
+
+        spdlog::get("XDBC.CLIENT")->info(
+                "xdbc client | \n all:\t {} \n proc:\t{} \n wait:\t{} \n thr:\t {} \n thr/b:\t {}",
+                totalTimes.str(), procTimes.str(), waitingTimes.str(), totalThroughput.str(),
+                perBufferThroughput.str());
+
+        auto loads = printAndReturnAverageLoad(*_xdbcenv);
+
+        const std::string filename = "/tmp/xdbc_client_timings.csv";
+
+        std::ostringstream headerStream;
+        headerStream << "transfer_id,total_time,"
+                     << "rcv_wait_time,rcv_proc_time,rcv_throughput,rcv_throughput_pb,rcv_load,"
+                     << "decomp_wait_time,decomp_proc_time,decomp_throughput,decomp_throughput_pb,decomp_load,"
+                     << "write_wait_time,write_proc_time,write_throughput,write_throughput_pb,write_load\n";
+
+        std::ifstream file_check(filename);
+        bool is_empty = file_check.peek() == std::ifstream::traits_type::eof();
+        file_check.close();
+
+        std::ofstream csv_file(filename,
+                               std::ios::out | std::ios::app);
+
+        if (is_empty)
+            csv_file << headerStream.str();
+
+        csv_file << std::fixed << std::setprecision(2)
+                 << std::to_string(_xdbcenv->transfer_id) << "," << total_time << ","
+                 << component_metrics["rcv"].waiting_time_ms << ","
+                 << component_metrics["rcv"].processing_time_ms << ","
+                 << component_metrics["rcv"].total_throughput << ","
+                 << component_metrics["rcv"].per_buffer_throughput << ","
+                 << std::get<0>(loads) << ","
+                 << component_metrics["decomp"].waiting_time_ms << ","
+                 << component_metrics["decomp"].processing_time_ms << ","
+                 << component_metrics["decomp"].total_throughput << ","
+                 << component_metrics["decomp"].per_buffer_throughput << ","
+                 << std::get<1>(loads) << ","
+                 << component_metrics["write"].waiting_time_ms << ","
+                 << component_metrics["write"].processing_time_ms << ","
+                 << component_metrics["write"].total_throughput << ","
+                 << component_metrics["write"].per_buffer_throughput << ","
+                 << std::get<2>(loads) << "\n";
+        csv_file.close();
+
     }
 
 
@@ -166,7 +153,7 @@ namespace xdbc {
     std::string read_(tcp::socket &socket) {
         boost::asio::streambuf buf;
         boost::system::error_code error;
-        size_t bytes = boost::asio::read_until(socket, buf, "\n", error);
+        size_t bytes = boost::asio::read_until(socket, buf,"\n", error);
 
         if (error) {
             spdlog::get("XDBC.CLIENT")->warn("Boost error while reading: {0} ", error.message());
@@ -180,8 +167,9 @@ namespace xdbc {
         //establish base connection with server
         XClient::initialize(tableName);
 
-        _xdbcenv->start_rcv_time.store(std::chrono::high_resolution_clock::now());
+        _xdbcenv->monitor.store(true);
 
+        _monitorThread = std::thread(&XClient::monitorQueues, this, 1000);
 
         //create rcv threads
         for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
@@ -196,8 +184,6 @@ namespace xdbc {
             _rcvThreads[i] = std::thread(&XClient::receive, this, i);
         }
 
-        _xdbcenv->start_decomp_time.store(std::chrono::high_resolution_clock::now());
-
         for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) {
             FBQ_ptr q(new customQueue<int>);
             _xdbcenv->compressedBufferIds.push_back(q);
@@ -211,9 +197,6 @@ namespace xdbc {
 
         spdlog::get("XDBC.CLIENT")->info("#3 Initialized");
 
-        _xdbcenv->monitor.store(true);
-
-        _monitorThread = std::thread(&XClient::monitorQueues, this, 1000);
 
         return 1;
     }
@@ -260,8 +243,6 @@ namespace xdbc {
         ip::tcp::socket socket(io_service);
         socket.connect(tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234));
          */
-
-        spdlog::get("XDBC.CLIENT.FILE")->info("Connection");
 
         //this is for hostname
 
@@ -311,15 +292,14 @@ namespace xdbc {
         //ready.erase(std::remove(ready.begin(), ready.end(), '\n'), ready.cend());
         spdlog::get("XDBC.CLIENT")->info("Basesocket: Server signaled: {0}", ready);
 
-        spdlog::get("XDBC.CLIENT.FILE")->info("Connection");
         //return socket;
 
     }
 
 
     void XClient::receive(int thr) {
+        _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "rcv", "start"});
         spdlog::get("XDBC.CLIENT")->info("Entered receive thread {0} ", thr);
-        spdlog::get("XDBC.CLIENT.FILE")->info("Receive data");
         boost::asio::io_service io_service;
         ip::tcp::socket socket(io_service);
         boost::asio::ip::tcp::resolver resolver(io_service);
@@ -368,18 +348,13 @@ namespace xdbc {
 
             int decompThreadId = 0;
 
-            auto start_profiling = std::chrono::high_resolution_clock::now();
             while (error != boost::asio::error::eof) {
 
-                // Wait for next free buffer. Measure wait time and set appropriate readstates while wating and when starting after the wait.
                 //_readState.store(0);
-                auto start_wait = std::chrono::high_resolution_clock::now();
 
                 bpi = _xdbcenv->freeBufferIds[thr]->pop();
+                _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "rcv", "pop"});
 
-                auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                        std::chrono::high_resolution_clock::now() - start_wait).count();
-                _xdbcenv->rcv_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
                 //_readState.store(1);
 
                 // getting response from server. Start with reading header and measuring header receive time.
@@ -396,9 +371,10 @@ namespace xdbc {
                 if (error) {
                     spdlog::get("XDBC.CLIENT")->error("Receive thread {0}: boost error while reading header: {1}", thr,
                                                       error.message());
-                    spdlog::get("XDBC.CLIENT")->error("header comp: {0}, size: {1}, headerBytes: {2}",
+                    spdlog::get("XDBC.CLIENT")->error("header comp: {0}, size: {1}, tuples {2}, headerBytes: {3}",
                                                       header.compressionType,
                                                       header.totalSize,
+                                                      header.totalTuples,
                                                       headerBytes);
 
                     if (error == boost::asio::error::eof) {
@@ -446,20 +422,12 @@ namespace xdbc {
 
                 _totalBuffersRead.fetch_add(1);
                 _xdbcenv->compressedBufferIds[decompThreadId]->push(bpi);
-                decompThreadId++;
-                if (decompThreadId == _xdbcenv->decomp_parallelism)
-                    decompThreadId = 0;
+                _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "rcv", "push"});
+
+                decompThreadId = (decompThreadId + 1) % _xdbcenv->decomp_parallelism;
 
                 buffers++;
 
-                if (buffers > 0 && buffers % _xdbcenv->profilingBufferCnt == 0) {
-                    auto duration_profiling = std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::high_resolution_clock::now() - start_profiling).count();
-                    _xdbcenv->profilingInfo.insert({"receive", duration_profiling});
-                    start_profiling = std::chrono::high_resolution_clock::now();
-                    /*spdlog::get("XDBC.CLIENT")->info("Receive thr {0} profiling {1} ms per {2} buffs", thr,
-                                                     duration_profiling, xdbcEnv->profilingBufferCnt);*/
-                }
                 //_readState.store(3);
             }
 
@@ -474,14 +442,14 @@ namespace xdbc {
             socket.close();
 
             spdlog::get("XDBC.CLIENT")->info("Receive thread {0} #buffers: {1}", thr, buffers);
-            spdlog::get("XDBC.CLIENT.FILE")->info("Receive data");
         } else
             spdlog::get("XDBC.CLIENT")->error("Receive thread {0} could not connect", thr);
 
+        _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "rcv", "end"});
     }
 
     void XClient::decompress(int thr) {
-        spdlog::get("XDBC.CLIENT.FILE")->info("Decompress data");
+        _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "start"});
 
         int readThrId = 0;
         int emptyCtr = 0;
@@ -489,25 +457,17 @@ namespace xdbc {
         int buffersDecompressed = 0;
         std::vector<char> decompressed_buffer(_xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
 
-        auto start_profiling = std::chrono::high_resolution_clock::now();
-
         while (emptyCtr < _xdbcenv->rcv_parallelism) {
 
-            // Wait for next buffer to decompress and measure the waiting time
-            auto start_wait = std::chrono::high_resolution_clock::now();
-
             int compBuffId = _xdbcenv->compressedBufferIds[thr]->pop();
-
-            auto duration_wait_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::high_resolution_clock::now() - start_wait).count();
-            _xdbcenv->decomp_wait_time.fetch_add(duration_wait_microseconds, std::memory_order_relaxed);
-
+            _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "pop"});
 
             // decompress the specific buffer depending on the type (header or not, type of header,...) and measure time
 
             if (compBuffId == -1)
                 emptyCtr++;
             else {
+                size_t totalTuples;
 
                 Header *header = reinterpret_cast<Header *>(_bufferPool[compBuffId].data());
                 std::byte *compressed_buffer = _bufferPool[compBuffId].data() + sizeof(Header);
@@ -621,25 +581,22 @@ namespace xdbc {
 
                     }
 
-                    memcpy(_bufferPool[compBuffId].data(), decompressed_buffer.data(),
+                    //write totaltuples as temp header
+                    memcpy(_bufferPool[compBuffId].data(), &header->totalTuples, sizeof(size_t));
+                    memcpy(_bufferPool[compBuffId].data() + sizeof(size_t), decompressed_buffer.data(),
                            _xdbcenv->tuple_size * _xdbcenv->tuples_per_buffer);
 
                 } else if (header->compressionType == 0) {
-
-                    memmove(_bufferPool[compBuffId].data(), compressed_buffer, header->totalSize);
+                    //write totaltuples as temp header
+                    memcpy(_bufferPool[compBuffId].data(), &header->totalTuples, sizeof(size_t));
+                    memmove(_bufferPool[compBuffId].data() + sizeof(size_t), compressed_buffer, header->totalSize);
                 }
 
 
                 _xdbcenv->decompressedBufferIds[readThrId]->push(compBuffId);
+                _xdbcenv->pts->push(
+                        ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "push"});
                 buffersDecompressed++;
-                if (buffersDecompressed > 0 && buffersDecompressed % _xdbcenv->profilingBufferCnt == 0) {
-                    auto duration_profiling = std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::high_resolution_clock::now() - start_profiling).count();
-                    _xdbcenv->profilingInfo.insert({"decomp", duration_profiling});
-                    start_profiling = std::chrono::high_resolution_clock::now();
-                    /*spdlog::get("XDBC.CLIENT")->info("Decomp thr {0} profiling {1} ms per {2} buffs", thr,
-                                                     duration_profiling, xdbcEnv->profilingBufferCnt);*/
-                }
 
                 readThrId++;
                 if (readThrId == _xdbcenv->write_parallelism)
@@ -651,7 +608,7 @@ namespace xdbc {
             _xdbcenv->decompressedBufferIds[i]->push(-1);
 
         spdlog::get("XDBC.CLIENT")->warn("Decomp thread {0} finished", thr);
-        spdlog::get("XDBC.CLIENT.FILE")->info("Decompress data");
+        _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "end"});
     }
 
     //TODO: handle parallelism internally
@@ -666,20 +623,27 @@ namespace xdbc {
     buffWithId XClient::getBuffer(int readThreadId) {
 
         int buffId = _xdbcenv->decompressedBufferIds[readThreadId]->pop();
+        _xdbcenv->pts->push(
+                ProfilingTimestamps{std::chrono::high_resolution_clock::now(), readThreadId, "write", "pop"});
 
+        buffWithId curBuf{};
         if (buffId == -1)
             _emptyDecompThreadCtr[readThreadId]++;
 
-        buffWithId curBuf{};
-        curBuf.buff.resize(_xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
-        curBuf.id = buffId;
-
+        size_t totalTuples = 0;
         if (buffId > -1) {
-            curBuf.buff = _bufferPool[buffId];
-            //TODO: set intermediate format dynamically
-            curBuf.iformat = _xdbcenv->iformat;
-            //std::copy(std::begin(_bufferPool[i]), std::end(_bufferPool[i]), std::begin(curBuf.buff));
+
+
+            std::memcpy(&totalTuples, _bufferPool[buffId].data(), sizeof(size_t));
+
+            curBuf.buff = _bufferPool[buffId].data() + sizeof(size_t);
+
         }
+        curBuf.id = buffId;
+        curBuf.totalTuples = totalTuples;
+        //TODO: set intermediate format dynamically
+        curBuf.iformat = _xdbcenv->iformat;
+
         //spdlog::get("XDBC.CLIENT")->warn("Sending buffer {0} to read thread {1}", buffId, readThreadId);
 
         return curBuf;
