@@ -47,4 +47,6 @@ install(TARGETS xdbc
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+install(FILES xdbc/customQueue.h xdbc/utils.h xdbc/metrics_calculator.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
 add_subdirectory(./tests)
