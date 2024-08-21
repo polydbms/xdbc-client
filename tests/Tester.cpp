@@ -184,8 +184,6 @@ int Tester::storageThread(int thr, const std::string &filename) {
     int totalcnt = 0;
     int cnt = 0;
     int buffsRead = 0;
-    long long deserTime = 0;
-    long long writeTime = 0;
     char comma = ',';
     char newLine = '\n';
 
@@ -229,7 +227,6 @@ int Tester::storageThread(int thr, const std::string &filename) {
         baseOffsetRow += sizes[i];
     }
 
-    auto start_profiling = std::chrono::high_resolution_clock::now();
     while (xclient.hasNext(thr)) {
         // Get next read buffer and measure the waiting time
         xdbc::buffWithId curBuffWithId = xclient.getBuffer(thr);
@@ -302,7 +299,7 @@ int Tester::storageThread(int thr, const std::string &filename) {
 
     }
 
-    spdlog::get("XCLIENT")->info("Thr {0} DeserTime: {1}, WriteTime {2}", thr, deserTime / 1000, writeTime / 1000);
+    //spdlog::get("XCLIENT")->info("Thr {0} DeserTime: {1}, WriteTime {2}", thr, deserTime / 1000, writeTime / 1000);
 
     spdlog::get("XCLIENT")->info("Write thread {0} Total written buffers: {1}", thr, buffsRead);
     csvFile.close();

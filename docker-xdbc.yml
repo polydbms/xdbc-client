@@ -1,6 +1,6 @@
 services:
   xdbc-server:
-    image: xdbc-server
+    image: xdbc-server:latest
     container_name: xdbcserver
     restart: always
     volumes:
@@ -20,10 +20,8 @@ services:
       com.docker-tc.enabled: 1
     #cpuset: "0,16,32,48,1,17,33,49,2,18,34,50,3,19,35,51,4,20,36,52,5,21,37,53,6,22,38,54,7,23,39,55"
 
-
-
   xdbc-client:
-    image: xdbc-client
+    image: xdbc-client:latest
     container_name: xdbcclient
     restart: always
     volumes:
@@ -36,6 +34,20 @@ services:
     labels:
       com.docker-tc.enabled: 1
     #cpuset: "8,24,40,56,9,25,41,57,10,26,42,58,11,27,43,59,12,28,44,60,13,29,45,61,14,30,46,62,15,31,47,63"
+
+  xdbc-python:
+    image: xdbc-python:latest
+    container_name: xdbcpython
+    restart: always
+    volumes:
+      - /dev/shm:/dev/shm
+    shm_size: '16gb'
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - xdbc-net
+    labels:
+      com.docker-tc.enabled: 1
 
   postgres-1:
     image: postgresdb

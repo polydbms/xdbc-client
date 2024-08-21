@@ -289,6 +289,7 @@ namespace xdbc {
         //std::this_thread::sleep_for(_xdbcenv->sleep_time*10);
         std::string ready = read_(_baseSocket);
 
+        //TODO: make a check that server is actually ready and try again until ready
         //ready.erase(std::remove(ready.begin(), ready.end(), '\n'), ready.cend());
         spdlog::get("XDBC.CLIENT")->info("Basesocket: Server signaled: {0}", ready);
 
