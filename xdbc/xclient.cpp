@@ -31,7 +31,12 @@ namespace xdbc {
             _markedFreeCounter(0),
             _baseSocket(_ioContext) {
 
-        auto console = spdlog::stdout_color_mt("XDBC.CLIENT");
+        auto console_logger = spdlog::get("XDBC.CLIENT");
+
+        if (!console_logger) {
+            // Logger does not exist, create it
+            console_logger = spdlog::stdout_color_mt("XDBC.CLIENT");
+        }
 
         PTQ_ptr pq(new customQueue<ProfilingTimestamps>);
         env.pts = pq;
@@ -265,6 +270,12 @@ namespace xdbc {
             _baseSocket.connect(endpoint, ec);
 
         }
+
+        if (ec) {
+            spdlog::get("XDBC.CLIENT")->error("Failed to connect after retries: {0}", ec.message());
+            throw boost::system::system_error(ec);  // Explicitly throw if connection fails
+        }
+
         spdlog::get("XDBC.CLIENT")->info("Basesocket: connected to {0}:{1}",
                                          endpoint.address().to_string(), endpoint.port());
 
@@ -635,7 +646,9 @@ namespace xdbc {
         if (buffId > -1) {
 
 
+
             std::memcpy(&totalTuples, _bufferPool[buffId].data(), sizeof(size_t));
+
 
             curBuf.buff = _bufferPool[buffId].data() + sizeof(size_t);
 
@@ -646,6 +659,7 @@ namespace xdbc {
         curBuf.iformat = _xdbcenv->iformat;
 
         //spdlog::get("XDBC.CLIENT")->warn("Sending buffer {0} to read thread {1}", buffId, readThreadId);
+
 
         return curBuf;
     }
