@@ -42,6 +42,7 @@ COPY tests/schemas/ /xdbc-client/tests/schemas/
 COPY CMakeLists.txt /xdbc-client/
 
 # build xdbc
+RUN rm -rf  /xdbc-client/CMakeCache.txt
 RUN mkdir /xdbc-client/build && cd /xdbc-client/build && cmake .. -D CMAKE_BUILD_TYPE=Release && make -j8 && make install
 #RUN mkdir /xdbc-client/build && cd /xdbc-client/build && cmake .. && make -j8 && make install
 
