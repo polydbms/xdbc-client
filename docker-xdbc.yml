@@ -35,19 +35,19 @@ services:
       com.docker-tc.enabled: 1
     #cpuset: "8,24,40,56,9,25,41,57,10,26,42,58,11,27,43,59,12,28,44,60,13,29,45,61,14,30,46,62,15,31,47,63"
 
-  xdbc-python:
-    image: xdbc-python:latest
-    container_name: xdbcpython
-    restart: always
-    volumes:
-      - /dev/shm:/dev/shm
-    shm_size: '16gb'
-    cap_add:
-      - NET_ADMIN
-    networks:
-      - xdbc-net
-    labels:
-      com.docker-tc.enabled: 1
+  #xdbc-python:
+  #  image: xdbc-python:latest
+  #  container_name: xdbcpython
+  #  restart: always
+  #  volumes:
+  #    - /dev/shm:/dev/shm
+  #  shm_size: '16gb'
+  #  cap_add:
+  #    - NET_ADMIN
+  #  networks:
+  #    - xdbc-net
+  #  labels:
+  #    com.docker-tc.enabled: 1
 
   postgres-1:
     image: postgresdb
