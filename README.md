@@ -27,8 +27,8 @@ The XDBC Server supports multiple options. For example, to transfer from a CSV s
 docker exec -it xdbcserver bash -c "./xdbc-server/build/xdbc-server \
 --system csv -b 256 -p 16384 --deser-parallelism 16 --read-parallelism 1 \
 --compression-parallelism=2 -f1 -csnappy"
-Currently, XDBC assumes your data is placed in `/dev/shm`, which is also mapped to the containers' `/dev/shm`.
 ```
+Currently, XDBC assumes your data is placed in `/dev/shm`, which is also mapped to the containers' `/dev/shm`.
 ### Then initiate the transfer through a client
 ```
 docker exec -it xdbcserver bash -c "./xdbc-server/tests/build/test --table ss13husallm"
