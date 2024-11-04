@@ -40,6 +40,7 @@ COPY xdbc/ /xdbc-client/xdbc/
 COPY tests/ /xdbc-client/tests/
 COPY tests/schemas/ /xdbc-client/tests/schemas/
 COPY CMakeLists.txt /xdbc-client/
+COPY optimizer /xdbc-client/
 
 # build xdbc
 RUN rm -rf  /xdbc-client/CMakeCache.txt
