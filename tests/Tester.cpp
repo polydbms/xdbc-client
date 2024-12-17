@@ -65,7 +65,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
         tupleSize += attr.size;
     }
 
-    while (xclient.hasNext(thr)) {
+    while (true) {
         // Get next read buffer and measure the wait time
         xdbc::buffWithId curBuffWithId = xclient.getBuffer(thr);
 
@@ -119,6 +119,7 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
 
     }
     env->pts->push(xdbc::ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "write", "end"});
+    env->write_activeThread.fetch_add(-1); // Atomically decrement by threadnum
     return buffsRead;
 
 }
@@ -145,7 +146,6 @@ void Tester::runAnalytics() {
         writeThreads[i] = std::thread(&Tester::analyticsThread, this, i, std::ref(mins[i]), std::ref(maxs[i]),
                                       std::ref(sums[i]), std::ref(cnts[i]), std::ref(totalcnts[i]));
     }
-
     for (int i = 0; i < env->write_parallelism; i++) {
         writeThreads[i].join();
     }

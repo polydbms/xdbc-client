@@ -64,6 +64,9 @@ namespace xdbc {
         std::string server_port;
         std::vector<SchemaAttribute> schema;
         std::string schemaJSON;
+        std::atomic<int> rcv_activeThread;
+        std::atomic<int> decomp_activeThread;
+        std::atomic<int> write_activeThread;
         FBQ_ptr freeBufferIds;
         FBQ_ptr compressedBufferIds;
         FBQ_ptr decompressedBufferIds;
@@ -182,7 +185,6 @@ namespace xdbc {
         Data Processing: Compares the number of empty decompression threads with the total parallelism to decide if the read thread can continue fetching buffers.
     }
     */
-
         
         buffWithId getBuffer(int readThread);
     /* 
