@@ -70,6 +70,10 @@ namespace xdbc {
         int mode;
         std::vector<std::tuple<long long, size_t, size_t, size_t>> queueSizes;
         std::atomic<bool> monitor;
+        std::atomic<int> finishedRcvThreads;
+        std::atomic<int> finishedDecompThreads;
+        std::atomic<int> finishedWriteThreads;
+
 
         PTQ_ptr pts;
     };
@@ -99,25 +103,27 @@ namespace xdbc {
         std::thread _monitorThread;
 
     public:
-    XClient(RuntimeEnv &xdbcenv);
- /* 
-    XClient::XClient(RuntimeEnv &env) :
-        Purpose: Initializes an `XClient` object with configuration and resources from the provided `RuntimeEnv`.
-        Input: `env` (RuntimeEnv): A reference to the `RuntimeEnv` object that contains the runtime configuration and environment settings.
-        Output: Initializes various member variables, sets up logging, and prepares resources such as buffer pools and thread counters.
-        Data Processing: The constructor initializes:
-            - The `_xdbcenv` pointer to reference the provided `RuntimeEnv` object.
-            - The `_bufferPool` to hold decompressed data buffers.
-            - Preallocates vector sizes to `_decompThreads` and `_rcvThreads`, i.e. empty threads without any associated function.
-            - The `_readSockets` for handling network sockets (although not fully defined in the constructor).
-            - The `_emptyDecompThreadCtr` and `_markedFreeCounter` to manage thread states and buffer marking.
-            - A `console_logger` is created using `spdlog` if not already available.
-            - A `ProfilingTimestamps` pq`) is initialized and assigned to `env.pts`.
-            - The buffer pool {2D pool(i.e. vector) of buffers} is populated with empty vectors sized to hold both headers and payloads, based on the configuration from `env`.
-        Additional Notes: The constructor logs initialization details using `spdlog`, including buffer pool size, buffer size, tuple size, and intermediate format settings.
-    */
+        XClient(RuntimeEnv &xdbcenv);
 
-    std::string get_name() const;
+        /*
+           XClient::XClient(RuntimeEnv &env) :
+               Purpose: Initializes an `XClient` object with configuration and resources from the provided `RuntimeEnv`.
+               Input: `env` (RuntimeEnv): A reference to the `RuntimeEnv` object that contains the runtime configuration and environment settings.
+               Output: Initializes various member variables, sets up logging, and prepares resources such as buffer pools and thread counters.
+               Data Processing: The constructor initializes:
+                   - The `_xdbcenv` pointer to reference the provided `RuntimeEnv` object.
+                   - The `_bufferPool` to hold decompressed data buffers.
+                   - Preallocates vector sizes to `_decompThreads` and `_rcvThreads`, i.e. empty threads without any associated function.
+                   - The `_readSockets` for handling network sockets (although not fully defined in the constructor).
+                   - The `_emptyDecompThreadCtr` and `_markedFreeCounter` to manage thread states and buffer marking.
+                   - A `console_logger` is created using `spdlog` if not already available.
+                   - A `ProfilingTimestamps` pq`) is initialized and assigned to `env.pts`.
+                   - The buffer pool {2D pool(i.e. vector) of buffers} is populated with empty vectors sized to hold both headers and payloads, based on the configuration from `env`.
+               Additional Notes: The constructor logs initialization details using `spdlog`, including buffer pool size, buffer size, tuple size, and intermediate format settings.
+           */
+
+        std::string get_name() const;
+
 /*
  * Purpose: Retrieves the name of the XClient environment.
  * Input: None.
@@ -125,7 +131,8 @@ namespace xdbc {
  * Process: Fetches and returns the `env_name` from the `_xdbcenv` object.
  */
 
-    void receive(int threadno);
+        void receive(int threadno);
+
 /*
  * Purpose: Handles receiving data from the server on a specific thread.
  * Input: The thread index (`thr`) to uniquely identify the thread.
@@ -139,8 +146,9 @@ namespace xdbc {
  * - Closes the socket when finished and logs the number of buffers processed.
  */
 
-    void decompress(int threadno);
-/* 
+        void decompress(int threadno);
+
+/*
     void XClient::decompress(int thr) {
         Purpose: Decompresses buffers received by a specific thread and processes them.
         Input: The thread ID (`thr`) specifying which decompression thread is calling the function.
@@ -149,7 +157,8 @@ namespace xdbc {
     }
     */
 
-   void initialize(const std::string &tableName);
+        void initialize(const std::string &tableName);
+
 /*
  * Purpose: Initializes the base connection to the server and sends the table schema.
  * Input: The table name (`tableName`) to identify the target table.
@@ -159,9 +168,10 @@ namespace xdbc {
  * - Sends the table name and schema data to the server.
  * - Reads the server's "ready" signal to confirm that it is prepared for communication.
  * - Handles retries if the connection fails.
- */ 
+ */
 
-    int startReceiving(const std::string &tableName);
+        int startReceiving(const std::string &tableName);
+
 /*
  * Purpose: Initializes the client to start receiving data from the server.
  * Input: A table name string (`tableName`) to identify the target table.
@@ -172,9 +182,10 @@ namespace xdbc {
  * - Creates and starts multiple threads to handle receiving, decompression, and writing operations.
  * - Sets up necessary buffer pools for each thread to operate on.
  */
-        
+
         bool hasNext(int readThread);
-/* 
+
+/*
     bool XClient::hasNext(int readThreadId) {
         Purpose: Checks if there are more buffers available for processing by the specified read thread.
         Input: The read thread ID (`readThreadId`).
@@ -183,28 +194,31 @@ namespace xdbc {
     }
     */
 
-        
+
         buffWithId getBuffer(int readThread);
-    /* 
-    buffWithId XClient::getBuffer(int readThreadId) {
-        Purpose: Fetches the next decompressed buffer for a specific read thread.
-        Input: The read thread ID (`readThreadId`).
-        Output: Returns a `buffWithId` structure containing the buffer data, buffer ID, total number of tuples, and intermediate format.
-        Data Processing: Pops a decompressed buffer from the buffer pool, retrieves its data (including total tuples), and prepares it for the read thread. It also sets the intermediate format for the buffer.
-    }
-    */
+
+        /*
+        buffWithId XClient::getBuffer(int readThreadId) {
+            Purpose: Fetches the next decompressed buffer for a specific read thread.
+            Input: The read thread ID (`readThreadId`).
+            Output: Returns a `buffWithId` structure containing the buffer data, buffer ID, total number of tuples, and intermediate format.
+            Data Processing: Pops a decompressed buffer from the buffer pool, retrieves its data (including total tuples), and prepares it for the read thread. It also sets the intermediate format for the buffer.
+        }
+        */
 
         int getBufferPoolSize() const;
-    /* 
-    int XClient::getBufferPoolSize() const {
-        Purpose: Returns the total size of the buffer pool.
-        Input: None.
-        Output: The total number of buffers in the buffer pool.
-        Data Processing: Retrieves the value of `_xdbcenv->buffers_in_bufferpool` to return the size of the buffer pool.
-    }
-    */
+
+        /*
+        int XClient::getBufferPoolSize() const {
+            Purpose: Returns the total size of the buffer pool.
+            Input: None.
+            Output: The total number of buffers in the buffer pool.
+            Data Processing: Retrieves the value of `_xdbcenv->buffers_in_bufferpool` to return the size of the buffer pool.
+        }
+        */
 
         void finalize();
+
         /*
  * Purpose: Cleans up and finalizes the client by shutting down threads and closing connections.
  * Input: None.
@@ -220,7 +234,8 @@ namespace xdbc {
  */
 
         void markBufferAsRead(int buffId);
-/* 
+
+/*
     void XClient::markBufferAsRead(int buffId) {
         Purpose: Marks a buffer as read and frees it for reuse by other threads.
         Input: The buffer ID (`buffId`) to be marked as read.
