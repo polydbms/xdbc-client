@@ -98,7 +98,7 @@ namespace xdbc {
         std::vector<ip::tcp::socket> _readSockets;
         boost::asio::io_context _ioContext;
         boost::asio::ip::tcp::socket _baseSocket;
-        int _emptyDecompThreadCtr;
+        std::atomic<int> _emptyDecompThreadCtr;
         std::atomic<int> _markedFreeCounter;
         std::thread _monitorThread;
 
