@@ -453,8 +453,8 @@ namespace xdbc {
                 }
 
                 _totalBuffersRead.fetch_add(1);
-                _xdbcenv->compressedBufferIds->push(bpi);
                 _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "rcv", "push"});
+                _xdbcenv->compressedBufferIds->push(bpi);
 
                 buffers++;
 
@@ -488,7 +488,6 @@ namespace xdbc {
         while (emptyCtr < 1) {
 
             int compBuffId = _xdbcenv->compressedBufferIds->pop();
-
 
             _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "pop"});
 
@@ -577,10 +576,12 @@ namespace xdbc {
                 size_t *tt = reinterpret_cast<size_t *>(_bufferPool[decompBuffId].data());
                 //spdlog::get("XDBC.CLIENT")->warn("read totalTuples: {}", header->totalTuples);
 
-                _xdbcenv->decompressedBufferIds->push(decompBuffId);
-                _xdbcenv->freeBufferIds->push(compBuffId);
                 _xdbcenv->pts->push(
                         ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "push"});
+
+                _xdbcenv->decompressedBufferIds->push(decompBuffId);
+                _xdbcenv->freeBufferIds->push(compBuffId);
+
                 buffersDecompressed++;
 
 
