@@ -50,16 +50,25 @@ namespace xdbc {
         _bufferPool.resize(env.buffers_in_bufferpool,
                            std::vector<std::byte>(sizeof(Header) + env.tuples_per_buffer * env.tuple_size));
 
+        //calculate buffers per queue
+        int total_consumer_threads = _xdbcenv->decomp_parallelism + _xdbcenv->write_parallelism;
+
+        if (_xdbcenv->buffers_in_bufferpool < total_consumer_threads)
+            spdlog::get("XDBC.SERVER")->error("not enough buffers in bufferpool");
+
+        int queueCapacityPerComp = _xdbcenv->buffers_in_bufferpool / 2;
+        int decompQueueCapacity = queueCapacityPerComp + _xdbcenv->buffers_in_bufferpool % 2;
+
         // Unified receive queue
         _xdbcenv->freeBufferIds = std::make_shared<customQueue<int>>();
         // Unified decompression queue
         _xdbcenv->compressedBufferIds = std::make_shared<customQueue<int>>();
-        _xdbcenv->compressedBufferIds->setCapacity(_xdbcenv->decomp_parallelism * 2);
+        _xdbcenv->compressedBufferIds->setCapacity(decompQueueCapacity);
         _xdbcenv->finishedRcvThreads.store(0);
 
         // Unified decompression queue
         _xdbcenv->decompressedBufferIds = std::make_shared<customQueue<int>>();
-        _xdbcenv->decompressedBufferIds->setCapacity(_xdbcenv->write_parallelism * 2);
+        _xdbcenv->decompressedBufferIds->setCapacity(queueCapacityPerComp);
         _xdbcenv->finishedDecompThreads.store(0);
         _xdbcenv->finishedWriteThreads.store(0);
 
@@ -69,8 +78,15 @@ namespace xdbc {
         }
 
         //for (int i = 0; i < env.write_parallelism; i++) {
-        _emptyDecompThreadCtr = 0;
+        _emptyDecompThreadCtr.store(0);
         //}
+
+        spdlog::get("XDBC.CLIENT")->info("Initialized queues, "
+                                         "freeBuffersQ: {0}, "
+                                         "decompQ:{1}, "
+                                         "writerQ: {2}, ",
+                                         env.buffers_in_bufferpool, decompQueueCapacity, queueCapacityPerComp);
+
     }
 
     void XClient::finalize() {
@@ -597,17 +613,12 @@ namespace xdbc {
 
         buffWithId curBuf{};
         if (buffId == -1)
-            _emptyDecompThreadCtr++;
+            _emptyDecompThreadCtr.fetch_add(1);
 
         size_t totalTuples = 0;
         if (buffId > -1) {
-
-
             std::memcpy(&totalTuples, _bufferPool[buffId].data(), sizeof(size_t));
-
-
             curBuf.buff = _bufferPool[buffId].data() + sizeof(size_t);
-
         }
         curBuf.id = buffId;
         curBuf.totalTuples = totalTuples;
@@ -615,7 +626,6 @@ namespace xdbc {
         curBuf.iformat = _xdbcenv->iformat;
 
         //spdlog::get("XDBC.CLIENT")->warn("Sending buffer {0} to read thread {1}", buffId, readThreadId);
-
 
         return curBuf;
     }
