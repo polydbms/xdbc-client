@@ -109,8 +109,8 @@ int Tester::analyticsThread(int thr, int &min, int &max, long &sum, long &cnt, l
             }
             buffsRead++;
 
-            xclient.markBufferAsRead(curBuffWithId.id);
             env->pts->push(xdbc::ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "write", "push"});
+            xclient.markBufferAsRead(curBuffWithId.id);
         } else {
             spdlog::get("XCLIENT")->warn("Write thread {0} found invalid buffer with id: {1}, buff_no: {2}",
                                          thr, curBuffWithId.id, buffsRead);
@@ -289,8 +289,8 @@ int Tester::storageThread(int thr, const std::string &filename) {
 
             buffsRead++;
 
-            xclient.markBufferAsRead(curBuffWithId.id);
             env->pts->push(xdbc::ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "write", "push"});
+            xclient.markBufferAsRead(curBuffWithId.id);
         } else {
             spdlog::get("XCLIENT")->warn("found invalid buffer with id: {0}, buff_no: {1}",
                                          curBuffWithId.id, buffsRead);
