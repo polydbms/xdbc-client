@@ -9,74 +9,15 @@
 #include <stack>
 #include <boost/asio.hpp>
 #include <set>
-#include "customQueue.h"
+
 #include "utils.h"
+#include "RuntimeEnv.h"
 
 using namespace boost::asio;
 using ip::tcp;
 
 namespace xdbc {
 
-    constexpr size_t MAX_ATTRIBUTES = 230;
-    struct Header {
-
-        size_t compressionType;
-        size_t totalSize;
-        size_t totalTuples;
-        size_t intermediateFormat;
-        size_t crc;
-        size_t attributeSize[MAX_ATTRIBUTES];
-        size_t attributeComp[MAX_ATTRIBUTES];
-
-    };
-
-    struct SchemaAttribute {
-        std::string name;
-        std::string tpe;
-        int size;
-    };
-
-    struct ProfilingTimestamps {
-        std::chrono::high_resolution_clock::time_point timestamp;
-        int thread;
-        std::string component;
-        std::string event;
-    };
-
-    typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
-    typedef std::shared_ptr<customQueue<ProfilingTimestamps>> PTQ_ptr;
-
-    struct RuntimeEnv {
-        long transfer_id;
-        std::string env_name;
-        int buffers_in_bufferpool;
-        int buffer_size;
-        int tuples_per_buffer;
-        int tuple_size;
-        int iformat;
-        std::chrono::milliseconds sleep_time;
-        int rcv_parallelism;
-        int decomp_parallelism;
-        int write_parallelism;
-        std::chrono::steady_clock::time_point startTime;
-        std::string table;
-        std::string server_host;
-        std::string server_port;
-        std::vector<SchemaAttribute> schema;
-        std::string schemaJSON;
-        FBQ_ptr freeBufferIds;
-        FBQ_ptr compressedBufferIds;
-        FBQ_ptr decompressedBufferIds;
-        int mode;
-        std::vector<std::tuple<long long, size_t, size_t, size_t>> queueSizes;
-        std::atomic<bool> monitor;
-        std::atomic<int> finishedRcvThreads;
-        std::atomic<int> finishedDecompThreads;
-        std::atomic<int> finishedWriteThreads;
-
-
-        PTQ_ptr pts;
-    };
 
     struct buffWithId {
         int id;
@@ -103,7 +44,10 @@ namespace xdbc {
         std::thread _monitorThread;
 
     public:
-        XClient(RuntimeEnv &xdbcenv);
+        std::vector<std::thread> _serThreads;
+        std::vector<std::thread> _writeThreads;
+
+        explicit XClient(RuntimeEnv &xdbcenv);
 
         /*
            XClient::XClient(RuntimeEnv &env) :
@@ -122,7 +66,7 @@ namespace xdbc {
                Additional Notes: The constructor logs initialization details using `spdlog`, including buffer pool size, buffer size, tuple size, and intermediate format settings.
            */
 
-        std::string get_name() const;
+        [[nodiscard]] std::string get_name() const;
 
 /*
  * Purpose: Retrieves the name of the XClient environment.
@@ -206,7 +150,7 @@ namespace xdbc {
         }
         */
 
-        int getBufferPoolSize() const;
+        [[nodiscard]] int getBufferPoolSize() const;
 
         /*
         int XClient::getBufferPoolSize() const {

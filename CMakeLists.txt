@@ -39,7 +39,7 @@ add_library(xdbc SHARED
 set_target_properties(xdbc PROPERTIES
         #VERSION ${PROJECT_VERSION}
         #SOVERSION 1
-        PUBLIC_HEADER xdbc/xclient.h)
+        PUBLIC_HEADER "xdbc/xclient.h;xdbc/SinkInterface.h")
 
 target_include_directories(xdbc PUBLIC .)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${ZSTD_LIBRARY_PATH} ${SNAPPY_LIBRARY_PATH} Threads::Threads lzo2 lz4 spdlog::spdlog_header_only ZLIB::ZLIB FastPFOR::FastPFOR ${FPZIP_LIBRARY})
@@ -50,3 +50,4 @@ install(TARGETS xdbc
 install(FILES xdbc/customQueue.h xdbc/utils.h xdbc/metrics_calculator.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 add_subdirectory(./tests)
+add_subdirectory(./CSVSink)
