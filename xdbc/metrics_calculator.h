@@ -158,33 +158,38 @@ calculate_metrics(const std::vector<xdbc::ProfilingTimestamps> &timestamps, size
     return component_metrics;
 }
 
-std::tuple<double, double, double> printAndReturnAverageLoad(xdbc::RuntimeEnv &_xdbcenv) {
+std::tuple<double, double, double, double> printAndReturnAverageLoad(xdbc::RuntimeEnv &_xdbcenv) {
     long long totalTimestamps = 0;
     size_t totalFreeBufferIdsSize = 0;
     size_t totalCompressedBufferIdsSize = 0;
     size_t totalDecompressedBufferIdsSize = 0;
+    size_t totalSerializedBufferIdsSize = 0;
     size_t recordCount = _xdbcenv.queueSizes.size();
 
-    auto ret = std::tuple<double, double, double>(0, 0, 0);
+    auto ret = std::tuple<double, double, double, double>(0, 0, 0, 0);
 
     for (const auto &record: _xdbcenv.queueSizes) {
         totalTimestamps += std::get<0>(record);
         totalFreeBufferIdsSize += std::get<1>(record);
         totalCompressedBufferIdsSize += std::get<2>(record);
         totalDecompressedBufferIdsSize += std::get<3>(record);
+        totalSerializedBufferIdsSize += std::get<4>(record);
+
     }
 
     if (recordCount > 0) {
         double avgFreeBufferIdsSize = static_cast<double>(totalFreeBufferIdsSize) / recordCount;
         double avgCompressedBufferIdsSize = static_cast<double>(totalCompressedBufferIdsSize) / recordCount;
         double avgDecompressedBufferIdsSize = static_cast<double>(totalDecompressedBufferIdsSize) / recordCount;
+        double avgSerializedBufferIdsSize = static_cast<double>(totalSerializedBufferIdsSize) / recordCount;
 
-        ret = std::tuple<double, double, double>(avgFreeBufferIdsSize, avgCompressedBufferIdsSize,
-                                                 avgDecompressedBufferIdsSize);
-        spdlog::get("XDBC.CLIENT")->info("Average Load of Queues: Receiver, Decompressor, Writer");
-        spdlog::get("XDBC.CLIENT")->info("{0}\t{1}\t{2}",
+
+        ret = std::tuple<double, double, double, double>(avgFreeBufferIdsSize, avgCompressedBufferIdsSize,
+                                                         avgDecompressedBufferIdsSize, avgSerializedBufferIdsSize);
+        spdlog::get("XDBC.CLIENT")->info("Average Load of Queues: Free, Decompressor, Serializer, Writer");
+        spdlog::get("XDBC.CLIENT")->info("{0}\t{1}\t{2}\t{3}",
                                          avgFreeBufferIdsSize, avgCompressedBufferIdsSize,
-                                         avgDecompressedBufferIdsSize);
+                                         avgDecompressedBufferIdsSize, avgSerializedBufferIdsSize);
     } else {
         spdlog::get("XDBC.CLIENT")->info("No records available to calculate averages.");
     }
