@@ -232,7 +232,7 @@ int Tester::storageThread(int thr, const std::string &filename) {
         xdbc::buffWithId curBuffWithId = xclient.getBuffer(thr);
 
         if (curBuffWithId.id >= 0) {
-            auto start_deser = std::chrono::high_resolution_clock::now();
+
             if (curBuffWithId.iformat == 1) {
 
                 auto dataPtr = curBuffWithId.buff;

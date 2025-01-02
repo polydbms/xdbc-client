@@ -30,7 +30,6 @@ namespace xdbc {
     private:
 
         RuntimeEnv *_xdbcenv;
-        std::atomic<int> _readState;
         std::vector<std::vector<std::byte>> _bufferPool;
         std::vector<std::atomic<bool>> _consumedAll;
         std::atomic<int> _totalBuffersRead;
