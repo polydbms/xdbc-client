@@ -145,6 +145,8 @@ void handleCMDParams(int ac, char *av[], xdbc::RuntimeEnv &env) {
     if (vm.count("write-parallelism")) {
         spdlog::get("XCLIENT")->info("Write parallelism: {0}", vm["write-parallelism"].as<int>());
         env.write_parallelism = vm["write-parallelism"].as<int>();
+        //legacy
+        env.ser_parallelism = env.write_parallelism;
     }
     if (vm.count("decomp-parallelism")) {
         spdlog::get("XCLIENT")->info("Decompression parallelism: {0}", vm["decomp-parallelism"].as<int>());

@@ -104,7 +104,8 @@ void CsvSink::serialize(int thr) {
             size_t cumulativeOffset = 0;
             for (size_t k = 0; k < schemaSize; ++k) {
                 columnStartPointers[k] = basePtr + cumulativeOffset;
-                cumulativeOffset += header.totalTuples * sizes[k]; // Move by the total size of this column
+                //TODO: check this, maybe write header.totalTuples instead of tuples_per_buffer
+                cumulativeOffset += runtimeEnv->tuples_per_buffer * sizes[k]; // Move by the total size of this column
 
             }
 
@@ -129,9 +130,9 @@ void CsvSink::serialize(int thr) {
 
                 for (size_t j = 0; j < schemaSize; ++j) {
                     const char *dataPtr;
-                    if (runtimeEnv->iformat == 1) { // Row-major
+                    if (runtimeEnv->iformat == 1) {
                         dataPtr = basePtr + i * totalRowSize + columnOffsets[j];
-                    } else if (runtimeEnv->iformat == 2) { // Column-major
+                    } else if (runtimeEnv->iformat == 2) {
                         dataPtr = columnStartPointers[j] + i * sizes[j];
                     }
 
@@ -202,7 +203,6 @@ void CsvSink::write(int thr) {
 
         const char *dataPtr = reinterpret_cast<const char *>(serializedBuffer.data() + sizeof(xdbc::Header));
         outputFile.write(dataPtr, header.totalSize);
-
 
         runtimeEnv->pts->push(
                 xdbc::ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "write", "push"});
