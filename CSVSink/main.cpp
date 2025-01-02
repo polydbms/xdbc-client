@@ -79,7 +79,9 @@ void handleCSVSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::
             ("intermediate-format,f", po::value<int>()->default_value(1),
              "Intermediate format: 1 (row) or 2 (column).")
             ("transfer-id,tid", po::value<long>()->default_value(0),
-             "Set the transfer id.\nDefault: 0");
+             "Set the transfer id.\nDefault: 0")
+            ("skip-serializer", po::value<int>()->default_value(0),
+             "Skip serialization (0/1).\nDefault: false");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -108,6 +110,8 @@ void handleCSVSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::
     env.write_parallelism = vm["write-parallelism"].as<int>();
     env.iformat = vm["intermediate-format"].as<int>();
     outputBasePath = vm["output"].as<std::string>();
+
+    env.skip_serializer = vm["skip-serializer"].as<int>();
 
     std::string schemaFile = "/xdbc-client/tests/schemas/" + env.table + ".json";
 
