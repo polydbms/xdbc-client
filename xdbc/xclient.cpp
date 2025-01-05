@@ -166,12 +166,13 @@ namespace xdbc {
 
         auto loads = printAndReturnAverageLoad(*_xdbcenv);
 
-        const std::string filename = "/xdbc-client/xdbc_client_timings.csv";
+        const std::string filename = "/tmp/xdbc_client_timings.csv";
 
         std::ostringstream headerStream;
         headerStream << "transfer_id,total_time,"
-                     << "rcv_wait_time,rcv_proc_time,rcv_throughput,rcv_throughput_pb,rcv_load,"
+                     << "rcv_wait_time,rcv_proc_time,rcv_throughput,rcv_throughput_pb,free_load,"
                      << "decomp_wait_time,decomp_proc_time,decomp_throughput,decomp_throughput_pb,decomp_load,"
+                     << "ser_wait_time,ser_proc_time,ser_throughput,ser_throughput_pb,ser_load,"
                      << "write_wait_time,write_proc_time,write_throughput,write_throughput_pb,write_load\n";
 
         std::ifstream file_check(filename);
@@ -196,11 +197,16 @@ namespace xdbc {
                  << component_metrics["decomp"].total_throughput << ","
                  << component_metrics["decomp"].per_buffer_throughput << ","
                  << std::get<1>(loads) << ","
+                 << component_metrics["ser"].waiting_time_ms << ","
+                 << component_metrics["ser"].processing_time_ms << ","
+                 << component_metrics["ser"].total_throughput << ","
+                 << component_metrics["ser"].per_buffer_throughput << ","
+                 << std::get<2>(loads) << ","
                  << component_metrics["write"].waiting_time_ms << ","
                  << component_metrics["write"].processing_time_ms << ","
                  << component_metrics["write"].total_throughput << ","
                  << component_metrics["write"].per_buffer_throughput << ","
-                 << std::get<2>(loads) << "\n";
+                 << std::get<3>(loads) << "\n";
         csv_file.close();
 
     }
