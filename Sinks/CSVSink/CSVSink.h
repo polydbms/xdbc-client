@@ -1,10 +1,9 @@
 #ifndef CSV_SINK_H
 #define CSV_SINK_H
 
-#include "../xdbc/SinkInterface.h"
-#include "../xdbc/RuntimeEnv.h"
+#include "../../xdbc/SinkInterface.h"
+#include "../../xdbc/RuntimeEnv.h"
 #include <fstream>
-#include <unordered_map>
 #include <vector>
 #include <string>
 #include <cstddef>
@@ -14,12 +13,10 @@ class CsvSink : public SinkInterface {
 private:
     xdbc::RuntimeEnv *runtimeEnv;
     std::vector<std::vector<std::byte>> *bufferPool;
-    std::unordered_map<int, std::ofstream> fileStreams;
     std::string baseFilename;
-    int threadCount;
 
 public:
-    CsvSink(std::string baseFilename, int threadCount, xdbc::RuntimeEnv *runtimeEnv);
+    CsvSink(std::string baseFilename, xdbc::RuntimeEnv *runtimeEnv);
 
     void serialize(int thr) override;
 

@@ -241,7 +241,7 @@ namespace xdbc {
             _decompThreads[i] = std::thread(&XClient::decompress, this, i);
         }
 
-        spdlog::get("XDBC.CLIENT")->info("#3 Initialized");
+        spdlog::get("XDBC.CLIENT")->info("Initialized receiver & decomp threads");
 
 
         return 1;

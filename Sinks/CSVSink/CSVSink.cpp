@@ -1,11 +1,19 @@
 #include "CSVSink.h"
 #include <fstream>
 #include <spdlog/spdlog.h>
+#include "spdlog/sinks/stdout_color_sinks.h"
 #include <sstream>
+#include <arrow/array.h>
+#include <arrow/table.h>
+#include <arrow/type.h>
+#include <arrow/ipc/api.h>  // For serialization/deserialization
+#include <arrow/io/api.h>
 
-CsvSink::CsvSink(std::string baseFilename, int threadCount, xdbc::RuntimeEnv *runtimeEnv)
-        : baseFilename(std::move(baseFilename)), threadCount(threadCount), runtimeEnv(runtimeEnv) {
+CsvSink::CsvSink(std::string baseFilename, xdbc::RuntimeEnv *runtimeEnv)
+        : baseFilename(std::move(baseFilename)), runtimeEnv(runtimeEnv) {
     bufferPool = runtimeEnv->bp;
+    auto console = spdlog::stdout_color_mt("XDBC.CSVSINK");
+
 }
 
 void CsvSink::serialize(int thr) {
@@ -46,6 +54,7 @@ void CsvSink::serialize(int thr) {
 
         size_t maxTupleSize = 0;
         for (size_t i = 0; i < schemaSize; ++i) {
+
             if (schema[i].tpe[0] == 'I') {
                 sizes[i] = 4; // sizeof(int)
                 serializers[i] = SerializeAttribute<int>;
@@ -63,8 +72,10 @@ void CsvSink::serialize(int thr) {
                 serializers[i] = SerializeAttribute<const char *>;
                 maxTupleSize += schema[i].size + 1; // Fixed string size + delimiter
             }
+
             delimiters[i] = (i == schemaSize - 1) ? '\n' : ','; // Newline for the last attribute, commas for others
         }
+
 
         //TODO: only for format 1
         std::vector<size_t> columnOffsets(schemaSize);
@@ -74,6 +85,8 @@ void CsvSink::serialize(int thr) {
             totalRowSize += sizes[j];
         }
 
+        //TODO: only for format 3 (arrow)
+        std::vector<std::function<const char *(int)>> dataExtractors(schemaSize);
 
         size_t bufferSizeInBytes = runtimeEnv->buffer_size * 1024;
 
@@ -89,10 +102,68 @@ void CsvSink::serialize(int thr) {
             const auto &inBufferPtr = (*bufferPool)[bufferId];
             auto header = *reinterpret_cast<const xdbc::Header *>(inBufferPtr.data());
             if (header.totalTuples > runtimeEnv->tuples_per_buffer || header.totalSize > runtimeEnv->buffer_size * 1024)
-                spdlog::get("XDBC.CSVSINK")->error("Something is wrong");
+                spdlog::get("XDBC.CSVSINK")->error("Size of buffer larger than expected tuples:{}/{}, size {}/{}",
+                                                   header.totalTuples, runtimeEnv->tuples_per_buffer, header.totalSize,
+                                                   runtimeEnv->buffer_size * 1024);
 
 
             const char *basePtr = reinterpret_cast<const char *>(inBufferPtr.data() + sizeof(xdbc::Header));
+
+            std::vector<std::shared_ptr<arrow::Array>> arrays; // To store Arrow arrays for `iformat == 3`
+
+            if (runtimeEnv->iformat == 3) {
+                // Deserialize Arrow RecordBatch from raw memory
+                const auto *bufferData = reinterpret_cast<const uint8_t *>(inBufferPtr.data() +
+                                                                           sizeof(xdbc::Header));
+
+                auto arrowBuffer = std::make_shared<arrow::Buffer>(bufferData, header.totalSize);
+                auto bufferReader = std::make_shared<arrow::io::BufferReader>(arrowBuffer);
+
+                // Open a FileReader or StreamReader
+                auto reader = arrow::ipc::RecordBatchFileReader::Open(bufferReader).ValueOrDie();
+                auto arrowSchema = reader->schema();
+
+                auto recordBatch = reader->ReadRecordBatch(0).ValueOrDie();
+
+                // Extract column arrays
+                arrays = recordBatch->columns();
+
+                // Precompute accessors for Arrow arrays
+                for (size_t j = 0; j < schemaSize; ++j) {
+                    switch (arrays[j]->type_id()) {
+                        case arrow::Type::INT32: {
+                            auto intArray = std::static_pointer_cast<arrow::Int32Array>(arrays[j]);
+                            dataExtractors[j] = [intArray](int i) {
+                                return reinterpret_cast<const char *>(intArray->raw_values() + i);
+                            };
+                            break;
+                        }
+                        case arrow::Type::DOUBLE: {
+                            auto doubleArray = std::static_pointer_cast<arrow::DoubleArray>(arrays[j]);
+                            dataExtractors[j] = [doubleArray](int i) {
+                                return reinterpret_cast<const char *>(doubleArray->raw_values() + i);
+                            };
+                            break;
+                        }
+                        case arrow::Type::STRING: {
+                            auto stringArray = std::static_pointer_cast<arrow::StringArray>(arrays[j]);
+                            dataExtractors[j] = [stringArray](int i) {
+                                return stringArray->GetString(i).c_str();
+                            };
+                            break;
+                        }
+                        case arrow::Type::FIXED_SIZE_BINARY: {
+                            auto fixedArray = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(arrays[j]);
+                            dataExtractors[j] = [fixedArray](int i) {
+                                return reinterpret_cast<const char *>(fixedArray->GetValue(i));
+                            };
+                            break;
+                        }
+                        default:
+                            throw std::runtime_error("Unsupported Arrow array type for serialization.");
+                    }
+                }
+            }
 
             int serializedBufferId = runtimeEnv->freeBufferIds->pop();
 
@@ -134,6 +205,8 @@ void CsvSink::serialize(int thr) {
                         dataPtr = basePtr + i * totalRowSize + columnOffsets[j];
                     } else if (runtimeEnv->iformat == 2) {
                         dataPtr = columnStartPointers[j] + i * sizes[j];
+                    } else if (runtimeEnv->iformat == 3) {
+                        dataPtr = dataExtractors[j](i);
                     }
 
                     totalSerializedBytes += serializers[j](

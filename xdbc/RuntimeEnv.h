@@ -47,7 +47,8 @@ namespace xdbc {
         int decomp_parallelism = 1;
         int ser_parallelism = 1;
         int write_parallelism = 1;
-        bool skip_serializer = 0;
+        bool skip_serializer = false;
+        std::string target;
 
         std::chrono::steady_clock::time_point startTime;
         std::string table;

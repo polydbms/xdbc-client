@@ -1,4 +1,5 @@
-#include "CSVSink.h"
+#include "CSVSink/CSVSink.h"
+#include "PQSink/PQSink.h"
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include <boost/program_options.hpp>
@@ -33,7 +34,7 @@ std::string formatSchema(const std::vector<xdbc::SchemaAttribute> &schema) {
 std::vector<xdbc::SchemaAttribute> createSchemaFromConfig(const std::string &configFile) {
     std::ifstream file(configFile);
     if (!file.is_open()) {
-        spdlog::get("CSVSINK")->error("Failed to open schema file: {0}", configFile);
+        spdlog::get("XDBC.SINK")->error("Failed to open schema file: {0}", configFile);
         exit(EXIT_FAILURE);
     }
 
@@ -51,7 +52,7 @@ std::vector<xdbc::SchemaAttribute> createSchemaFromConfig(const std::string &con
 std::string readJsonFileIntoString(const std::string &filePath) {
     std::ifstream file(filePath);
     if (!file.is_open()) {
-        spdlog::get("CSVSINK")->error("Failed to open schema file: {0}", filePath);
+        spdlog::get("XDBC.SINK")->error("Failed to open schema file: {0}", filePath);
         exit(EXIT_FAILURE);
     }
 
@@ -60,7 +61,7 @@ std::string readJsonFileIntoString(const std::string &filePath) {
     return buffer.str();
 }
 
-void handleCSVSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::string &outputBasePath) {
+void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::string &outputBasePath) {
     namespace po = boost::program_options;
 
     po::options_description desc("Usage: ./csvsink [options]\n\nAllowed options");
@@ -81,7 +82,9 @@ void handleCSVSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::
             ("transfer-id,tid", po::value<long>()->default_value(0),
              "Set the transfer id.\nDefault: 0")
             ("skip-serializer", po::value<int>()->default_value(0),
-             "Skip serialization (0/1).\nDefault: false");
+             "Skip serialization (0/1).\nDefault: false")
+            ("target", po::value<std::string>()->default_value("csv"),
+             "Target (csv, parquet).\nDefault: csv");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -94,11 +97,11 @@ void handleCSVSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::
     try {
         po::notify(vm);
     } catch (po::required_option &e) {
-        spdlog::get("CSVSINK")->error("Missing required options: {0}", e.what());
+        spdlog::get("XDBC.SINK")->error("Missing required options: {0}", e.what());
         exit(EXIT_FAILURE);
     }
 
-    env.env_name = "CSV Sink";
+    env.env_name = "Sink";
     env.server_host = vm["server-host"].as<std::string>();
     env.server_port = "1234";
     env.table = vm["table"].as<std::string>();
@@ -109,6 +112,7 @@ void handleCSVSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::
     env.ser_parallelism = vm["serialize-parallelism"].as<int>();
     env.write_parallelism = vm["write-parallelism"].as<int>();
     env.iformat = vm["intermediate-format"].as<int>();
+    env.target = vm["target"].as<std::string>();
     outputBasePath = vm["output"].as<std::string>();
 
     env.skip_serializer = vm["skip-serializer"].as<int>();
@@ -125,36 +129,46 @@ void handleCSVSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::
     env.tuples_per_buffer = (env.buffer_size * 1024) / env.tuple_size;
     env.startTime = std::chrono::steady_clock::now();
 
-    spdlog::get("XDBC.CSVSINK")->info("Table: {0}, Tuple size: {1}, Schema:\n{2}",
-                                      env.table, env.tuple_size, formatSchema(env.schema));
+    spdlog::get("XDBC.SINK")->info("Table: {0}, Tuple size: {1}, Schema:\n{2}",
+                                   env.table, env.tuple_size, formatSchema(env.schema));
 }
 
 int main(int argc, char *argv[]) {
-    auto console = spdlog::stdout_color_mt("XDBC.CSVSINK");
+    auto console = spdlog::stdout_color_mt("XDBC.SINK");
     spdlog::set_level(spdlog::level::info);
 
     xdbc::RuntimeEnv env;
     std::string outputBasePath;
 
-    handleCSVSinkCMDParams(argc, argv, env, outputBasePath);
+    handleSinkCMDParams(argc, argv, env, outputBasePath);
 
     // Initialize XClient
     xdbc::XClient xclient(env);
     xclient.startReceiving(env.table);
 
-    CsvSink csvSink(outputBasePath, env.write_parallelism, &env);
+    if (env.target == "csv") {
+        CsvSink csvSink(outputBasePath, &env);
 
-    // Start serialization and writing threads
-    std::vector<std::thread> threads;
-    for (int i = 0; i < env.ser_parallelism; ++i) {
-        xclient._serThreads[i] = std::thread(&CsvSink::serialize, &csvSink, i);
+        // Start serialization and writing threads
+        std::vector<std::thread> threads;
+        for (int i = 0; i < env.ser_parallelism; ++i) {
+            xclient._serThreads[i] = std::thread(&CsvSink::serialize, &csvSink, i);
+        }
+        for (int i = 0; i < env.write_parallelism; ++i) {
+            xclient._writeThreads[i] = std::thread(&CsvSink::write, &csvSink, i);
+        }
+    } else if (env.target == "parquet") {
+        PQSink parquetSink(outputBasePath, &env);
+
+        // Start serialization and writing threads
+        std::vector<std::thread> threads;
+        for (int i = 0; i < env.ser_parallelism; ++i) {
+            xclient._serThreads[i] = std::thread(&PQSink::serialize, &parquetSink, i);
+        }
+        for (int i = 0; i < env.write_parallelism; ++i) {
+            xclient._writeThreads[i] = std::thread(&PQSink::write, &parquetSink, i);
+        }
     }
-    for (int i = 0; i < env.write_parallelism; ++i) {
-        xclient._writeThreads[i] = std::thread(&CsvSink::write, &csvSink, i);
-    }
-
-    //spdlog::get("XDBC.CSVSINK")->info(env.toString());
-
 
     // Wait for threads to finish
     for (int i = 0; i < env.ser_parallelism; ++i) {
@@ -165,8 +179,8 @@ int main(int argc, char *argv[]) {
     }
 
     xclient.finalize();
-    spdlog::get("XDBC.CSVSINK")->info("CSV serialization completed. Output files are available at: {0}",
-                                      outputBasePath);
+    spdlog::get("XDBC.CSVSINK")->info("{} serialization completed. Output files are available at: {}",
+                                      env.target, outputBasePath);
 
     return 0;
 }
