@@ -32,11 +32,24 @@ RUN git clone https://github.com/LLNL/fpzip.git && cd fpzip && \
     cmake --build . --config Release && \
     make install
 
+# install arrow/parquet dependencies
+#TODO: cleanup
+RUN apt install -qy ca-certificates lsb-release wget
+
+RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+
+RUN apt install -y -V ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+
+RUN apt update && apt install -y --no-install-recommends \
+    libarrow-dev \
+    libparquet-dev
+
 RUN mkdir /xdbc-client
 
 RUN rm -rf xdbc-client && mkdir /xdbc-client
 
 COPY xdbc/ /xdbc-client/xdbc/
+COPY Sinks/ /xdbc-client/Sinks/
 COPY tests/ /xdbc-client/tests/
 COPY tests/schemas/ /xdbc-client/tests/schemas/
 COPY CMakeLists.txt /xdbc-client/
@@ -48,8 +61,8 @@ RUN mkdir /xdbc-client/build && cd /xdbc-client/build && cmake .. -D CMAKE_BUILD
 #RUN mkdir /xdbc-client/build && cd /xdbc-client/build && cmake .. && make -j8 && make install
 
 # build test
-RUN mkdir /xdbc-client/tests/build && cd /xdbc-client/tests/build && cmake .. -D CMAKE_BUILD_TYPE=Release && make -j8
-#RUN mkdir /xdbc-client/tests/build && cd /xdbc-client/tests/build && cmake .. && make -j8
+#RUN mkdir /xdbc-client/tests/build && cd /xdbc-client/tests/build && cmake .. -D CMAKE_BUILD_TYPE=Release && make -j8
+RUN mkdir /xdbc-client/Sinks/build && cd /xdbc-client/Sinks/build && cmake .. -D CMAKE_BUILD_TYPE=Release && make -j8
 
 #ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 RUN ldconfig

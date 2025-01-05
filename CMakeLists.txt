@@ -50,4 +50,4 @@ install(TARGETS xdbc
 install(FILES xdbc/customQueue.h xdbc/utils.h xdbc/metrics_calculator.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 add_subdirectory(./tests)
-add_subdirectory(./CSVSink)
+add_subdirectory(Sinks)
