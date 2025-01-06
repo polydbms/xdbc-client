@@ -407,55 +407,41 @@ namespace xdbc {
             while (error != boost::asio::error::eof) {
 
                 bpi = _xdbcenv->freeBufferIds->pop();
+                _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "rcv", "pop"});
                 //spdlog::get("XDBC.CLIENT")->info("Receive thread {0} got buff {1}", thr, bpi);
 
-                // getting response from server. Start with reading header and measuring header receive time.
-
-                _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "rcv", "pop"});
-
+                // getting response from server, first the header
                 headerBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi].data(), sizeof(Header)),
                                                 boost::asio::transfer_exactly(sizeof(Header)), error);
                 Header header = *reinterpret_cast<Header *>(_bufferPool[bpi].data());
 
-
-                //uint16_t checksum = header.crc;
-
                 //TODO: handle error types (e.g., EOF)
-                if (error) {
-                    spdlog::get("XDBC.CLIENT")->error("Receive thread {0}: boost error while reading header: {1}", thr,
-                                                      error.message());
-                    spdlog::get("XDBC.CLIENT")->error("header comp: {0}, size: {1}, tuples {2}, headerBytes: {3}",
-                                                      header.compressionType,
-                                                      header.totalSize,
-                                                      header.totalTuples,
-                                                      headerBytes);
+                if (error || header.compressionType > 6 ||
+                    header.totalSize > _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size) {
 
-                    if (error == boost::asio::error::eof) {
-                        spdlog::get("XDBC.CLIENT")->error("EOF");
+                    if (error) {
+                        spdlog::get("XDBC.CLIENT")->error("Receive thread {0}: boost error while reading header: {1}",
+                                                          thr,
+                                                          error.message());
+                        if (error == boost::asio::error::eof) {
+                            spdlog::get("XDBC.CLIENT")->error("EOF");
+                        }
+                        break;
                     }
-                    break;
-                }
 
-                // check for errors in header
-                if (header.compressionType > 6)
-                    spdlog::get("XDBC.CLIENT")->error("Client: corrupt header: comp: {0}, size: {1}, headerbytes: {2}",
-                                                      header.compressionType, header.totalSize, headerBytes);
-                if (header.totalSize > _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size)
                     spdlog::get("XDBC.CLIENT")->error(
                             "Client: corrupt body: comp: {0}, size: {1}/{2}, headerbytes: {3}",
                             header.compressionType, header.totalSize,
                             _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size, headerBytes);
 
-                // all good, read incoming body and measure time
+                }
 
+                // all good, read incoming body and measure time
                 readBytes = boost::asio::read(socket, boost::asio::buffer(_bufferPool[bpi].data() + sizeof(Header),
                                                                           header.totalSize),
                                               boost::asio::transfer_exactly(header.totalSize), error);
 
-
-                // check for errors in body
                 //TODO: handle errors correctly
-
                 if (error) {
                     spdlog::get("XDBC.CLIENT")->error(
                             "Client: boost error while reading body: readBytes {0}, error: {1}",
@@ -476,7 +462,7 @@ namespace xdbc {
 
             _xdbcenv->finishedRcvThreads.fetch_add(1);
             if (_xdbcenv->finishedRcvThreads == _xdbcenv->rcv_parallelism) {
-                for (int i = 0; i < _xdbcenv->decomp_parallelism; i++) // Signal all decompression threads to stop
+                for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
                     _xdbcenv->compressedBufferIds->push(-1);
             }
             socket.close();
@@ -491,108 +477,60 @@ namespace xdbc {
     void XClient::decompress(int thr) {
         _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "start"});
 
-        //int readThrId = 0;
-        int emptyCtr = 0;
         int decompError;
         int buffersDecompressed = 0;
-        //std::vector<char> decompressed_buffer(_xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
 
-        while (emptyCtr < 1) {
+        while (true) {
 
             int compBuffId = _xdbcenv->compressedBufferIds->pop();
-            //spdlog::get("XDBC.CLIENT")->info("Decompressor thr {} got full buff {}", thr, compBuffId);
-
-
-            _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "pop"});
-
-            // decompress the specific buffer depending on the type (header or not, type of header,...) and measure time
 
             if (compBuffId == -1)
-                emptyCtr++;
-            else {
+                break;
+            _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "pop"});
 
+
+            Header *header = reinterpret_cast<Header *>(_bufferPool[compBuffId].data());
+            std::byte *compressed_buffer = _bufferPool[compBuffId].data() + sizeof(Header);
+            //spdlog::get("XDBC.CLIENT")->info("decompress thread total tuples {}", header->totalTuples);
+
+            //just forward buffer if its not compressed
+            if (header->compressionType == 0) {
+                _xdbcenv->pts->push(
+                        ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "push"});
+                _xdbcenv->decompressedBufferIds->push(compBuffId);
+
+
+            } else if (header->compressionType > 0) {
+
+                //we need a free buffer to decompress
                 int decompBuffId = _xdbcenv->freeBufferIds->pop();
+
                 //spdlog::get("XDBC.CLIENT")->info("Decompressor thr {} got free buff {}", thr, decompBuffId);
 
                 auto &decompressed_buffer = _bufferPool[decompBuffId];
 
-                Header *header = reinterpret_cast<Header *>(_bufferPool[compBuffId].data());
-                std::byte *compressed_buffer = _bufferPool[compBuffId].data() + sizeof(Header);
-                //spdlog::get("XDBC.CLIENT")->info("decompress thread total tuples {}", header->totalTuples);
-                if (header->compressionType > 0) {
+                //TODO: refactor decompress_cols with schema in Decompressor
+                if (header->compressionType == 6) {
 
-                    //TODO: refactor decompress_cols with schema in Decompressor
-                    if (header->compressionType == 6) {
+                    //TODO: decompress every column individually
 
-                        int posInWriteBuffer = 0;
-                        size_t posInReadBuffer = 0;
-                        int i = 0;
+                } else
+                    decompError = Decompressor::decompress(header->compressionType,
+                                                           decompressed_buffer.data() + sizeof(Header),
+                                                           compressed_buffer, header->totalSize,
+                                                           _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
 
-                        for (const auto &attribute: _xdbcenv->schema) {
+                if (decompError == 1) {
 
-                            //spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}", std::get<0>(attribute));
+                    //TODO: check error handling
+                    spdlog::get("XDBC.CLIENT")->warn("decompress error: header: comp: {0}, size: {1}",
+                                                     header->compressionType, header->totalSize);
 
-                            if (attribute.tpe == "INT") {
-
-                                decompError = Decompressor::decompress_int_col(
-                                        reinterpret_cast<const uint32_t *>(compressed_buffer) +
-                                        posInReadBuffer / attribute.size,
-                                        header->attributeSize[i] / attribute.size,
-                                        decompressed_buffer.data() + sizeof(Header) + posInWriteBuffer,
-                                        _xdbcenv->tuples_per_buffer);
-
-                            } else if (attribute.tpe == "DOUBLE") {
-                                /*spdlog::get("XDBC.CLIENT")->warn("Handling att: {0}, compressed_size: {1}",
-                                                                 std::get<0>(attribute), attSize);*/
-
-                                /*decompError = Decompressor::decompress_zstd(
-                                        decompressed_buffer.data() + posInWriteBuffer,
-                                        compressed_buffer + posInReadBuffer,
-                                        header->attributeSize[i],
-                                        _xdbcenv->buffer_size * 8);*/
-
-                                decompError = Decompressor::decompress_double_col(
-                                        compressed_buffer + posInReadBuffer,
-                                        header->attributeSize[i],
-                                        decompressed_buffer.data() + sizeof(Header) + posInWriteBuffer,
-                                        _xdbcenv->tuples_per_buffer);
-
-                            }
-                            //TODO: add CHAR, STRING decompression
-                            posInWriteBuffer += _xdbcenv->tuples_per_buffer * attribute.size;
-                            posInReadBuffer += header->attributeSize[i];
-                            i++;
-                        }
-
-                    } else
-                        decompError = Decompressor::decompress(header->compressionType,
-                                                               decompressed_buffer.data() + sizeof(Header),
-                                                               compressed_buffer, header->totalSize,
-                                                               _xdbcenv->tuples_per_buffer * _xdbcenv->tuple_size);
-
-                    if (decompError == 1) {
-
-                        //TODO: check if we can just skip the buffer
-                        /*size_t computed_checksum = compute_crc(boost::asio::buffer(_bufferPool[bpi]));
-                        if (computed_checksum != checksum) {
-                            spdlog::get("XDBC.CLIENT")->warn("CHECKSUM MISMATCH expected: {0}, got: {1}",
-                                                             checksum, computed_checksum);
-                        }*/
-
-                        spdlog::get("XDBC.CLIENT")->warn(
-                                "decompress error: header: comp: {0}, size: {1}",
-                                header->compressionType, header->totalSize);
-
-                    }
-                }
-                if (header->compressionType == 0) {
-                    _xdbcenv->decompressedBufferIds->push(compBuffId);
-                    _xdbcenv->pts->push(
-                            ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "push"});
-
+                    //since there was an error return both buffers
+                    _xdbcenv->freeBufferIds->push(compBuffId);
                     _xdbcenv->freeBufferIds->push(decompBuffId);
+
                 } else {
-                    //TODO: check if we can reuse old header for no comp
                     Header newHeader{};
                     newHeader.totalTuples = header->totalTuples;
                     newHeader.totalSize = header->totalSize;
@@ -606,11 +544,10 @@ namespace xdbc {
                     _xdbcenv->decompressedBufferIds->push(decompBuffId);
                     _xdbcenv->freeBufferIds->push(compBuffId);
                 }
-
-                buffersDecompressed++;
-
-
             }
+
+            buffersDecompressed++;
+
         }
 
         _xdbcenv->finishedDecompThreads.fetch_add(1);
