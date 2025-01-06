@@ -7,16 +7,19 @@ RUN apt-get update
 RUN apt-get upgrade -qy
 
 #-------------------------------------------- Install XDBC and prerequisites -------------------------------------------
+# install arrow/parquet dependencies
 
-RUN apt install -qy cmake git gdb nlohmann-json3-dev clang libboost-all-dev build-essential libspdlog-dev iproute2 netcat
+RUN apt install -qy ca-certificates lsb-release wget
 
-#RUN git clone https://github.com/gabime/spdlog.git && cd spdlog && mkdir build && cd build &&  cmake .. && make -j8 && make install
+RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+
+RUN apt install -y -V ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+
+RUN apt update && apt install -qy cmake git gdb nlohmann-json3-dev clang libboost-all-dev build-essential libspdlog-dev iproute2 netcat libarrow-dev libparquet-dev
 
 # install compression libs
 
 RUN apt install -qy libzstd-dev liblzo2-dev liblz4-dev libsnappy-dev libbrotli-dev
-
-#RUN git clone https://github.com/LLNL/zfp.git && cd zfp && make
 
 RUN git clone https://github.com/lemire/FastPFor.git && cd FastPFor && \
     mkdir build && \
@@ -32,17 +35,6 @@ RUN git clone https://github.com/LLNL/fpzip.git && cd fpzip && \
     cmake --build . --config Release && \
     make install
 
-# install arrow/parquet dependencies
-#TODO: cleanup
-RUN apt install -qy ca-certificates lsb-release wget
-
-RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
-
-RUN apt install -y -V ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
-
-RUN apt update && apt install -y --no-install-recommends \
-    libarrow-dev \
-    libparquet-dev
 
 RUN mkdir /xdbc-client
 
