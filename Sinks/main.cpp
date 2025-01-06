@@ -104,6 +104,7 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
     env.env_name = "Sink";
     env.server_host = vm["server-host"].as<std::string>();
     env.server_port = "1234";
+    env.transfer_id = vm["transfer-id"].as<long>();
     env.table = vm["table"].as<std::string>();
     env.buffer_size = vm["buffer-size"].as<int>();
     env.buffers_in_bufferpool = vm["bufferpool-size"].as<int>() / vm["buffer-size"].as<int>();
