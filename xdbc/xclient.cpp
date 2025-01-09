@@ -44,7 +44,7 @@ namespace xdbc {
         env.pts = pq;
 
 
-        spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2}, TS: {3}, iformat: {4} ",
+        spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2} bytes, TS: {3} bytes, iformat: {4} ",
                                          _xdbcenv->env_name, env.buffers_in_bufferpool, env.buffer_size, env.tuple_size,
                                          env.iformat);
 
@@ -488,12 +488,11 @@ namespace xdbc {
                 break;
             _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "pop"});
 
-
             Header *header = reinterpret_cast<Header *>(_bufferPool[compBuffId].data());
             std::byte *compressed_buffer = _bufferPool[compBuffId].data() + sizeof(Header);
             //spdlog::get("XDBC.CLIENT")->info("decompress thread total tuples {}", header->totalTuples);
 
-            //just forward buffer if its not compressed
+            //just forward buffer if not compressed
             if (header->compressionType == 0) {
                 _xdbcenv->pts->push(
                         ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "push"});
@@ -534,6 +533,7 @@ namespace xdbc {
                     Header newHeader{};
                     newHeader.totalTuples = header->totalTuples;
                     newHeader.totalSize = header->totalSize;
+                    newHeader.intermediateFormat = header->intermediateFormat;
 
                     memcpy(decompressed_buffer.data(), &newHeader, sizeof(Header));
                     //spdlog::get("XDBC.CLIENT")->warn("read totalTuples: {}", header->totalTuples);
@@ -579,14 +579,18 @@ namespace xdbc {
             _emptyDecompThreadCtr.fetch_add(1);
 
         size_t totalTuples = 0;
+        size_t totalSize = 0;
 
         if (buffId > -1) {
             auto header = reinterpret_cast<Header *>(_bufferPool[buffId].data());
             totalTuples = header->totalTuples;
+            totalSize = header->totalSize;
             curBuf.buff = _bufferPool[buffId].data() + sizeof(Header);
         }
         curBuf.id = buffId;
         curBuf.totalTuples = totalTuples;
+        curBuf.totalSize = totalSize;
+
         //TODO: set intermediate format dynamically
         curBuf.iformat = _xdbcenv->iformat;
 
