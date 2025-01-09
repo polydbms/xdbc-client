@@ -23,6 +23,7 @@ namespace xdbc {
         int id;
         int iformat;
         size_t totalTuples;
+        size_t totalSize;
         std::byte *buff;
     };
 
