@@ -46,7 +46,7 @@ class SSHConnection:
             self.ssh.exec_command(background_command)
             return None
         else:
-            stdin, stdout, stderr = self.ssh.exec_command(cmd)
+            stdin, stdout, stderr = self.ssh.exec_command(cmd,get_pty=True)
             error_output = stderr.read().decode().strip()
             if error_output:
                 warnings.warn(f"error on host: {self.hostname}, cmd: {cmd}, error: {error_output}", SSHExecutionWarning)
