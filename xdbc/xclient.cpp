@@ -54,31 +54,27 @@ namespace xdbc {
 
         _xdbcenv->bp = &_bufferPool;
         //calculate buffers per queue
-        int total_consumer_threads = _xdbcenv->decomp_parallelism + _xdbcenv->write_parallelism;
-        int total_producer_threads = _xdbcenv->decomp_parallelism + _xdbcenv->ser_parallelism;
+        int total_workers = _xdbcenv->rcv_parallelism + _xdbcenv->decomp_parallelism +
+                            _xdbcenv->ser_parallelism + _xdbcenv->write_parallelism;
 
-        int available_buffers_for_queues = _xdbcenv->buffers_in_bufferpool - total_producer_threads;
+        int available_buffers_for_queues = _xdbcenv->buffers_in_bufferpool - total_workers;
 
-        if (_xdbcenv->buffers_in_bufferpool < total_producer_threads + total_consumer_threads ||
-            available_buffers_for_queues < total_consumer_threads) {
+        if (_xdbcenv->buffers_in_bufferpool < total_workers ||
+            available_buffers_for_queues < total_workers) {
 
             spdlog::get("XDBC.CLIENT")->error(
                     "Buffer allocation error: Total buffers: {0}. "
-                    "\nRequired buffers:  Total: {3}, Producers: {1}, Consumers: {2} "
-                    "\nReserved for producers: {4}, Available for queues: {5}, Required for consumer threads: {6}. "
-                    "\nIncrease the buffer pool size to at least {7}.",
+                    "\nRequired buffers:  Total: {1},"
+                    "\nAvailable for queues: {2}. "
+                    "\nIncrease the buffer pool size to at least {1}.",
                     _xdbcenv->buffers_in_bufferpool,
-                    total_producer_threads, total_consumer_threads,
-                    total_producer_threads + total_consumer_threads,
-                    total_producer_threads, available_buffers_for_queues,
-                    total_consumer_threads,
-                    total_producer_threads + total_consumer_threads
-            );
+                    total_workers,
+                    available_buffers_for_queues);
 
         }
 
-        int queueCapacityPerComp = available_buffers_for_queues / 3;
-        int serQueueCapacity = queueCapacityPerComp + available_buffers_for_queues % 3;
+        int queueCapacityPerComp = available_buffers_for_queues / 4;
+        int serQueueCapacity = queueCapacityPerComp + available_buffers_for_queues % 4;
 
         // Unified receive queue
         _xdbcenv->freeBufferIds = std::make_shared<customQueue<int>>();
@@ -235,7 +231,7 @@ namespace xdbc {
 
         _xdbcenv->monitor.store(true);
 
-        _monitorThread = std::thread(&XClient::monitorQueues, this, 1000);
+        _monitorThread = std::thread(&XClient::monitorQueues, this, _xdbcenv->profilingInterval);
 
         //create rcv threads
         for (int i = 0; i < _xdbcenv->rcv_parallelism; i++) {
@@ -467,7 +463,7 @@ namespace xdbc {
             }
             socket.close();
 
-            spdlog::get("XDBC.CLIENT")->info("Receive thread {0} #buffers: {1}", thr, buffers);
+            spdlog::get("XDBC.CLIENT")->info("Receive thread {0} finished, #buffers: {1}", thr, buffers);
         } else
             spdlog::get("XDBC.CLIENT")->error("Receive thread {0} could not connect", thr);
 

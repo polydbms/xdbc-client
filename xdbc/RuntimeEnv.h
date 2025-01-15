@@ -63,6 +63,7 @@ namespace xdbc {
         int mode = 0;
         std::vector<std::tuple<long long, size_t, size_t, size_t, size_t>> queueSizes;
         std::atomic<bool> monitor = false;
+        int profilingInterval = 1000;
         std::atomic<int> finishedRcvThreads = 0;
         std::atomic<int> finishedDecompThreads = 0;
         std::atomic<int> finishedSerializerThreads = 0;
