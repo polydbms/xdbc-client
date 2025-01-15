@@ -81,6 +81,8 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
              "Intermediate format: 1 (row) or 2 (column).")
             ("transfer-id,tid", po::value<long>()->default_value(0),
              "Set the transfer id.\nDefault: 0")
+            ("profiling-interval", po::value<int>()->default_value(1000),
+             "Set profiling interval.\nDefault: 1000")
             ("skip-serializer", po::value<int>()->default_value(0),
              "Skip serialization (0/1).\nDefault: false")
             ("target", po::value<std::string>()->default_value("csv"),
@@ -114,6 +116,7 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
     env.write_parallelism = vm["write-parallelism"].as<int>();
     env.iformat = vm["intermediate-format"].as<int>();
     env.target = vm["target"].as<std::string>();
+    env.profilingInterval = vm["profiling-interval"].as<int>();
     outputBasePath = vm["output"].as<std::string>();
 
     env.skip_serializer = vm["skip-serializer"].as<int>();
