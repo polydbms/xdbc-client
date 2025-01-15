@@ -1,3 +1,4 @@
+from datetime import datetime
 import time
 from pathlib import Path
 import threading
@@ -32,39 +33,28 @@ def main():
 
 
 
-    '''
+
+
     test_cost_model_on_unknown_environments(ssh_host="cloud-7.dima.tu-berlin.de",
-                                            environments_to_run=environments_list,
+                                            environments_to_run=[environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9,environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9],
                                             config_space=config_space_variable_parameters_generalized_1310k,
                                             metric='time',
                                             mode='min',
                                             max_training_transfers_per_iteration=500,
-                                            max_real_transfers=25)
+                                            max_real_transfers=25,
+                                            use_history=True)
 
-    test_cost_model_on_all_environments(ssh_host="cloud-7.dima.tu-berlin.de",
-                                        environments_to_run=environments_list,
-                                        config_space=config_space_variable_parameters_generalized_1310k,
-                                        metric='time',
-                                        mode='min',
-                                        max_training_transfers_per_iteration=500,
-                                        max_real_transfers=25)
-
-    test_cost_model_on_unknown_environments(ssh_host="cloud-7.dima.tu-berlin.de",
-                                            environments_to_run=environments_list,
+    test_cost_model_on_unknown_environments(ssh_host="cloud-9.dima.tu-berlin.de",
+                                            environments_to_run=[environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9,environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9],
                                             config_space=config_space_variable_parameters_generalized_1310k,
                                             metric='time',
                                             mode='min',
                                             max_training_transfers_per_iteration=500,
-                                            max_real_transfers=25)
+                                            max_real_transfers=25,
+                                            use_history=False)
 
-    test_cost_model_on_all_environments(ssh_host="cloud-7.dima.tu-berlin.de",
-                                        environments_to_run=environments_list,
-                                        config_space=config_space_variable_parameters_generalized_1310k,
-                                        metric='time',
-                                        mode='min',
-                                        max_training_transfers_per_iteration=500,
-                                        max_real_transfers=25)
-    '''
+
+
 
     # EXAMPLE :
     #execute_optimization_runs_multi_threaded(ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
@@ -75,6 +65,7 @@ def main():
     #                            mode='min',
     #                            loop_count=25)
 
+    '''
     algos_to_run =[
         #"tlbo_rgpe_prf_all",
         #"tlbo_sgpr_prf_all",
@@ -107,7 +98,7 @@ def main():
                                     training_data_per_env=n)
 
 
-
+    '''
 
 
 
@@ -319,7 +310,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
     print(f"[{datetime.today().strftime('%H:%M:%S')}] best found configuration has time of {best_time}")
     print(f"[{datetime.today().strftime('%H:%M:%S')}] best config : {best_config}")
 
-def test_cost_model_on_unknown_environments(ssh_host,config_space, metric, mode, environments_to_run,max_training_transfers_per_iteration, max_real_transfers,):
+def test_cost_model_on_unknown_environments(ssh_host,config_space, metric, mode, environments_to_run,max_training_transfers_per_iteration, max_real_transfers,use_history):
     input_fields = ["client_cpu",
                     "server_cpu",
                     "network",
@@ -373,7 +364,11 @@ def test_cost_model_on_unknown_environments(ssh_host,config_space, metric, mode,
         environments_without_target = all_envs_inner
 
         # create cost model
-        cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_exc")
+        if use_history:
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_rs_exc_w_update")
+        else:
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_rs_exc")
+
 
         data = load_data_from_csv(type='random_samples_1310k',environment_list=environments_without_target)
 

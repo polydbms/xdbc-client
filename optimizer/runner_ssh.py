@@ -32,8 +32,8 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh=None, return_tr
     # subprocess.run([f"curl -X DELETE localhost:4080/xdbcserver && curl -X PUT localhost:4080/xdbcserver"])
 
 
-    ssh.execute_cmd(f"docker update --cpus '{env['server_cpu']}'{env['server_container']}")
-    ssh.execute_cmd(f"docker update --cpus '{env['client_cpu']}'{env['client_container']}")
+    ssh.execute_cmd(f"docker update --cpus '{env['server_cpu']}' {env['server_container']}")
+    ssh.execute_cmd(f"docker update --cpus '{env['client_cpu']}' {env['client_container']}")
 
     ssh.execute_cmd(f"curl -X DELETE localhost:4080/{env['client_container']}")
     ssh.execute_cmd(f"curl -X PUT localhost:4080/{env['client_container']}")

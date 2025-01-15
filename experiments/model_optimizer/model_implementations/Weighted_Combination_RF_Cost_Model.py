@@ -9,11 +9,21 @@ from experiments.model_optimizer.Configs import *
 
 class Per_Environment_RF_Cost_Model:
     def __init__(self, input_fields, metric='time', underlying="cost_model_rfs"):
+        """
+       Initializes the Per_Environment_RF_Cost_Model, which trains and predicts using
+       Random Forest models for multiple environment.
+
+       Parameters:
+           input_fields (list): List of feature names used for training and prediction.
+           metric (str): Metric to optimize.
+           underlying (str): Identifier-String for the underlying model.
+       """
         self.input_fields = input_fields
         self.metric = metric
         self.models = {}  # dict to store rf's per environment
         self.environments = []  # list of known environments
         self.underlying = underlying
+        self.weight_history = []
 
     def train(self, x_train, y_train):
         """
@@ -47,32 +57,46 @@ class Per_Environment_RF_Cost_Model:
             self.environments.append(env)
 
     def update(self, config, result, factor=10):
-        '''
+        """
+        Updates the weight history by calculating a weight vector for the  configuration
+        and result,depending on how close they are to the individual models' predictions.
 
-        if we get a new result, we cant build a cost model based on that single result.
-        we could get the estimate of all knonw cost models for that config, and compare their predicted result to the known result,
-        and this way influence the wheigts by which they are combined in the prediction.
+        Parameters:
+            config (dict): Configuration which was executed.
+            result (dict): Result of that execution contianing `self.metric`.
+            factor (int): Factor to amplify weights.
+        """
 
-        we could calculate the distance between the actual result and the predicted results, and somhow calculate wheight-factors from that.
-        then include these factors in the weight prediction calculation to get a more accurate prediction.
+        data = self.convert_dict(dict(config))
+        data["compression"] = data["compression_lib"]
 
+        if isinstance(data, dict):
+            data = pd.DataFrame([data])
 
-        '''
-        #todo
-        '''
-        X = config[self.input_fields].values
+        X = data[self.input_fields].values
 
-        known_predictions = []
-
+        known_predictions = {}
         for env, model in self.models.items():
+            prediction = model.predict(X)
+            known_predictions[env] = prediction[0]
 
-            predictions = self.models[env].predict(X)
-            known_predictions.append(predictions)
+        weight_vector = {}
+        total_difference = 0
+        for env, prediction in known_predictions.items():
+            difference = abs(prediction - result[self.metric])
+            weight = 1 / (difference + 1e-8)
+            weight_vector[env] = weight
+            total_difference += weight
 
-        known_predictions = np.array(known_predictions).T
+        for env in weight_vector:
+            weight_vector[env] /= total_difference
 
-        '''
-        pass
+        for env in weight_vector:
+            weight_vector[env] *= factor
+
+        self.weight_history.append(weight_vector)
+
+        #print(f"New weight vector: {weight_vector}")
 
     def convert_dataframe(self, df, reverse=False):
 
@@ -101,15 +125,15 @@ class Per_Environment_RF_Cost_Model:
 
     def predict(self, data, target_environment, weights_algorithm="distances"):
         """
-            Predict for a target environment using the cost model for that environment,
-            or if the environment is not known, a linear combination of known models.
+        Predict for a target environment using the cost model for that environment,
+        or if the environment is not known, a linear combination of known models.
 
-            Parameters:
-                data (dict): Data to be predicted on.
-                target_environment (dict): Dictionary containing the values for the target environment (server_cpu,client_cpu,network).
-            Returns:
-                dict: Dictionary containing the result of the specified metric.
-            """
+        Parameters:
+            data (dict): Data to be predicted on.
+            target_environment (dict): Dictionary containing the values for the target environment (server_cpu,client_cpu,network).
+        Returns:
+            dict: Dictionary containing the result of the specified metric.
+        """
 
         data = self.convert_dict(dict(data))
         data["compression"] = data["compression_lib"]
@@ -128,7 +152,7 @@ class Per_Environment_RF_Cost_Model:
             y = self.models[environment_to_string(target_environment)].predict(X)
             return {self.metric: y[0]}
 
-        # if not, collect known environment, their predictions, and use lr to estimtae the wheights for a linear combination
+        # if not, collect known environment, their predictions, and use lr to estimate the weights for a linear combination
 
         known_features = []
         known_predictions = []
@@ -187,8 +211,30 @@ class Per_Environment_RF_Cost_Model:
             weights = 1 / distances
             weights /= np.sum(weights)
 
+        # add weight history from update method
+
+        total_weights = len(self.weight_history)
+        averaged_weights = np.zeros_like(weights)
+        weight_decay_factor = 0.9
+
+        for idx, weight_vector in enumerate(self.weight_history):
+            influence = weight_decay_factor ** (total_weights - idx - 1)
+            for i, env in enumerate(self.models.keys()):
+                averaged_weights[i] += influence * weight_vector.get(env, 0)
+
+            # normalize
+            normalization_factor = sum(weight_decay_factor ** (total_weights - idx - 1) for idx in range(total_weights))
+            averaged_weights /= normalization_factor
+
+        # combine
+        final_weights = weights + averaged_weights
+        final_weights /= np.sum(final_weights)
+
         combined_predictions = np.dot(known_predictions, weights.T)
-        combined_environment = np.dot(known_features.T, weights.T).T[0]
+        combined_environment = np.dot(known_features.T, weights.T).T
+
+        combined_predictions_final = np.dot(known_predictions, final_weights.T)
+        combined_environment_final = np.dot(known_features.T, final_weights.T).T
 
         #print(f"\nEstimated Environment : ['server_cpu': {round(combined_environment[0],2)}, 'client_cpu': {round(combined_environment[1],2)}, 'network': {round(combined_environment[2],2)}] ")
         #print(f"True Environment        : {target_environment}")
@@ -197,4 +243,7 @@ class Per_Environment_RF_Cost_Model:
         #print(f"Sqrt Factors :       {np.sqrt(round(target_server / combined_environment[0][0], 2))}  {np.sqrt(round(target_client / combined_environment[1][0], 2))}  {np.sqrt(round(target_network / combined_environment[2][0], 2))}")
         #print(f"Average of Sqrt Factors : {(np.sqrt(round(target_server / combined_environment[0][0], 2)) + np.sqrt(round(target_client / combined_environment[1][0], 2)) + np.sqrt(round(target_network / combined_environment[2][0], 2)))/3}")
 
-        return {self.metric: combined_predictions[0]}
+        if 'update' in self.underlying:
+            return {self.metric: combined_predictions_final[0]}
+        else:
+            return {self.metric: combined_predictions[0]}

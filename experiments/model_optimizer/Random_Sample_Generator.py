@@ -8,7 +8,7 @@ from queue import Queue
 from experiments.experiment_scheduler.ssh_handler import SSHConnection
 from experiments.model_optimizer import data_transfer_wrapper
 from experiments.model_optimizer.Configs import *
-from experiments.model_optimizer.additional_environments import all_additional_environments
+from experiments.model_optimizer.additional_environments import *
 from experiments.model_optimizer.model_implementations.syne_tune_ask_tell import Syne_Tune_Ask_Tell
 
 
@@ -32,19 +32,21 @@ def process_configuration(queue, environment, ssh_host, output_file, lock):
 
             #run transfer
             ssh = SSHConnection(ssh_host, "bene")
-            result = data_transfer_wrapper.transfer(complete_config,max_retries=1, ssh=ssh,i=config['config_id'])
+            result = data_transfer_wrapper.transfer(complete_config, max_retries=1, ssh=ssh, i=config['config_id'])
             ssh.close()
 
             result['config_id'] = config_id
             with lock:
                 df = pd.DataFrame(result, index=[0])
-                df.to_csv(output_file, mode='a', header=False, index=False)
+                if os.path.isfile(output_file):
+                    df.to_csv(output_file, mode='a', header=False, index=False)
+                else:
+                    df.to_csv(output_file, mode='a', header=True, index=False)
+
             print(f"[{datetime.today().strftime('%H:%M:%S')}] finished executing  config {config_id} for environment {environment_to_string(environment)} on {ssh_host}  in {result['time']} seconds")
 
         finally:
             queue.task_done()
-
-
 
 
 def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
@@ -60,9 +62,13 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
     df = pd.read_csv(config_file)
     configs = df.to_dict(orient="records")[:count]  # converts dataframe to LIST of dicts
 
-    #environments = [environment_1,environment_3,environment_4,environment_2,environment_6,environment_8]#,environment_7,environment_9,environment_5]#environments_list
+    #environments = [environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9]#environments_list
     #environments = [environment_9,environment_5]#environments_list
-    environments = all_additional_environments
+    #environments = all_additional_environments
+    #environments = envs_scale_network_test
+    # environments = [environment_50, environment_51, environment_52, environment_53, environment_54, environment_55, environment_56, environment_57,
+    #                 environment_70, environment_71, environment_72, environment_73, environment_74, environment_75, environment_76]
+    environments = envs_scale_compute_test
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -80,8 +86,6 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
         else:
             executed_configs = []
 
-
-
         # filter configurations to skip already executed ones
         remaining_configs = [
             (i, config) for i, config in enumerate(configs) if i not in executed_configs
@@ -95,14 +99,13 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
         for config_id, config in remaining_configs:
             queue.put((config_id, config))
 
-
-
         lock = threading.Lock()
 
         # start threads
         threads = []
         for i in range(len(ssh_hosts)):
-            thread = threading.Thread(target=process_configuration, args=(queue, environment, ssh_hosts[i], output_file, lock))
+            thread = threading.Thread(target=process_configuration,
+                                      args=(queue, environment, ssh_hosts[i], output_file, lock))
             thread.start()
             threads.append(thread)
 
@@ -114,7 +117,6 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
 
 
 def generate_random_configurations(n=1000):
-
     config_space_string = get_config_space_string(CONFIG_SPACE)
 
     filename = f"grid_configurations.csv"
@@ -149,7 +151,6 @@ def generate_random_configurations(n=1000):
 
 CONFIG_SPACE = config_space_variable_parameters_generalized_1310k
 
-
 if __name__ == "__main__":
 
     #generate_random_configurations()
@@ -159,10 +160,9 @@ if __name__ == "__main__":
     config_file = f"random_samples_{config_space_string}/grid_configurations_FIXED.csv"
     output_dir = f"random_samples_{config_space_string}"
 
-    #ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
-    ssh_hosts = ["cloud-8.dima.tu-berlin.de", "cloud-7.dima.tu-berlin.de","cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
+    ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
+    #ssh_hosts = [ "cloud-8.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
 
-
-    for i in [4,20,32,44,66,88,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000]:
+    for i in [4, 20, 32, 44, 66, 88, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
         print(f"starting executing with n = {i}")
         execute_all_configurations(config_file, output_dir, ssh_hosts, i)
