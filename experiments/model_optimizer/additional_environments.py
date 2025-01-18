@@ -278,7 +278,7 @@ environment_57 = {
 
 #all environments with cpu == 16
 envs_scale_network_test = [environment_50, environment_51, environment_52, environment_53, environment_54, environment_55, environment_56, environment_57,
-                           environment_42, environment_43, environment_44, environment_1, environment_4]
+                           environment_42, environment_43, environment_44, environment_1]
 
 environment_70 = {
     "server_cpu": 2,
@@ -421,3 +421,225 @@ env_S4_C8_N1000 = environment_73
 env_S4_C16_N1000 = environment_74
 env_S8_C4_N1000 = environment_75
 env_S16_C4_N1000 = environment_76
+
+
+# tst which environments to use for next big iterations
+
+environment_100 = {
+    "server_cpu": 2,
+    "client_cpu": 2,
+    "network": 50,
+    "timeout": 350
+}
+environment_101 = {
+    "server_cpu": 2,
+    "client_cpu": 8,
+    "network": 50,
+    "timeout": 350
+}
+environment_102 = {
+    "server_cpu": 4,
+    "client_cpu": 4,
+    "network": 50,
+    "timeout": 350
+}
+environment_103 = {
+    "server_cpu": 4,
+    "client_cpu": 16,
+    "network": 50,
+    "timeout": 350
+}
+environment_104 = {
+    "server_cpu": 8,
+    "client_cpu": 8,
+    "network": 50,
+    "timeout": 350
+}
+environment_105 = {
+    "server_cpu": 8,
+    "client_cpu": 2,
+    "network": 50,
+    "timeout": 350
+}
+environment_106 = {
+    "server_cpu": 16,
+    "client_cpu": 4,
+    "network": 50,
+    "timeout": 350
+}
+environment_1061 = {
+    "server_cpu": 16,
+    "client_cpu": 8,
+    "network": 50,
+    "timeout": 350
+}
+environment_107 = {
+    "server_cpu": 16,
+    "client_cpu": 16,
+    "network": 50,
+    "timeout": 350
+}
+environment_108 = {
+    "server_cpu": 2,
+    "client_cpu": 2,
+    "network": 150,
+    "timeout": 200
+}
+environment_109 = {
+    "server_cpu": 2,
+    "client_cpu": 8,
+    "network": 150,
+    "timeout": 200
+}
+environment_110 = {
+    "server_cpu": 4,
+    "client_cpu": 4,
+    "network": 150,
+    "timeout": 200
+}
+environment_111 = {
+    "server_cpu": 4,
+    "client_cpu": 16,
+    "network": 150,
+    "timeout": 200
+}
+environment_112 = {
+    "server_cpu": 8,
+    "client_cpu": 8,
+    "network": 150,
+    "timeout": 200
+}
+environment_113 = {
+    "server_cpu": 8,
+    "client_cpu": 2,
+    "network": 150,
+    "timeout": 200
+}
+environment_114 = {
+    "server_cpu": 16,
+    "client_cpu": 4,
+    "network": 150,
+    "timeout": 200
+}
+environment_1141 = {
+    "server_cpu": 16,
+    "client_cpu": 8,
+    "network": 150,
+    "timeout": 200
+}
+environment_115 = {
+    "server_cpu": 16,
+    "client_cpu": 16,
+    "network": 150,
+    "timeout": 200
+}
+environment_116 = {
+    "server_cpu": 2,
+    "client_cpu": 2,
+    "network": 1000,
+    "timeout": 200
+}
+environment_117 = {
+    "server_cpu": 2,
+    "client_cpu": 8,
+    "network": 1000,
+    "timeout": 200
+}
+environment_118 = {
+    "server_cpu": 4,
+    "client_cpu": 4,
+    "network": 1000,
+    "timeout": 200
+}
+environment_119 = {
+    "server_cpu": 4,
+    "client_cpu": 16,
+    "network": 1000,
+    "timeout": 200
+}
+environment_120 = {
+    "server_cpu": 8,
+    "client_cpu": 8,
+    "network": 1000,
+    "timeout": 200
+}
+environment_121 = {
+    "server_cpu": 8,
+    "client_cpu": 2,
+    "network": 1000,
+    "timeout": 200
+}
+environment_122 = {
+    "server_cpu": 16,
+    "client_cpu": 4,
+    "network": 1000,
+    "timeout": 200
+}
+environment_1221 = {
+    "server_cpu": 16,
+    "client_cpu": 8,
+    "network": 1000,
+    "timeout": 200
+}
+environment_123 = {
+    "server_cpu": 16,
+    "client_cpu": 16,
+    "network": 1000,
+    "timeout": 200
+}
+
+env_S2_C2_N50 = environment_100
+env_S2_C8_N50 = environment_101
+#env_S4_C4_N50 = environment_102
+env_S4_C16_N50 = environment_103
+env_S8_C8_N50 = environment_104
+env_S8_C2_N50 = environment_105
+env_S16_C4_N50 = environment_106
+env_S16_C8_N50 = environment_1061
+env_S16_C16_N50 = environment_107
+
+
+env_S2_C2_N150 = environment_108
+env_S2_C8_N150 = environment_109
+#env_S4_C4_N150 = environment_110
+env_S4_C16_N150 = environment_111
+env_S8_C8_N150 = environment_112
+env_S8_C2_N150 = environment_113
+env_S16_C4_N150 = environment_114
+env_S16_C8_N150 = environment_1141
+env_S16_C16_N150 = environment_115
+
+env_S2_C2_N1000 = environment_116
+env_S2_C8_N1000 = environment_117
+#env_S4_C4_N1000 = environment_118
+env_S4_C16_N1000 = environment_119
+env_S8_C8_N1000 = environment_120
+env_S8_C2_N1000 = environment_121
+env_S16_C4_N1000 = environment_122
+env_S16_C8_N1000 = environment_1221
+env_S16_C16_N1000 = environment_123
+'''
+main envs : 
+
+2-2
+8-2
+16-16
+
+for each network speed -> 9 main envs
+
+'''
+
+environment_list_test_new_main_envs = [environment_100,environment_105,environment_107,
+                                       environment_108,environment_113,environment_115,
+                                       environment_116,environment_121,environment_123]
+
+environment_list_test_new_base_envs = [environment_100,environment_101,environment_103,environment_104,
+                                       environment_105,
+                                       environment_106,environment_1061,
+                                       environment_107,environment_108,environment_109,
+                                       environment_111,environment_112,environment_113,
+                                       environment_114,environment_1141,
+                                       environment_115,environment_116,environment_117,environment_119,
+                                       environment_120,environment_121,
+                                       environment_122,environment_1221,
+                                       environment_123]
