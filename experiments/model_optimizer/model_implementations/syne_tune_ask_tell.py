@@ -1,6 +1,9 @@
 from collections import defaultdict
 import numpy as np
 import pandas as pd
+from scipy.stats import wasserstein_distance
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score
 from syne_tune.optimizer.schedulers import HyperbandScheduler, FIFOScheduler
 from syne_tune.optimizer.baselines import BayesianOptimization, RandomSearch, GridSearch, ZeroShotTransfer
 from typing import Dict
@@ -12,11 +15,21 @@ from syne_tune.optimizer.schedulers.transfer_learning import TransferLearningTas
 from syne_tune.optimizer.schedulers.transfer_learning.quantile_based.quantile_based_searcher import \
     QuantileBasedSurrogateSearcher
 
+from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer import Metrics
 from experiments.model_optimizer.Configs import *
 
 
 class Syne_Tune_Ask_Tell():
+    available_optimization_algorithms = ["bayesian_syne_tune",
+                                         "random_search",
+                                         "hyperband",
+                                         "asha",
+                                         "grid_search"]
+    available_transfer_algorithms = ["zero_shot",
+                                     "quantile"]
+
+    available_algorithms = available_optimization_algorithms + available_transfer_algorithms
 
     def __init__(self, config_space, metric='time', mode='min', underlying='bayesian'):
         """
@@ -139,7 +152,7 @@ class Syne_Tune_Ask_Tell():
         trial = self.current_suggestions[frozenset(config.items())]
         self.scheduler.tell(trial, metric_value)
 
-    def load_transfer_learning_history_per_env(self, file_list, training_data_per_env=-1):
+    def load_transfer_learning_history_per_env_from_dataframe(self, data, training_data_per_env=-1):
         """
         Loads a list of files as previous evaluations into the underlying optimizer, creating one history per environment.
         Groups evaluations by environment and loads them as a transfer learning history into the algorithm.
@@ -148,17 +161,59 @@ class Syne_Tune_Ask_Tell():
             file_list (list): List of file paths to load.
             training_data_per_env (int): Number of samples to use per environment (-1 for no limit).
         """
+        '''
         # Group data by unique combinations of 'server_cpu', 'client_cpu', and 'network'
-        grouped_data = self._group_data_by_environment(file_list)
+        grouped_data = defaultdict(list)
+
+        df = data[(data['server_cpu'] > 0) & (data['client_cpu'] > 0) & (data['network'] > 0)]
+
+        for combination, group in df.groupby(['server_cpu', 'client_cpu', 'network']):
+
+            if training_data_per_env != -1:
+                group = group.head(training_data_per_env)
+                if f"_n_{training_data_per_env}" not in self.underlying:
+                    self.underlying += f"_n_{training_data_per_env}"
+
+            grouped_data[combination].append(group)
+
+        grouped_data = {key: pd.concat(frames, ignore_index=True) for key, frames in grouped_data.items()}
+
+        clusters = self._cluster_groups(grouped_data, column='time')
+
+        group_to_rows = {}
+        for group_key, group_df in grouped_data.items():
+            group_to_rows[group_key] = df[
+                (df['server_cpu'] == group_key[0]) &
+                (df['client_cpu'] == group_key[1]) &
+                (df['network'] == group_key[2])
+                ]
+
+        # Split data based on clusters
+        cluster_dataframes = {}
+        for cluster_index, cluster in enumerate(clusters):
+            # Create the cluster key
+            cluster_key = "cluster-" + "-".join(
+                f"{group_key[0]}_{group_key[1]}_{group_key[2]}" for group_key in cluster
+            )
+
+            # Combine rows for this cluster
+            cluster_rows = pd.concat([group_to_rows[group_key] for group_key in cluster], ignore_index=True)
+            cluster_dataframes[cluster_key] = cluster_rows
+        '''
+
+        cluster_dataframes = Transfer_Data_Processor.process_data(data,training_data_per_env)
+
+        self.underlying = self.underlying + "_with_clustering"
 
         # Create transfer learning histories
         transfer_learning_evaluations = {}
 
-        for env_key, df in grouped_data.items():
+        #for env_key, df in grouped_data.items():
+        for env_key, df in cluster_dataframes.items():
             df = df[df['time'].notna() & (df['time'] > 0)]
 
             if training_data_per_env != -1:
-                df = df.head(training_data_per_env)
+                #df = df.head(training_data_per_env)
                 if f"_n_{training_data_per_env}" not in self.underlying:
                     self.underlying += f"_n_{training_data_per_env}"
 
@@ -172,31 +227,11 @@ class Syne_Tune_Ask_Tell():
                 objectives_names=[self.metric],
                 objectives_evaluations=np.array(df[self.metric], ndmin=4).T
             )
-            print(f"[{datetime.today().strftime('%H:%M:%S')}] Loaded History for Environment {env_key} with length {len(df)}")
+            print(
+                f"[{datetime.today().strftime('%H:%M:%S')}] Loaded History for Environment {env_key} with length {len(df)}")
 
         self.transfer_history = transfer_learning_evaluations
         self.reset()
-
-    def _group_data_by_environment(self, file_list):
-        """
-        Groups data by unique combinations of 'server_cpu', 'client_cpu', and 'network'.
-
-        Parameters:
-            file_list (list): List of file paths to load.
-
-        Returns:
-            dict: Grouped data with keys as combinations and values as concatenated DataFrames.
-        """
-        grouped_data = defaultdict(list)
-
-        for file_path in file_list:
-            df = pd.read_csv(file_path[0])
-            df = df[(df['server_cpu'] > 0) & (df['client_cpu'] > 0) & (df['network'] > 0)]
-
-            for combination, group in df.groupby(['server_cpu', 'client_cpu', 'network']):
-                grouped_data[combination].append(group)
-
-        return {key: pd.concat(frames, ignore_index=True) for key, frames in grouped_data.items()}
 
 
 """

@@ -1,4 +1,5 @@
 import subprocess
+import threading
 import time
 import datetime
 import csv
@@ -214,23 +215,33 @@ def copy_metrics(server_container, client_container, perf_dir,ssh):
 
         data_server = ssh.execute_cmd(f"docker exec {server_container} tail -n 1 {file_path_server}")
         data_client = ssh.execute_cmd(f"docker exec {client_container} tail -n 1 {file_path_client}")
+        file_lock = threading.Lock()
 
-        with open(f"{absolute_perf_dir}/xdbc_server_timings_bene.csv",'a') as file_server:
-
-            if "cannot open" in data_server:
-                print("error reading timing file")
-            else:
-                file_server.write("\n")
-                file_server.write(data_server)
+        if data_server.startswith("transfer"):
+            raise ValueError("\n\n\n\n\n\n\nfoudn header in data file\n\n\n\n\n\n\n")
 
 
-        with open(f"{absolute_perf_dir}/xdbc_client_timings_bene.csv",'a') as file_client:
+        if data_client.startswith("transfer"):
+            raise ValueError("\n\n\n\n\n\n\nfoudn header in data file\n\n\n\n\n\n\n")
 
-            if "cannot open" in data_client:
-                print("error reading timing file")
-            else:
-                file_client.write("\n")
-                file_client.write(data_client)
+        with file_lock:
+
+            with open(f"{absolute_perf_dir}/xdbc_server_timings_bene.csv",'a') as file_server:
+
+                if "cannot open" in data_server:
+                    print("error reading timing file")
+                else:
+                    file_server.write("\n")
+                    file_server.write(data_server)
+
+
+            with open(f"{absolute_perf_dir}/xdbc_client_timings_bene.csv",'a') as file_client:
+
+                if "cannot open" in data_client:
+                    print("error reading timing file")
+                else:
+                    file_client.write("\n")
+                    file_client.write(data_client)
 
         x = print_metrics(perf_dir, True)
 

@@ -75,24 +75,27 @@ class Per_Environment_RF_Cost_Model:
 
         X = data[self.input_fields].values
 
+
         known_predictions = {}
         for env, model in self.models.items():
             prediction = model.predict(X)
             known_predictions[env] = prediction[0]
 
+        # dict {env-key : weight }
         weight_vector = {}
+
         total_difference = 0
         for env, prediction in known_predictions.items():
-            difference = abs(prediction - result[self.metric])
-            weight = 1 / (difference + 1e-8)
-            weight_vector[env] = weight
+            difference = abs(prediction - result[self.metric])  # calculate the error for the model
+            weight = 1 / (difference + 1e-8)                    # 1 / error = weight
+            weight_vector[env] = weight                         # add to weight vector
             total_difference += weight
 
         for env in weight_vector:
-            weight_vector[env] /= total_difference
+            weight_vector[env] /= total_difference              # normalize wieghts to sum = 1
 
         for env in weight_vector:
-            weight_vector[env] *= factor
+            weight_vector[env] *= factor                        # add factor to controll the the influence od the wieght vector
 
         self.weight_history.append(weight_vector)
 
@@ -215,7 +218,7 @@ class Per_Environment_RF_Cost_Model:
 
         total_weights = len(self.weight_history)
         averaged_weights = np.zeros_like(weights)
-        weight_decay_factor = 0.9
+        weight_decay_factor = 0.95 # todo whats a good value ?
 
         for idx, weight_vector in enumerate(self.weight_history):
             influence = weight_decay_factor ** (total_weights - idx - 1)
@@ -235,13 +238,6 @@ class Per_Environment_RF_Cost_Model:
 
         combined_predictions_final = np.dot(known_predictions, final_weights.T)
         combined_environment_final = np.dot(known_features.T, final_weights.T).T
-
-        #print(f"\nEstimated Environment : ['server_cpu': {round(combined_environment[0],2)}, 'client_cpu': {round(combined_environment[1],2)}, 'network': {round(combined_environment[2],2)}] ")
-        #print(f"True Environment        : {target_environment}")
-        #print(f"Individual Factors : {round(target_server / combined_environment[0][0],2)}  {round(target_client / combined_environment[1][0],2)}  {round(target_network / combined_environment[2][0],2)}")
-        #print(f"Average of Factors : {(round(target_server / combined_environment[0][0],2) + round(target_client / combined_environment[1][0],2) + round(target_network / combined_environment[2][0],2))/3}")
-        #print(f"Sqrt Factors :       {np.sqrt(round(target_server / combined_environment[0][0], 2))}  {np.sqrt(round(target_client / combined_environment[1][0], 2))}  {np.sqrt(round(target_network / combined_environment[2][0], 2))}")
-        #print(f"Average of Sqrt Factors : {(np.sqrt(round(target_server / combined_environment[0][0], 2)) + np.sqrt(round(target_client / combined_environment[1][0], 2)) + np.sqrt(round(target_network / combined_environment[2][0], 2)))/3}")
 
         if 'update' in self.underlying:
             return {self.metric: combined_predictions_final[0]}

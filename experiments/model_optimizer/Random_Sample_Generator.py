@@ -68,7 +68,8 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
     #environments = envs_scale_network_test
     # environments = [environment_50, environment_51, environment_52, environment_53, environment_54, environment_55, environment_56, environment_57,
     #                 environment_70, environment_71, environment_72, environment_73, environment_74, environment_75, environment_76]
-    environments = envs_scale_compute_test
+    #environments = envs_scale_compute_test + envs_scale_network_test
+    environments = environment_list_test_new_base_envs
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -92,7 +93,7 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
         ]
 
         if not remaining_configs:
-            print(f"[{datetime.today().strftime('%H:%M:%S')}] All configurations already executed for {environment_to_string(environment)}.")
+            print(f"[{datetime.today().strftime('%H:%M:%S')}] All configurations already executed for {environment_to_string(environment)} with N = {count}.")
             continue
 
         queue = Queue()
@@ -160,9 +161,9 @@ if __name__ == "__main__":
     config_file = f"random_samples_{config_space_string}/grid_configurations_FIXED.csv"
     output_dir = f"random_samples_{config_space_string}"
 
-    ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
-    #ssh_hosts = [ "cloud-8.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
+    #ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
+    ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"]
 
-    for i in [4, 20, 32, 44, 66, 88, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
+    for i in [4, 20, 32, 44, 66, 88, 100]:#, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
         print(f"starting executing with n = {i}")
         execute_all_configurations(config_file, output_dir, ssh_hosts, i)

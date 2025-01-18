@@ -1,4 +1,6 @@
 import datetime
+import threading
+
 import pandas as pd
 from experiments.experiment_scheduler.ssh_handler import SSHConnection
 from Metrics import add_all_metrics_to_result
@@ -40,12 +42,12 @@ def transfer(config,i=0,max_retries=1, ssh=None):
 
     while not result and retries < max_retries:
         print(
-            f"[{datetime.today().strftime('%H:%M:%S')}] transfer #{i} failed for {retries + 1} times, retrying for {retries + 1} time")
+            f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] transfer #{i} failed for {retries + 1} times, retrying for {retries + 1} time")
         result = train_method(config, ssh)
         retries = retries + 1
 
     if not result:
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] transfer #{i} failed for {retries + 1} times, reporting dummy result")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] transfer #{i} failed for {retries + 1} times, reporting dummy result")
 
         try:
             save_failed_config(config)
@@ -195,8 +197,6 @@ def train_method_seperate_params(xdbc_version: int, run: int, client_readmode: i
         datatype: descritpion.
     """
 
-    METRIC = metric
-
     config = {
         # fixded / enviroment params
         "xdbc_version": xdbc_version,
@@ -250,8 +250,6 @@ def train_method_seperate_params(xdbc_version: int, run: int, client_readmode: i
     ssh.execute_cmd('docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo \'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time\' > /tmp/xdbc_server_timings.csv"')
     ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
 
-    result = None
-    timeout = timeout
 
     try:
                                                                                              #(config, env, mode, perf_dir, ssh=None, return_transfer_id=False, sleep=2, show_output=(False, False),include_setup=True):
@@ -262,11 +260,9 @@ def train_method_seperate_params(xdbc_version: int, run: int, client_readmode: i
 
 
     except FunctionTimedOut:
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] transfer  could not be completet within {timeout} seconds and was terminated")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] transfer  could not be completet within {timeout} seconds and was terminated")
         ssh.execute_cmd("docker compose -f xdbc-client/docker-xdbc.yml down")
         return {}
-
-    #ssh.close()
 
     return result
 
@@ -282,47 +278,32 @@ def load_complete_result(result):
     Returns:
         datatype: descritpion.
     """
+    file_lock = threading.Lock()
 
-    #remove_rows_with_string("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_client_timings_bene.csv",'transfer_id')
-    #remove_rows_with_string("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_server_timings_bene.csv",'transfer_id')
+    with file_lock:
 
+        client_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_client_timings_bene.csv")
+        server_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_server_timings_bene.csv")
+        general_stats = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_general_stats_bene.csv")
 
-    client_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_client_timings_bene.csv")
-    server_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_server_timings_bene.csv")
-    general_stats = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_general_stats_bene.csv")
+        df_both_timings = pd.merge(client_timings,server_timings,on='transfer_id')
 
-    #client_timings = client_timings[client_timings['transfer_id'] != 'transfer_id']
-    #server_timings = server_timings[server_timings['transfer_id'] != 'transfer_id']
+        df_complete = pd.merge(df_both_timings,general_stats,left_on="transfer_id",right_on="date")
 
-    df_both_timings = pd.merge(client_timings,server_timings,on='transfer_id')
+        df_result = df_complete[(df_complete.transfer_id == result['transfer_id'])]
 
-    df_complete = pd.merge(df_both_timings,general_stats,left_on="transfer_id",right_on="date")
+        df_result['timestamp_end'] = str(datetime.now())
 
-    df_result = df_complete[(df_complete.transfer_id == result['transfer_id'])]
+        #print(df_complete['transfer_id'].dtype)
+        #print(type(result['transfer_id'])) s
+        #print(result['transfer_id'] in df_complete['transfer_id'].values)
 
-    df_result['timestamp_end'] = str(datetime.now())
-
-    print(df_complete['transfer_id'].dtype)
-    print(type(result['transfer_id']))
-    print(result['transfer_id'] in df_complete['transfer_id'].values)
-
-    df_result['transfer_id'] = df_result['transfer_id'].astype(str)
-    result['transfer_id'] = str(result['transfer_id'])
+        df_result['transfer_id'] = df_result['transfer_id'].astype(str)
+        result['transfer_id'] = str(result['transfer_id'])
 
 
-    result = df_result.iloc[0].to_dict()
+        result = df_result.iloc[0].to_dict()
 
-    result = add_all_metrics_to_result(result)
+        result = add_all_metrics_to_result(result)
 
-    return result
-
-def remove_rows_with_string(file_path, string_to_remove):
-
-    # Read the CSV file
-    df = pd.read_csv(file_path)
-
-    # Filter out rows that contain the specific string in any column
-    filtered_df = df[~df.astype(str).apply(lambda row: row.str.contains(string_to_remove, na=False)).any(axis=1)]
-
-    # Write back to the same file
-    filtered_df.to_csv(file_path, index=False)
+        return result
