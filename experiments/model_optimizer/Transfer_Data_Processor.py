@@ -8,21 +8,37 @@ from sklearn.metrics import silhouette_score
 
 
 def process_data(data, training_data_per_env=-1):
+    """
+    This function precesses data to be used in the trasnfe rlearning algorithms.
+    1. It groups the data for each combination of 'server_cpu', 'client_cpu' and 'network' into dataframes.
+    2. For each of these dataframes it takes the first 'training_data_per_env' rows.
+    3. It creates clusters of the individual dataframes based on their similarity.
+    4. It groups the dataframes by their cluster, and creates a cluster_key containing all groups in that cluster.
+
+    Parameters:
+        data (dataframe): The Dataframe containing all datat.
+        training_data_per_env (int): The amount of data to use per environment, -1 if all data should be used.
+
+    Returns:
+        Dict{cluster_key: dataframe}: Dictionary contaiing all clusterkeys and their corresponding dataframes.
+    """
+
+    # 1. Group the data
     grouped_data = defaultdict(list)
-
     df = data[(data['server_cpu'] > 0) & (data['client_cpu'] > 0) & (data['network'] > 0)]
-
     for combination, group in df.groupby(['server_cpu', 'client_cpu', 'network']):
-
         if training_data_per_env != -1:
+            # 2. take first n entries
             group = group.head(training_data_per_env)
-
         grouped_data[combination].append(group)
-
     grouped_data = {key: pd.concat(frames, ignore_index=True) for key, frames in grouped_data.items()}
 
+
+    # 3. Create cluster
     clusters = _cluster_groups(grouped_data, column='time')
 
+
+    # 4. Group dataframes by their cluster
     group_to_rows = {}
     for group_key, group_df in grouped_data.items():
         group_to_rows[group_key] = df[
@@ -31,14 +47,12 @@ def process_data(data, training_data_per_env=-1):
             (df['network'] == group_key[2])
             ]
 
-    # Split data based on clusters
     cluster_dataframes = {}
     for cluster_index, cluster in enumerate(clusters):
-        cluster_key = "cluster-" + "-".join(
-            f"{group_key[0]}_{group_key[1]}_{group_key[2]}" for group_key in cluster
-        )
+        # Create clusterkey containing all groups in that cluster
+        cluster_key = "cluster-" + "-".join(f"{group_key[0]}_{group_key[1]}_{group_key[2]}" for group_key in cluster)
 
-        # Combine rows for this cluster
+        # Combine all dataframes of that cluster
         cluster_rows = pd.concat([group_to_rows[group_key] for group_key in cluster], ignore_index=True)
         cluster_dataframes[cluster_key] = cluster_rows
 
@@ -46,6 +60,20 @@ def process_data(data, training_data_per_env=-1):
 
 
 def _cluster_groups(grouped_data, column):
+    """
+    This function generates cluster of the grouped data.
+
+    1. It calculates a similarity matrix based on a similarity function.
+    2. It tries to find the optimal number of clusters using the silhouette score.
+    3. Finaly it clusters the data into the specified number of clusters
+
+    Parameters:
+        grouped_data (dict): the grouped data to be clusters.
+        column (str): the column name by which the similarity should be calculated.
+
+    Returns:
+        list: A list of all clusters with their cluster members.
+    """
     group_keys = list(grouped_data.keys())
     group_frames = list(grouped_data.values())
 
@@ -60,7 +88,7 @@ def _cluster_groups(grouped_data, column):
 
     optimal_clusters, scores = _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=len(group_keys) - 1)
 
-    actual_clusters = min(optimal_clusters*2, len(group_keys) - 1)
+    actual_clusters = min(optimal_clusters*2, len(group_keys) - 1) # todo optimal number of clusters seems too low ?
 
     clustering = AgglomerativeClustering(n_clusters=actual_clusters, affinity='precomputed', linkage='average')
     labels = clustering.fit_predict(similarity_matrix)
@@ -73,12 +101,37 @@ def _cluster_groups(grouped_data, column):
 
 
 def _calculate_similarity(group1, group2, column):
+    """
+    This function calculated the similarity between two dataframes based on the
+    similarity of the distribution of values in the specified column.
+
+    Parameters:
+        group1 (dataframe): Data 1 to compare.
+        group2 (dataframe): Data 2 to compare.
+        column (str): Column on which to calculate the similarity on.
+
+    Returns:
+        float: The similarity of the two dataframe-columns.
+    """
     values1 = group1[column].values
     values2 = group2[column].values
     return wasserstein_distance(values1, values2)
 
 
 def _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=10):
+    """
+    This functino tries to find the optimal number of clusters for a similarity matrix.
+    For that it creates a clustering for each possible number of clusters, calculates
+    the silhouette-score for that clustering, and finaly return the number of clusters with
+    the highest silhouette-score.
+
+    Parameters:
+        similarity_matrix (dataframe): Similarity matrix on which the clustering should be based.
+        max_clusters (int): The maximum number of clusters to create.
+
+    Returns:
+        int: The number of optimal clusters.
+    """
     silhouette_scores = []
     max_clusters = int(max_clusters)
 
@@ -92,7 +145,7 @@ def _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=10):
 
     # Take clustering with best score
     optimal_clusters = np.argmax(silhouette_scores) + 2  # Add 2 because range starts at 2
-    return optimal_clusters, silhouette_scores
+    return optimal_clusters
 
 
 def _group_data_by_environment(file_list):

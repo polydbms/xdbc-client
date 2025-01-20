@@ -251,6 +251,22 @@ config_space_variable_parameters_generalized_1310k = \
      {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
      ]
 
+
+config_space_variable_parameters_generalized_42M = \
+    [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
+     {'name': "format", 'type': 'discrete', 'domain': [1, 2]},
+     {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
+     {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
+     {'name': "send_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     {'name': "write_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     {'name': "decomp_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     {'name': "read_partitions", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     {'name': "read_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     {'name': "deser_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     {'name': "ser_par", 'type': 'discrete', 'domain': [1]},    # this parameter currently has no influence on the perfoamnce, so including for completness.
+     {'name': "comp_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     ]
+
 config_space_variable_parameters_generalized_6250k = \
     [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
      {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
@@ -474,7 +490,9 @@ def get_config_space_string(config_space):
         config_space_string = "96636M"
     elif config_space == config_space_variable_parameters_generalized_test_search_space:
         config_space_string = "test_search_space"
-    return  config_space_string
+    elif config_space == config_space_variable_parameters_generalized_42M:
+        config_space_string = "42M"
+    return config_space_string
 
 def environment_to_string(environment):
     return f"S{environment['server_cpu']}_C{environment['client_cpu']}_N{environment['network']}"

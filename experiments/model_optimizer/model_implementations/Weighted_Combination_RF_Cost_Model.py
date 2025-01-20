@@ -45,6 +45,8 @@ class Per_Environment_RF_Cost_Model:
         )
         grouped = combine_data.groupby('environment')
 
+        # todo: use same logic as in transfer learning processor, but then how to calculate the difference between environments and clusters ?
+
         # then train a model for each environment-group
         for env, group in grouped:
             X = group[self.input_fields].values
@@ -75,7 +77,7 @@ class Per_Environment_RF_Cost_Model:
 
         X = data[self.input_fields].values
 
-
+        # Collect all prediction of the known models
         known_predictions = {}
         for env, model in self.models.items():
             prediction = model.predict(X)
@@ -84,6 +86,7 @@ class Per_Environment_RF_Cost_Model:
         # dict {env-key : weight }
         weight_vector = {}
 
+        # Calculate the difference between the true result and the predictions
         total_difference = 0
         for env, prediction in known_predictions.items():
             difference = abs(prediction - result[self.metric])  # calculate the error for the model
@@ -91,15 +94,14 @@ class Per_Environment_RF_Cost_Model:
             weight_vector[env] = weight                         # add to weight vector
             total_difference += weight
 
+        # Create a weight vector
         for env in weight_vector:
-            weight_vector[env] /= total_difference              # normalize wieghts to sum = 1
+            weight_vector[env] /= total_difference              # normalize weights to sum = 1
 
         for env in weight_vector:
-            weight_vector[env] *= factor                        # add factor to controll the the influence od the wieght vector
+            weight_vector[env] *= factor                        # add factor to control the influence od the weight vector
 
         self.weight_history.append(weight_vector)
-
-        #print(f"New weight vector: {weight_vector}")
 
     def convert_dataframe(self, df, reverse=False):
 
@@ -183,7 +185,7 @@ class Per_Environment_RF_Cost_Model:
         target_features[0][2] /= 100
 
         global weights
-
+        # Calculate the weights per model using one of these methods
         if weights_algorithm == "linear_regression":
 
             reg = LinearRegression(positive=True)  # use only positive weights
@@ -214,12 +216,14 @@ class Per_Environment_RF_Cost_Model:
             weights = 1 / distances
             weights /= np.sum(weights)
 
-        # add weight history from update method
 
+
+        # Introducce weight history from update method
         total_weights = len(self.weight_history)
         averaged_weights = np.zeros_like(weights)
         weight_decay_factor = 0.95 # todo whats a good value ?
 
+        # Calculate the actual added wieghts vector from the history
         for idx, weight_vector in enumerate(self.weight_history):
             influence = weight_decay_factor ** (total_weights - idx - 1)
             for i, env in enumerate(self.models.keys()):
@@ -229,7 +233,7 @@ class Per_Environment_RF_Cost_Model:
             normalization_factor = sum(weight_decay_factor ** (total_weights - idx - 1) for idx in range(total_weights))
             averaged_weights /= normalization_factor
 
-        # combine
+        # Combine the weight vectors
         final_weights = weights + averaged_weights
         final_weights /= np.sum(final_weights)
 
@@ -239,6 +243,8 @@ class Per_Environment_RF_Cost_Model:
         combined_predictions_final = np.dot(known_predictions, final_weights.T)
         combined_environment_final = np.dot(known_features.T, final_weights.T).T
 
+        # Depending on what cost model we created, return one of the combined predictions.
+        # ( the underlying_str is what I use the identify an algorithm after I ran it, so this way I can distinguish weather the update part was used or not)
         if 'update' in self.underlying:
             return {self.metric: combined_predictions_final[0]}
         else:

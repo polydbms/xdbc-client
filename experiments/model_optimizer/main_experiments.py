@@ -12,6 +12,8 @@ from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_C
     Per_Environment_RF_Cost_Model
 from experiments.model_optimizer.model_implementations.openbox_ask_tell import OpenBox_Ask_Tell
 from experiments.model_optimizer.model_implementations.syne_tune_ask_tell import Syne_Tune_Ask_Tell
+from experiments.model_optimizer.model_implementations.own_random_search import Own_Random_Search
+
 
 
 def main():
@@ -86,11 +88,9 @@ def main():
                                                           environment_108,environment_113,environment_115,
                                                           environment_116,environment_121,environment_123,
 
-                                                          environment_100,environment_105,environment_107,
-                                                          environment_108,environment_113,environment_115,
-                                                          environment_116,environment_121,environment_123
+
                                                           ],
-                                    algorithms_to_run=algos_to_run,
+                                    algorithms_to_run=['own_random_search'],
                                     config_space=config_space_variable_parameters_generalized_1310k,
                                     metric='time',
                                     mode='min',
@@ -452,6 +452,9 @@ def execute_run(algorithm, ssh_host, environment, config_space, metric, mode, lo
     elif algorithm in OpenBox_Ask_Tell.available_optimization_algorithms + Syne_Tune_Ask_Tell.available_optimization_algorithms:
         execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count)
 
+    elif algorithm in Own_Random_Search.available_algorithms:
+        execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count)
+
 def execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count):
     ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
 
@@ -462,6 +465,9 @@ def execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_
 
     elif algorithm in OpenBox_Ask_Tell.available_optimization_algorithms :
         optimizer = OpenBox_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying=algorithm)
+
+    elif algorithm in Own_Random_Search.available_algorithms :
+        optimizer = Own_Random_Search(config_space=config_space, metric=metric, mode=mode, underlying=algorithm)
 
     else:
         raise ValueError(f"Algorithm {algorithm} is not in available transfer algorithms of any supported library wrapper.")

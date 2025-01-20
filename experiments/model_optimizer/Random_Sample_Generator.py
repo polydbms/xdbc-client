@@ -49,7 +49,7 @@ def process_configuration(queue, environment, ssh_host, output_file, lock):
             queue.task_done()
 
 
-def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
+def execute_all_configurations(config_file, output_dir, ssh_hosts, count, environments):
     """
     #todo
 
@@ -61,15 +61,6 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count):
     # read the configurations to be executed
     df = pd.read_csv(config_file)
     configs = df.to_dict(orient="records")[:count]  # converts dataframe to LIST of dicts
-
-    #environments = [environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9]#environments_list
-    #environments = [environment_9,environment_5]#environments_list
-    #environments = all_additional_environments
-    #environments = envs_scale_network_test
-    # environments = [environment_50, environment_51, environment_52, environment_53, environment_54, environment_55, environment_56, environment_57,
-    #                 environment_70, environment_71, environment_72, environment_73, environment_74, environment_75, environment_76]
-    #environments = envs_scale_compute_test + envs_scale_network_test
-    environments = environment_list_test_new_base_envs
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -128,8 +119,7 @@ def generate_random_configurations(n=1000):
     results = pd.DataFrame()
     first_write_done = False
 
-    optimizer = Syne_Tune_Ask_Tell(config_space=CONFIG_SPACE,
-                                   underlying='grid_search')
+    optimizer = Syne_Tune_Ask_Tell(config_space=CONFIG_SPACE, underlying='grid_search')
 
     for i in range(0, n):
 
@@ -164,6 +154,8 @@ if __name__ == "__main__":
     #ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
     ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"]
 
-    for i in [4, 20, 32, 44, 66, 88, 100]:#, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
+    environments = environment_list_test_new_base_envs
+
+    for i in [4, 20, 32, 44, 66, 88, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
         print(f"starting executing with n = {i}")
-        execute_all_configurations(config_file, output_dir, ssh_hosts, i)
+        execute_all_configurations(config_file, output_dir, ssh_hosts, i, environments)
