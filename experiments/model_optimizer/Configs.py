@@ -513,3 +513,17 @@ def unparse_environment(env_string):
         }
     except (IndexError, ValueError):
         raise ValueError("Invalid input format. Expected format: 'SXX_CXX_NXXX'.")
+
+def unparse_environment_float(env_string):
+    try:
+        parts = env_string.split('_')
+        server_cpu = float(parts[0][1:])
+        client_cpu = float(parts[1][1:])
+        network = float(parts[2][1:])
+        return {
+            "server_cpu": server_cpu,
+            "client_cpu": client_cpu,
+            "network": network
+        }
+    except (IndexError, ValueError):
+        raise ValueError("Invalid input format. Expected format: 'SXX_CXX_NXXX'.")

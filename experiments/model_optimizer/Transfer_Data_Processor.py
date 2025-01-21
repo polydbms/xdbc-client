@@ -5,9 +5,10 @@ from scipy.stats import wasserstein_distance
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
 
+from experiments.model_optimizer.Configs import *
 
 
-def process_data(data, training_data_per_env=-1):
+def process_data(data, training_data_per_env=-1, cluster_labes_avg=False):
     """
     This function precesses data to be used in the trasnfe rlearning algorithms.
     1. It groups the data for each combination of 'server_cpu', 'client_cpu' and 'network' into dataframes.
@@ -52,6 +53,16 @@ def process_data(data, training_data_per_env=-1):
         # Create clusterkey containing all groups in that cluster
         cluster_key = "cluster-" + "-".join(f"{group_key[0]}_{group_key[1]}_{group_key[2]}" for group_key in cluster)
 
+        averaged_environments = tuple(sum(elements) / len(cluster) for elements in zip(*cluster))
+        print(f"Cluster containing {cluster}")
+        print(f"Averaged to : {averaged_environments}")
+
+        if cluster_labes_avg:
+            cluster_key = f"cluster-avg_S{averaged_environments[0]}_C{averaged_environments[1]}_N{averaged_environments[2]}"
+
+            #env_only = cluster_key.replace("cluster-avg_","")
+            #env_dict = unparse_environment_float(env_only)
+
         # Combine all dataframes of that cluster
         cluster_rows = pd.concat([group_to_rows[group_key] for group_key in cluster], ignore_index=True)
         cluster_dataframes[cluster_key] = cluster_rows
@@ -86,7 +97,7 @@ def _cluster_groups(grouped_data, column):
             similarity_matrix[i, j] = distance
             similarity_matrix[j, i] = distance
 
-    optimal_clusters, scores = _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=len(group_keys) - 1)
+    optimal_clusters = _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=len(group_keys) - 1)
 
     actual_clusters = min(optimal_clusters*2, len(group_keys) - 1) # todo optimal number of clusters seems too low ?
 

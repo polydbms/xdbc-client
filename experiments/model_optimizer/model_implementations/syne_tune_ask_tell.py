@@ -46,7 +46,7 @@ class Syne_Tune_Ask_Tell():
         self.config_space = convert_from_general(config_space, 'syne_tune')
         self.metric = metric
         self.mode = mode
-        self.underlying = underlying + "_syne_tune"
+        self.underlying = underlying + "_syne_tune_ndr"
 
         self.transfer_history = None
         self.scheduler = None

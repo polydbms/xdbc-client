@@ -39,7 +39,7 @@ class OpenBox_Ask_Tell():
         self.config_space = convert_from_general(config_space, 'open_box')
         self.metric = metric
         self.mode = mode
-        self.underlying = f"{underlying}_open_box"
+        self.underlying = f"{underlying}_open_box_ndr"
 
         self.history = None
         self.advisor = None

@@ -127,7 +127,7 @@ def transfer(config,i=0,max_retries=1, ssh=None):
             "read_partitions": config["read_partitions"],
             "deser_par": config["deser_par"],
             "comp_par": config["comp_par"],
-            "time": -1,
+            "time": config['timeout']*2, # todo test !!!!
             "datasize": -1,
             "avg_cpu_server": -1,
             "avg_cpu_client": -1,

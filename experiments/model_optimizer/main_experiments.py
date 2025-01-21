@@ -34,12 +34,8 @@ def main():
         test_transfer_on_changing_environment_setup(algo)
     '''
 
-
-    '''
-
-
-    test_cost_model_on_unknown_environments(ssh_host="cloud-7.dima.tu-berlin.de",
-                                            environments_to_run=[environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9,environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9],
+    test_cost_model_on_unknown_environments(ssh_host="cloud-9.dima.tu-berlin.de",
+                                            environments_to_run=environment_list_test_new_main_envs,
                                             config_space=config_space_variable_parameters_generalized_1310k,
                                             metric='time',
                                             mode='min',
@@ -47,16 +43,7 @@ def main():
                                             max_real_transfers=25,
                                             use_history=True)
 
-    test_cost_model_on_unknown_environments(ssh_host="cloud-9.dima.tu-berlin.de",
-                                            environments_to_run=[environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9,environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9],
-                                            config_space=config_space_variable_parameters_generalized_1310k,
-                                            metric='time',
-                                            mode='min',
-                                            max_training_transfers_per_iteration=500,
-                                            max_real_transfers=25,
-                                            use_history=False)
 
-    '''
 
 
     # EXAMPLE :
@@ -68,7 +55,7 @@ def main():
     #                            mode='min',
     #                            loop_count=25)
 
-
+    '''
     algos_to_run =[
         "tlbo_rgpe_prf",
         #"tlbo_sgpr_prf",
@@ -82,23 +69,17 @@ def main():
 
     #for n in [25,50,75,100,150,250,350,450]:
 
-
-    execute_optimization_runs_multi_threaded(ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"],
-                                    environments_to_run= [environment_100,environment_105,environment_107,
-                                                          environment_108,environment_113,environment_115,
-                                                          environment_116,environment_121,environment_123,
-
-
-                                                          ],
-                                    algorithms_to_run=['own_random_search'],
-                                    config_space=config_space_variable_parameters_generalized_1310k,
-                                    metric='time',
-                                    mode='min',
-                                    loop_count=25,
-                                    use_all_environments=False,
-                                    training_data_per_env=100)
-
-
+    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-9.dima.tu-berlin.de"],#, "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"],
+                                             environments_to_run=[env_S8_C2_N1000
+                                                                  ],
+                                             algorithms_to_run=algos_to_run,
+                                             config_space=config_space_variable_parameters_generalized_1310k,
+                                             metric='time',
+                                             mode='min',
+                                             loop_count=25,
+                                             use_all_environments=False,
+                                             training_data_per_env=100)
+    '''
 
 
 
@@ -166,11 +147,7 @@ def main():
     '''
 
 
-
-
-
-
-def experiment_indirect_optimization(cost_model, optimizer, environment, metric, config_space, max_training_transfers_per_iteration, max_real_transfers,ssh_host, trial_id=-1):
+def experiment_indirect_optimization(cost_model, optimizer, environment, metric, config_space, max_training_transfers_per_iteration, max_real_transfers, ssh_host, trial_id=-1):
     # train cost model
 
     # search cost model for config
@@ -269,6 +246,8 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         print(f"[{datetime.today().strftime('%H:%M:%S')}] running {max_training_transfers_per_iteration} surrogate transfers took {(end_inner - start_inner).total_seconds()} seconds")
         print(f"[{datetime.today().strftime('%H:%M:%S')}] best found configuration has predicted time of {best_predicted_time}")
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] now running best predicted config {best_predicted_config}")
+        # Get weight table for best config
+        cost_model.predict(best_predicted_config, environment, print=True)
 
         # run the actual transfer
         result = data_transfer_wrapper.transfer(best_predicted_config, i,ssh=ssh)
@@ -282,7 +261,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         result['algo'] = cost_model.underlying
         end_temp = datetime.now()
         result['seconds_since_start_of_opt_run'] = ((end_temp - start_outer).total_seconds())
-
+        result['predicted_time'] = best_predicted_time
 
         # save results to file
         df = pd.DataFrame(result, index=[0])
@@ -311,7 +290,8 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
     print(f"[{datetime.today().strftime('%H:%M:%S')}] best found configuration has time of {best_time}")
     print(f"[{datetime.today().strftime('%H:%M:%S')}] best config : {best_config}")
 
-def test_cost_model_on_unknown_environments(ssh_host,config_space, metric, mode, environments_to_run,max_training_transfers_per_iteration, max_real_transfers,use_history):
+
+def test_cost_model_on_unknown_environments(ssh_host, config_space, metric, mode, environments_to_run, max_training_transfers_per_iteration, max_real_transfers, use_history):
     input_fields = ["client_cpu",
                     "server_cpu",
                     "network",
@@ -336,42 +316,18 @@ def test_cost_model_on_unknown_environments(ssh_host,config_space, metric, mode,
 
     for environment in environments_to_run:
 
-        envs_to_exclude = []
-        if environment == environment_1:
-            envs_to_exclude = [environment_1,environment_4]
-        if environment == environment_2:
-            envs_to_exclude = [environment_2,environment_5]
-        if environment == environment_3:
-            envs_to_exclude = [environment_3,environment_8]
-        if environment == environment_4:
-            envs_to_exclude = [environment_1,environment_4]
-        if environment == environment_5:
-            envs_to_exclude = [environment_2,environment_5]
-        if environment == environment_6:
-            envs_to_exclude = [environment_6,environment_7]
-        if environment == environment_7:
-            envs_to_exclude = [environment_6,environment_7]
-        if environment == environment_8:
-            envs_to_exclude = [environment_3,environment_8]
-        if environment == environment_9:
-            envs_to_exclude = [environment_3,environment_9]
-
-        all_envs_inner = [environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9]
-
-
-        for env in envs_to_exclude:
-            if env in all_envs_inner:
-                all_envs_inner.remove(env)
-        environments_without_target = all_envs_inner
 
         # create cost model
         if use_history:
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_rs_exc_w_update")
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_rs_exc_w_update_non_neg")
         else:
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_rs_exc")
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_rs_exc_non_neg")
 
 
-        data = load_data_from_csv(type='random_samples_1310k',environment_list=environments_without_target)
+        #data = load_data_from_csv(type='random_samples_1310k',environment_list=environments_without_target)
+        data, suffix = get_transfer_learning_data_for_environment(environment,False)
+
+        data['bufpool_size'] = data['server_bufferpool_size']
 
         x, y = split_data(data, metric=metric)
         cost_model.train(x, y)
@@ -389,7 +345,7 @@ def test_cost_model_on_unknown_environments(ssh_host,config_space, metric, mode,
                                          ssh_host=ssh_host)
 
 
-def test_cost_model_on_all_environments(ssh_host,config_space, metric, mode, environments_to_run,max_training_transfers_per_iteration, max_real_transfers,):
+def test_cost_model_on_all_environments(ssh_host, config_space, metric, mode, environments_to_run, max_training_transfers_per_iteration, max_real_transfers,):
     input_fields = ["client_cpu",
                     "server_cpu",
                     "network",
@@ -414,14 +370,14 @@ def test_cost_model_on_all_environments(ssh_host,config_space, metric, mode, env
 
     for environment in environments_to_run:
 
-
-
-        all_envs_inner = [environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9]
 
         # create cost model
         cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,metric=metric, underlying="cost_model_rfs_all")
 
-        data = load_data_from_csv(type='random_samples_1310k',environment_list=all_envs_inner)
+        data, suffix = get_transfer_learning_data_for_environment(environment,True)
+
+        data['bufpool_size'] = data['server_bufferpool_size']
+
 
         x, y = split_data(data, metric=metric)
         cost_model.train(x, y)
@@ -439,13 +395,10 @@ def test_cost_model_on_all_environments(ssh_host,config_space, metric, mode, env
                                          ssh_host=ssh_host)
 
 
-
-
-
-
-
 def execute_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count, training_data_per_env, use_all_environments):
-
+    '''
+        should work with any algorithm that is specified in the available algorithm lists
+    '''
     if algorithm in OpenBox_Ask_Tell.available_transfer_algorithms + Syne_Tune_Ask_Tell.available_transfer_algorithms:
         execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, environment, config_space, metric, mode, loop_count, training_data_per_env)
 
@@ -454,6 +407,7 @@ def execute_run(algorithm, ssh_host, environment, config_space, metric, mode, lo
 
     elif algorithm in Own_Random_Search.available_algorithms:
         execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count)
+
 
 def execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count):
     ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
@@ -476,11 +430,8 @@ def execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_
 
     ssh.close()
 
-def execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, environment, config_space, metric, mode, loop_count, training_data_per_env):
-    '''
-        should work with any algorithm that is specified in the available algorithm lists
-    '''
 
+def execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, environment, config_space, metric, mode, loop_count, training_data_per_env):
     ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
 
     global optimizer
@@ -502,7 +453,8 @@ def execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, en
 
     ssh.close()
 
-def get_transfer_learning_data_for_environment(target_environment,use_all_environments,except_N_most_similar=2):
+
+def get_transfer_learning_data_for_environment(target_environment, use_all_environments, except_N_most_similar=2):
 
     base_path = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/random_samples_1310k"
     environments_to_use = []
@@ -510,51 +462,9 @@ def get_transfer_learning_data_for_environment(target_environment,use_all_enviro
 
     if use_all_environments:
 
-        if target_environment in [environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9]:
+        if target_environment in environment_list_test_new_base_envs:
             environments_to_use = environment_list_test_new_base_envs
             suffix = "_all_envs"
-
-        elif target_environment in environment_list_test_new_base_envs:
-            environments_to_use = environment_list_test_new_base_envs
-            suffix = "_all_envs"
-
-
-# 'old' main environments
-    elif target_environment == environment_1:
-        environments_to_use = ["S16_C8_N100","S8_C1_N50","S16_C4_N10","S8_C8_N500","S2_C2_N20","S16_C1_N1000","S16_C1_N10"]
-        suffix = "_exc_env1_env4"
-
-    elif target_environment == environment_2:
-        environments_to_use = ["S16_C16_N1000","S8_C1_N50","S16_C16_N10000","S8_C8_N500","S2_C2_N20","S16_C1_N1000","S16_C1_N10"]
-        suffix = "_exc_env2_env5"
-
-    elif target_environment == environment_3:
-        environments_to_use = ["S16_C16_N1000","S16_C8_N100","S16_C16_N10000","S16_C4_N10","S8_C8_N500","S2_C2_N20","S16_C1_N10"]
-        suffix = "_exc_env3_env8"
-
-    elif target_environment == environment_4:
-        environments_to_use = ["S16_C8_N100","S8_C1_N50","S16_C4_N10","S8_C8_N500","S2_C2_N20","S16_C1_N1000","S16_C1_N10"]
-        suffix = "_exc_env4_env1"
-
-    elif target_environment == environment_5:
-        environments_to_use = ["S16_C16_N1000","S8_C1_N50","S16_C16_N10000","S8_C8_N500","S2_C2_N20","S16_C1_N1000","S16_C1_N10"]
-        suffix = "_exc_env5_env2"
-
-    elif target_environment == environment_6:
-        environments_to_use = ["S16_C16_N1000","S16_C8_N100","S8_C1_N50","S16_C16_N10000","S16_C4_N10","S16_C1_N1000","S16_C1_N10"]
-        suffix = "_exc_env6_env7"
-
-    elif target_environment == environment_7:
-        environments_to_use = ["S16_C16_N1000","S16_C8_N100","S8_C1_N50","S16_C16_N10000","S16_C4_N10","S16_C1_N1000","S16_C1_N10"]
-        suffix = "_exc_env7_env6"
-
-    elif target_environment == environment_8:
-        environments_to_use = ["S16_C16_N1000","S16_C8_N100","S16_C16_N10000","S16_C4_N10","S8_C8_N500","S2_C2_N20","S16_C1_N10"]
-        suffix = "_exc_env8_env3"
-
-    elif target_environment == environment_9:
-        environments_to_use = ["S16_C16_N1000","S16_C8_N100","S16_C16_N10000","S16_C4_N10","S8_C8_N500","S2_C2_N20","S16_C1_N1000"]
-        suffix = "_exc_env9_env3"
 
 
     # environments sorted by similarity to the key-environemt. calculated using spearman rank coefficient on a sample size of about 80 samples per environment.
@@ -610,10 +520,6 @@ def get_transfer_learning_data_for_environment(target_environment,use_all_enviro
     data = pd.concat(data_frames, axis=0, ignore_index=True) if data_frames else pd.DataFrame()
 
     return data, suffix
-
-
-
-
 
 
 def test_transfer_on_changing_environment_setup(algo):
@@ -745,7 +651,6 @@ def test_transfer_on_changing_environment(optimizer, environment1, environment2,
         i += 1
 
     pass
-
 
 
 def experiment_direct_optimization_loop(optimizer, environment, metric, config_space, loop_count, trial_id=-1, ssh=None):

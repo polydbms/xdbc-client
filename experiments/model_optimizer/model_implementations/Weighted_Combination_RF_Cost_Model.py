@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
+from prettytable import PrettyTable
 from scipy.optimize import nnls, lsq_linear
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression, Ridge
 
+from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
 
@@ -39,16 +41,16 @@ class Per_Environment_RF_Cost_Model:
 
         combine_data = self.convert_dataframe(combine_data)
 
-        # group data per environment by using the env_to_string method
-        combine_data['environment'] = combine_data.apply(
-            lambda row: environment_values_to_string(row["server_cpu"], row["client_cpu"], row["network"]), axis=1
-        )
-        grouped = combine_data.groupby('environment')
+        grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=100, cluster_labes_avg=True)
+
 
         # todo: use same logic as in transfer learning processor, but then how to calculate the difference between environments and clusters ?
 
         # then train a model for each environment-group
-        for env, group in grouped:
+        for env, group in grouped.items():
+
+            env = env.replace("cluster-avg_","")
+
             X = group[self.input_fields].values
             y = group[self.metric].values
 
@@ -128,7 +130,7 @@ class Per_Environment_RF_Cost_Model:
 
         return data
 
-    def predict(self, data, target_environment, weights_algorithm="distances"):
+    def predict(self, data, target_environment, weights_algorithm="distances", print=False):
         """
         Predict for a target environment using the cost model for that environment,
         or if the environment is not known, a linear combination of known models.
@@ -163,10 +165,10 @@ class Per_Environment_RF_Cost_Model:
         known_predictions = []
 
         for env, model in self.models.items():
-            env_dict = unparse_environment(env)
-            env_server = env_dict['server_cpu']
-            env_client = env_dict['client_cpu']
-            env_network = env_dict['network']
+            env_dict = unparse_environment_float(env)
+            env_server = round(env_dict['server_cpu'],2)
+            env_client = round(env_dict['client_cpu'],2)
+            env_network = round(env_dict['network'],2)
 
             known_features.append([env_server, env_client, env_network])
 
@@ -184,37 +186,48 @@ class Per_Environment_RF_Cost_Model:
         known_features[:, 2] /= 100
         target_features[0][2] /= 100
 
-        global weights
+        weights = None
+        weights_normalized = None
+
         # Calculate the weights per model using one of these methods
         if weights_algorithm == "linear_regression":
 
             reg = LinearRegression(positive=True)  # use only positive weights
             reg.fit(known_features.transpose(), target_features.transpose())
-            weights = reg.coef_
+            weights = reg.coef_[0]
+            weights_normalized = weights / np.sum(weights)
 
         elif weights_algorithm == "ridge_regression":
 
             reg = Ridge(positive=True, alpha=1.0)
             reg.fit(known_features.transpose(), target_features.transpose())
-            weights = reg.coef_
+            weights = reg.coef_[0]
+            weights_normalized = weights / np.sum(weights)
 
         elif weights_algorithm == "random_forest_regression":
 
             reg = RandomForestRegressor(n_estimators=100, random_state=123)
             reg.fit(known_features.transpose(), target_features.transpose())
-            weights = reg.feature_importances_
+            weights = reg.feature_importances_[0]
+            weights_normalized = weights / np.sum(weights)
 
         elif weights_algorithm == "least_squares_linear":
 
             res = lsq_linear(known_features.T, target_features[0], bounds=(0, np.inf))
-            weights = res.x
+            weights = res.x[0]
+            weights_normalized = weights / np.sum(weights)
 
         elif weights_algorithm == "distances":
 
             distances = np.linalg.norm(known_features - target_features[0], axis=1)
             distances = np.where(distances == 0, 1e-8, distances)
             weights = 1 / distances
-            weights /= np.sum(weights)
+            weights_normalized = weights / np.sum(weights)
+
+        elif weights_algorithm == "distances_test":
+
+            weights, residuals, rank, s = np.linalg.lstsq(known_features.T, target_features.flatten(), rcond=None)
+            weights_normalized = weights / np.sum(weights)
 
 
 
@@ -235,17 +248,44 @@ class Per_Environment_RF_Cost_Model:
 
         # Combine the weight vectors
         final_weights = weights + averaged_weights
-        final_weights /= np.sum(final_weights)
+        final_weights_normalized = final_weights / np.sum(final_weights)
 
-        combined_predictions = np.dot(known_predictions, weights.T)
-        combined_environment = np.dot(known_features.T, weights.T).T
 
-        combined_predictions_final = np.dot(known_predictions, final_weights.T)
-        combined_environment_final = np.dot(known_features.T, final_weights.T).T
+        #use normalized weights for combining predictions, non normalized for environments printing
+        combined_predictions = np.dot(weights_normalized, known_predictions.flatten())
+        combined_environment = np.dot(weights, known_features)
+
+        combined_predictions_final = np.dot(final_weights_normalized, known_predictions.flatten())
+        combined_environment_final = np.dot(final_weights, known_features)
+
+
+        data_df = {'Env/Cluster' : [" ".join(map(str, row)) for row in known_features],
+                   'Predictions': known_predictions[0],
+                   'Weights': weights_normalized,
+                   'Weights w/ hist.': final_weights_normalized}
+
+        df_to_print = pd.DataFrame(data_df)
+        df_to_print = df_to_print.round(2)
+
+        table = PrettyTable()
+        table.field_names = df_to_print.columns.tolist()
+        for row in df_to_print.itertuples(index=False):
+            table.add_row(row)
+
+        if print:
+
+            print(f"\nTarget Environment: {environment_to_string(target_environment)}")
+            print(f"Feature vector: {target_features}")
+            print(table)
+
+            print(f"Prediction :         { round(combined_predictions,2)}")
+            print(f"Prediction w/ hist.: { round(combined_predictions_final,2)}")
+            print(f"Estimated Environment :         { np.round(combined_environment,2)}")
+            print(f"Estimated Environment w/ hist.: { np.round(combined_environment_final,2)}")
 
         # Depending on what cost model we created, return one of the combined predictions.
         # ( the underlying_str is what I use the identify an algorithm after I ran it, so this way I can distinguish weather the update part was used or not)
         if 'update' in self.underlying:
-            return {self.metric: combined_predictions_final[0]}
+            return {self.metric: combined_predictions_final}
         else:
-            return {self.metric: combined_predictions[0]}
+            return {self.metric: combined_predictions}

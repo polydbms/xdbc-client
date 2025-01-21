@@ -152,10 +152,10 @@ if __name__ == "__main__":
     output_dir = f"random_samples_{config_space_string}"
 
     #ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
-    ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"]
+    ssh_hosts = ["cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"]
 
     environments = environment_list_test_new_base_envs
 
-    for i in [4, 20, 32, 44, 66, 88, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
+    for i in [4, 20, 32, 44, 66, 88, 100, 120, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
         print(f"starting executing with n = {i}")
         execute_all_configurations(config_file, output_dir, ssh_hosts, i, environments)
