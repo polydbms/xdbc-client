@@ -10,7 +10,7 @@ from experiments.model_optimizer.Configs import *
 
 
 class Per_Environment_RF_Cost_Model:
-    def __init__(self, input_fields, metric='time', underlying="cost_model_rfs"):
+    def __init__(self, input_fields, metric='time', data_per_env=100, underlying="cost_model_rfs"):
         """
        Initializes the Per_Environment_RF_Cost_Model, which trains and predicts using
        Random Forest models for multiple environment.
@@ -25,6 +25,7 @@ class Per_Environment_RF_Cost_Model:
         self.models = {}  # dict to store rf's per environment
         self.environments = []  # list of known environments
         self.underlying = underlying
+        self.data_per_env = data_per_env
         self.weight_history = []
 
     def train(self, x_train, y_train):
@@ -41,10 +42,8 @@ class Per_Environment_RF_Cost_Model:
 
         combine_data = self.convert_dataframe(combine_data)
 
-        grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=100, cluster_labes_avg=True)
+        grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=self.data_per_env, cluster_labes_avg=True)
 
-
-        # todo: use same logic as in transfer learning processor, but then how to calculate the difference between environments and clusters ?
 
         # then train a model for each environment-group
         for env, group in grouped.items():
@@ -130,7 +129,7 @@ class Per_Environment_RF_Cost_Model:
 
         return data
 
-    def predict(self, data, target_environment, weights_algorithm="distances", print=False):
+    def predict(self, data, target_environment, weights_algorithm="distances", print_wieghts=False):
         """
         Predict for a target environment using the cost model for that environment,
         or if the environment is not known, a linear combination of known models.
@@ -272,9 +271,9 @@ class Per_Environment_RF_Cost_Model:
         for row in df_to_print.itertuples(index=False):
             table.add_row(row)
 
-        if print:
+        if print_wieghts == True:
 
-            print(f"\nTarget Environment: {environment_to_string(target_environment)}")
+            print(f"\nTarget Environment: S{target_environment['server_cpu']}_C{target_environment['client_cpu']}_N{target_environment['network']}")
             print(f"Feature vector: {target_features}")
             print(table)
 

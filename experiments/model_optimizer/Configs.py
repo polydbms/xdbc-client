@@ -2,8 +2,6 @@ import sys
 from syne_tune.config_space import choice, ordinal, Integer, Float
 from openbox import space as sp
 
-
-
 DEFAULT_LOGGING = {
     'version': 1,
     'formatters': {
@@ -104,35 +102,7 @@ environment_9 = {
     "timeout": 1500
 }
 
-
 environments_list = [environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9]
-
-all_algorithms = [
-"bayesian_open_box",
-"bayesian_syne_tune",
-"random_search_syne_tune",
-"hyperband_syne_tune",
-"asha_syne_tune",
-"grid_search_syne_tune",
-"tlbo_rgpe_prf_all",
-"tlbo_sgpr_prf_all",
-"tlbo_topov3_prf_all",
-"tlbo_rgpe_gp_all",
-"tlbo_sgpr_gp_all",
-"tlbo_topov3_gp_all",
-"tlbo_rgpe_prf_exc",
-"tlbo_sgpr_prf_exc",
-"tlbo_topov3_prf_exc",
-"tlbo_rgpe_gp_exc",
-"tlbo_sgpr_gp_exc",
-"tlbo_topov3_gp_exc",
-"zero_shot_all",
-"quantile_all",
-"zero_shot_exc",
-"quantile_exc"
-]
-
-
 
 env_S16_C16_N1000 = environment_1
 env_S16_C8_N100 = environment_2
@@ -152,11 +122,11 @@ fixed_parameters = {
     "network_loss": 0,
     "table": "lineitem_sf10",
     'src': 'csv',
-    'src_format': 1,
     'target': 'csv',
-    'target_format': 1,
     'server_container': 'xdbcserver',
-    'client_container': 'xdbcclient'
+    'client_container': 'xdbcclient',
+    'src_format': 1,
+    'target_format': 1
 }
 
 variable_parameter_baseline = {
@@ -205,8 +175,6 @@ config_space_variable_parameters_skopt = \
      ]
 '''
 
-
-
 config_space_variable_parameters_generalized_test_search_space = \
     [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
      {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
@@ -250,7 +218,6 @@ config_space_variable_parameters_generalized_1310k = \
      {'name': "ser_par", 'type': 'discrete', 'domain': [1]},    # this parameter currently has no influence on the perfoamnce, so including for completness.
      {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
      ]
-
 
 config_space_variable_parameters_generalized_42M = \
     [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
@@ -327,6 +294,7 @@ all_hosts_cloud_11 = ["cloud-11.dima.tu-berlin.de",
                      # "cloud-33.dima.tu-berlin.de",
                       #"cloud-34.dima.tu-berlin.de",
                       #"cloud-35.dima.tu-berlin.de"] #23 nodes
+
 
 def get_username_for_host(ssh_host):
     if ssh_host in all_hosts_cloud_7:
@@ -494,11 +462,14 @@ def get_config_space_string(config_space):
         config_space_string = "42M"
     return config_space_string
 
+
 def environment_to_string(environment):
     return f"S{environment['server_cpu']}_C{environment['client_cpu']}_N{environment['network']}"
 
+
 def environment_values_to_string(server_cpu,client_cpu,network):
     return f"S{int(round(server_cpu,0))}_C{int(round(client_cpu,0))}_N{int(round(network,0))}"
+
 
 def unparse_environment(env_string):
     try:
@@ -514,6 +485,7 @@ def unparse_environment(env_string):
     except (IndexError, ValueError):
         raise ValueError("Invalid input format. Expected format: 'SXX_CXX_NXXX'.")
 
+
 def unparse_environment_float(env_string):
     try:
         parts = env_string.split('_')
@@ -526,4 +498,4 @@ def unparse_environment_float(env_string):
             "network": network
         }
     except (IndexError, ValueError):
-        raise ValueError("Invalid input format. Expected format: 'SXX_CXX_NXXX'.")
+        raise ValueError(f"Invalid input format. Expected format: 'SXX_CXX_NXXX', got {env_string}")

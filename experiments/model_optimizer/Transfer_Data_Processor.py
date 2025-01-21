@@ -54,8 +54,8 @@ def process_data(data, training_data_per_env=-1, cluster_labes_avg=False):
         cluster_key = "cluster-" + "-".join(f"{group_key[0]}_{group_key[1]}_{group_key[2]}" for group_key in cluster)
 
         averaged_environments = tuple(sum(elements) / len(cluster) for elements in zip(*cluster))
-        print(f"Cluster containing {cluster}")
-        print(f"Averaged to : {averaged_environments}")
+        #print(f"Cluster containing {cluster}")
+        #print(f"Averaged to : {averaged_environments}")
 
         if cluster_labes_avg:
             cluster_key = f"cluster-avg_S{averaged_environments[0]}_C{averaged_environments[1]}_N{averaged_environments[2]}"

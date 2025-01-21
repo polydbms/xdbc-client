@@ -211,7 +211,7 @@ def check_for_duplicate(config, filename="random_samples_16_16_1000.csv"):
         return None
 
 
-def get_next_trial_id(path="C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/results/"):
+def get_next_trial_id(path="C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/results_1310k/"):
 
     all_files = glob.glob(path+"*/*/*.csv")
 
