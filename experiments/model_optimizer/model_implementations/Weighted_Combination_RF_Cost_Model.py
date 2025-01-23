@@ -42,7 +42,12 @@ class Per_Environment_RF_Cost_Model:
 
         combine_data = self.convert_dataframe(combine_data)
 
-        grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=self.data_per_env, cluster_labes_avg=True)
+        if 'cluster' in self.underlying:
+            # cluster data automatically
+            grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=self.data_per_env, cluster_labes_avg=True, n_clusters=0)
+        else:
+            # one cluster per environment
+            grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=self.data_per_env, cluster_labes_avg=True, n_clusters=-1)
 
 
         # then train a model for each environment-group
@@ -53,7 +58,12 @@ class Per_Environment_RF_Cost_Model:
             X = group[self.input_fields].values
             y = group[self.metric].values
 
-            model = RandomForestRegressor(n_estimators=100, random_state=123)
+            model = RandomForestRegressor(n_estimators=100,
+                                          max_depth=None,
+                                          min_samples_split=2,
+                                          min_samples_leaf=1,
+                                          bootstrap=True,
+                                          random_state=123)
             model.fit(X, y)
 
             self.models[env] = model
@@ -233,7 +243,7 @@ class Per_Environment_RF_Cost_Model:
         # Introducce weight history from update method
         total_weights = len(self.weight_history)
         averaged_weights = np.zeros_like(weights)
-        weight_decay_factor = 0.95 # todo whats a good value ?
+        weight_decay_factor = 0.9 # todo whats a good value ?
 
         # Calculate the actual added wieghts vector from the history
         for idx, weight_vector in enumerate(self.weight_history):
@@ -245,8 +255,12 @@ class Per_Environment_RF_Cost_Model:
             normalization_factor = sum(weight_decay_factor ** (total_weights - idx - 1) for idx in range(total_weights))
             averaged_weights /= normalization_factor
 
+        if not np.all(averaged_weights == 0):
+            averaged_weights = np.where(averaged_weights == 0, 1e-8, averaged_weights)
+            averaged_weights /= np.sum(averaged_weights)
+
         # Combine the weight vectors
-        final_weights = weights + averaged_weights
+        final_weights = weights_normalized + averaged_weights
         final_weights_normalized = final_weights / np.sum(final_weights)
 
 
@@ -261,10 +275,13 @@ class Per_Environment_RF_Cost_Model:
         data_df = {'Env/Cluster' : [" ".join(map(str, row)) for row in known_features],
                    'Predictions': known_predictions[0],
                    'Weights': weights_normalized,
-                   'Weights w/ hist.': final_weights_normalized}
+                   'Weights w/ hist.': final_weights_normalized,
+                   'Hist. Weights': averaged_weights}
 
         df_to_print = pd.DataFrame(data_df)
         df_to_print = df_to_print.round(2)
+
+        df_to_print = df_to_print.sort_values(by='Weights w/ hist.', ascending=True, inplace=False)
 
         table = PrettyTable()
         table.field_names = df_to_print.columns.tolist()

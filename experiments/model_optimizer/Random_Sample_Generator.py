@@ -26,14 +26,17 @@ def process_configuration(queue, environment, ssh_host, output_file, lock):
     while not queue.empty():
         config_id, config = queue.get()
         try:
-            print(f"[{datetime.today().strftime('%H:%M:%S')}] starting to execute config {config_id} for environment {environment_to_string(environment)} on {ssh_host}  {config}")
+            print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh_host}] starting to execute config {config_id} for environment {environment_to_string(environment)} {config}")
 
-            complete_config = create_complete_config(environment, 'time', 'dict', config)
+            complete_config = create_complete_config(environment=environment, metric='time', library='dict', config=config)
 
             #run transfer
-            ssh = SSHConnection(ssh_host, "bene")
-            result = data_transfer_wrapper.transfer(complete_config, max_retries=1, ssh=ssh, i=config['config_id'])
+            ssh = SSHConnection(host=ssh_host, username="bene")
+            result = data_transfer_wrapper.transfer(config=complete_config, max_retries=1, ssh=ssh, i=config['config_id'])
             ssh.close()
+            
+            if result['transfer_id'] == -1:
+                result['time'] = -1
 
             result['config_id'] = config_id
             with lock:
@@ -43,7 +46,7 @@ def process_configuration(queue, environment, ssh_host, output_file, lock):
                 else:
                     df.to_csv(output_file, mode='a', header=True, index=False)
 
-            print(f"[{datetime.today().strftime('%H:%M:%S')}] finished executing  config {config_id} for environment {environment_to_string(environment)} on {ssh_host}  in {result['time']} seconds")
+            print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh_host}] finished executing  config {config_id} for environment {environment_to_string(environment)} in {result['time']} seconds")
 
         finally:
             queue.task_done()
@@ -89,7 +92,7 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count, enviro
 
         queue = Queue()
         for config_id, config in remaining_configs:
-            queue.put((config_id, config))
+            queue.put((config_id, config)) # todo have on generall queue, to not have to wait for one env to finish until it can start with hte nxt one.
 
         lock = threading.Lock()
 
@@ -152,10 +155,10 @@ if __name__ == "__main__":
     output_dir = f"random_samples_{config_space_string}"
 
     #ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
-    ssh_hosts = ["cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"]
+    ssh_hosts = ["cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
 
     environments = environment_list_test_new_base_envs
 
-    for i in [4, 20, 32, 44, 66, 88, 100, 120, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
+    for i in [4, 20, 32, 44, 66, 88, 100, 120, 150, 175, 200, 210, 215, 220, 225, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
         print(f"starting executing with n = {i}")
         execute_all_configurations(config_file, output_dir, ssh_hosts, i, environments)

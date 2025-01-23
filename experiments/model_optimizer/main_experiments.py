@@ -16,50 +16,50 @@ from experiments.model_optimizer.model_implementations.own_random_search import 
 
 
 def main():
-    '''
-    ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"]
-
-    envs = [[environment_100, environment_105, environment_107],
-
-            [environment_108, environment_113, environment_115],
-
-            [environment_116, environment_121, environment_123]]
-
-    threads = []
-    for i in range(len(ssh_hosts)):
-        thread = threading.Thread(target=execute_cost_model_run, args=(ssh_hosts[i], "cost_model_rfs_rs", config_space_variable_parameters_generalized_1310k, 'time', 'min', envs[i], 500, 25, True, False, 100))
-        time.sleep(2.5)  # so no threads start at the same time, bc filenames depend on timestamp
-        thread.start()
-        threads.append(thread)
-
-    for thread in threads:
-        thread.join()
-    '''
-
-
-
 
     algos_to_run = [
-        #"tlbo_rgpe_prf",
-        #"tlbo_sgpr_prf",
-        #"tlbo_topov3_prf",
-        #"tlbo_rgpe_gp",
-        #"tlbo_sgpr_gp",
-        #"tlbo_topov3_gp",
-        #"zero_shot",
-        #"quantile"
-        "cost_model_rfs_bay"
-    ]
+        "cost_model_rfs_bay",       #test both rs and bay, with clustering or not, both using history updates
+        "cost_model_rfs_rs",
 
-    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-8.dima.tu-berlin.de"],  #, "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de"],
-                                             environments_to_run=[env_S8_C8_N150],
+        "cost_model_rfs_bay_cluster",
+        "cost_model_rfs_rs_cluster",
+        
+        
+        "bayesian_open_box",
+
+        "tlbo_rgpe_prf",
+        "tlbo_topov3_prf",
+
+        #"tlbo_rgpe_gp",
+        #"tlbo_topov3_gp",
+
+        "quantile",
+        
+
+    ]
+    '''
+    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de"],#, "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
+                                             environments_to_run=[env_S16_C4_N1000],#environment_list_test_new_main_envs,
+                                             algorithms_to_run=["cost_model_rfs_bay", "cost_model_rfs_bay_cluster"],
+                                             config_space=config_space_variable_parameters_generalized_1310k,
+                                             metric='time',
+                                             mode='min',
+                                             loop_count=2,
+                                             use_all_environments=False,
+                                             training_data_per_env=200,
+                                             max_training_transfers_per_iteration=150,
+                                             use_history=True)
+
+    '''
+    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
+                                             environments_to_run=environment_list_test_new_main_envs,
                                              algorithms_to_run=algos_to_run,
                                              config_space=config_space_variable_parameters_generalized_1310k,
                                              metric='time',
                                              mode='min',
                                              loop_count=25,
                                              use_all_environments=False,
-                                             training_data_per_env=100,
+                                             training_data_per_env=200,
                                              max_training_transfers_per_iteration=150,
                                              use_history=True)
 
@@ -126,7 +126,9 @@ def main():
     '''
 
 
-cost_model_algorithms = ["test_cost_model_rfs_rs", "test_cost_model_rfs_bay", "cost_model_rfs_rs", "cost_model_rfs_bay"]
+cost_model_algorithms = ["test_cost_model_rfs_rs", "test_cost_model_rfs_bay",
+                         "cost_model_rfs_rs", "cost_model_rfs_bay",
+                         "cost_model_rfs_rs_cluster", "cost_model_rfs_bay_cluster"]
 
 
 #========================================================================
@@ -161,7 +163,7 @@ def experiment_direct_optimization_loop(optimizer, environment, metric, config_s
     i = 1
     while i < loop_count+1:
 
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] starting  transfer #{i}")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{optimizer.underlying}] starting  transfer #{i}")
         start = datetime.now()
 
         #get next config
@@ -211,7 +213,7 @@ def experiment_direct_optimization_loop(optimizer, environment, metric, config_s
         results = pd.concat([results, df], axis=0)
 
         end = datetime.now()
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] completed transfer #{i} in {(end - start).total_seconds()} seconds (result time was {result['time']})")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{optimizer.underlying}] completed transfer #{i} in {(end - start).total_seconds()} seconds (result time was {result['time']})")
 
         #should_stop = Stopping_Rules.get_decision("no_improvment_iterations", results['time'].values)
 
@@ -220,6 +222,8 @@ def experiment_direct_optimization_loop(optimizer, environment, metric, config_s
 
 
 def experiment_indirect_optimization(cost_model, optimizer, environment, metric, config_space, max_training_transfers_per_iteration, max_real_transfers, ssh_host, trial_id=-1):
+
+    print(f"\n----------------------------- \n now starting with cost model {cost_model.underlying} with environment {environment_to_string(environment)} for {max_real_transfers} real transfers on [{ssh_host}]\n ----------------------------- \n")
 
     # create files etc
     global result
@@ -251,7 +255,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         best_predicted_config = None
         best_predicted_time = -1
 
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] now starting to run {max_training_transfers_per_iteration} surrogate transfers")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] now starting to run {max_training_transfers_per_iteration} surrogate transfers")
 
         start_inner = datetime.now()
         for i_inner in range(1, max_training_transfers_per_iteration + 1):
@@ -275,9 +279,9 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
             optimizer.report(suggested_config, result_cost_model)
         end_inner = datetime.now()
 
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] running {max_training_transfers_per_iteration} surrogate transfers took {(end_inner - start_inner).total_seconds()} seconds")
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] best found configuration has predicted time of {best_predicted_time}")
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] now running best predicted config {best_predicted_config}")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] running {max_training_transfers_per_iteration} surrogate transfers took {(end_inner - start_inner).total_seconds()} seconds")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] best found configuration has predicted time of {best_predicted_time}")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] now running best predicted config {best_predicted_config}")
         # Get weight table for best config
         cost_model.predict(data=best_predicted_config, target_environment=environment, print_wieghts=True)
 
@@ -285,7 +289,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         result = data_transfer_wrapper.transfer(best_predicted_config, i, ssh=ssh)
         count_real_transfers = count_real_transfers + 1
         result_time = float(result[metric])
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] true data transfer completed in {result['time']} seconds \n")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] true data transfer completed in {result['time']} seconds \n")
 
         # add additional fields
         result['trial_id'] = trial_id
@@ -314,9 +318,9 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
 
     end_outer = datetime.now()
 
-    print(f"[{datetime.today().strftime('%H:%M:%S')}] running {count_real_transfers} real transfers with {max_training_transfers_per_iteration * count_real_transfers} training transfers took {(end_outer - start_outer).total_seconds()} seconds")
-    print(f"[{datetime.today().strftime('%H:%M:%S')}] best found configuration has time of {best_time}")
-    print(f"[{datetime.today().strftime('%H:%M:%S')}] best config : {best_config}")
+    print(f"[{datetime.today().strftime('%H:%M:%S')}] [{cost_model.underlying}] running {count_real_transfers} real transfers with {max_training_transfers_per_iteration * count_real_transfers} training transfers took {(end_outer - start_outer).total_seconds()} seconds")
+    print(f"[{datetime.today().strftime('%H:%M:%S')}] [{cost_model.underlying}] best found configuration has time of {best_time}")
+    print(f"[{datetime.today().strftime('%H:%M:%S')}] [{cost_model.underlying}] best config : {best_config}")
 
 
 #========================================================================
@@ -390,12 +394,13 @@ def execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, en
 
 
 def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, environment, max_training_transfers_per_iteration, max_real_transfers, use_history, use_all_environments, training_data_per_env):
-    input_fields = ["client_cpu",
-                    "server_cpu",
-                    "network",
+    input_fields = [
+                    #"client_cpu",
+                    #"server_cpu",
+                    #"network",         # if i split the rf by env anyway, why would i need to include env variabels ??
                     #"network_latency",
                     #"network_loss",
-                    #"source_system",
+                    #"source_system",   # potentialy relevant if variety in training data, also the format
                     #"target_system",
                     #"table",
                     "bufpool_size",
@@ -408,9 +413,9 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
                     "read_partitions",
                     "read_par",
                     "deser_par",
+                    #"ser_par",         # add in the future
                     "comp_par"
                     ]
-
 
     cost_model = None
     search_optimizer = None
@@ -425,21 +430,37 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
             search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
 
         elif algorithm == "cost_model_rfs_rs":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_w_update_non_neg")
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_w_update")
             search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
 
         elif algorithm == "cost_model_rfs_bay":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_w_update_non_neg")
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_w_update")
+            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
+
+        elif algorithm == "cost_model_rfs_rs_cluster":
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_w_update_cluster")
+            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
+
+        elif algorithm == "cost_model_rfs_bay_cluster":
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_w_update_cluster")
             search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
 
     else:
 
         if algorithm == "cost_model_rfs_rs":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_non_neg")
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc")
             search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
 
         elif algorithm == "cost_model_rfs_bay":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_non_neg")
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc")
+            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
+
+        elif algorithm == "cost_model_rfs_rs_cluster":
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_cluster")
+            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
+
+        elif algorithm == "cost_model_rfs_bay_cluster":
+            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_cluster")
             search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
 
     if cost_model is None:

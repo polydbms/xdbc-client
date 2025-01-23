@@ -41,8 +41,7 @@ def transfer(config,i=0,max_retries=1, ssh=None):
     #max_retries = 1
 
     while not result and retries < max_retries:
-        print(
-            f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] transfer #{i} failed for {retries + 1} times, retrying for {retries + 1} time")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] transfer #{i} failed for {retries + 1} times, retrying for {retries + 1} time")
         result = train_method(config, ssh)
         retries = retries + 1
 
@@ -103,7 +102,7 @@ def transfer(config,i=0,max_retries=1, ssh=None):
             "send_load": -1,
             "date": -1,
             "xdbc_version": -1,
-            "host": -1,
+            "host": ssh.hostname,
             "run": -1,
             "source_system": -1,
             "target_system": -1,
