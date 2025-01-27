@@ -1,7 +1,7 @@
 #ifndef XDBC_RUNTIMEENV_H
 #define XDBC_RUNTIMEENV_H
 
-#include "customQueue.h"
+#include "BufferGenerator.h"
 #include <vector>
 #include <string>
 #include <atomic>
@@ -10,18 +10,20 @@
 #include <numeric>
 #include <sstream>
 
-namespace xdbc {
-
+namespace xdbc
+{
 
     constexpr size_t MAX_ATTRIBUTES = 230;
 
-    struct SchemaAttribute {
+    struct SchemaAttribute
+    {
         std::string name;
         std::string tpe;
         int size;
     };
 
-    struct ProfilingTimestamps {
+    struct ProfilingTimestamps
+    {
         std::chrono::high_resolution_clock::time_point timestamp;
         int thread;
         std::string component;
@@ -31,10 +33,13 @@ namespace xdbc {
     typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
     typedef std::shared_ptr<customQueue<ProfilingTimestamps>> PTQ_ptr;
 
-    class RuntimeEnv {
+    class RuntimeEnv
+    {
     public:
         // Public members for configuration and state
         std::vector<std::vector<std::byte>> *bp = nullptr;
+        // BufferGenerator bufferGenerator;
+
         long transfer_id = 0;
         std::string env_name;
         int buffers_in_bufferpool = 0;
@@ -69,7 +74,8 @@ namespace xdbc {
         std::atomic<int> finishedWriteThreads = 0;
         PTQ_ptr pts = std::make_shared<customQueue<ProfilingTimestamps>>();
 
-        std::string toString() const {
+        std::string toString() const
+        {
             std::ostringstream oss;
 
             oss << "RuntimeEnv Configuration:\n";
@@ -117,9 +123,11 @@ namespace xdbc {
         RuntimeEnv() = default;
 
         // Utility to calculate tuple size based on schema
-        void calculateTupleSize() {
+        void calculateTupleSize()
+        {
             tuple_size = std::accumulate(schema.begin(), schema.end(), 0,
-                                         [](int acc, const SchemaAttribute &attr) {
+                                         [](int acc, const SchemaAttribute &attr)
+                                         {
                                              return acc + attr.size;
                                          });
             tuples_per_buffer = (buffer_size * 1024 / tuple_size);
@@ -129,7 +137,8 @@ namespace xdbc {
     typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
     typedef std::shared_ptr<customQueue<ProfilingTimestamps>> PTQ_ptr;
 
-    struct Header {
+    struct Header
+    {
 
         size_t compressionType;
         size_t totalSize;
@@ -138,9 +147,7 @@ namespace xdbc {
         size_t crc;
         size_t attributeSize[MAX_ATTRIBUTES];
         size_t attributeComp[MAX_ATTRIBUTES];
-
     };
 } // namespace xdbc
-
 
 #endif // XDBC_RUNTIMEENV_H

@@ -1,3 +1,6 @@
+.vscode/*
+Sinks/build/*
+xdbc_client_timings.csv
 build/*
 cmake-build-*
 .idea/*
