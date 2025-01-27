@@ -16,10 +16,10 @@ public:
         : max_bufID(0) {}
 
     // Create a buffer and map it to the given token_bufferID
-    std::vector<std::byte> &createBuffer(int token_bufferID)
+    std::vector<std::byte> &createBuffer(int token_bufferID, size_t bufSize)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        usedBuffers[token_bufferID] = std::vector<std::byte>(bufferSize);
+        usedBuffers[token_bufferID] = std::vector<std::byte>(bufSize);
         return usedBuffers[token_bufferID];
     }
 

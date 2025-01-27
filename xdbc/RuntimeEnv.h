@@ -38,7 +38,7 @@ namespace xdbc
     public:
         // Public members for configuration and state
         std::vector<std::vector<std::byte>> *bp = nullptr;
-        // BufferGenerator bufferGenerator;
+        BufferGenerator bufferGen;
 
         long transfer_id = 0;
         std::string env_name;
