@@ -69,6 +69,8 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
             ("help,h", "Produce help message.")
             ("server-host,a", po::value<std::string>()->default_value("xdbcserver"),
              "Server Host: \nDefault:\n  xdbcserver")
+            ("server-port", po::value<std::string>()->default_value("1234"),
+             "Server port: \nDefault:\n  1234")
             ("table,e", po::value<std::string>()->default_value("lineitem_sf10"), "Input table name.")
             ("output,o", po::value<std::string>()->default_value("/dev/shm/output"), "Output CSV base file path.")
             ("buffer-size,b", po::value<int>()->default_value(64), "Buffer size in KiB.")
@@ -105,7 +107,7 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
 
     env.env_name = "Sink";
     env.server_host = vm["server-host"].as<std::string>();
-    env.server_port = "1234";
+    env.server_port = vm["server-port"].as<std::string>();
     env.transfer_id = vm["transfer-id"].as<long>();
     env.table = vm["table"].as<std::string>();
     env.buffer_size = vm["buffer-size"].as<int>();
