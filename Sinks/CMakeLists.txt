@@ -16,6 +16,12 @@ find_package(spdlog REQUIRED)
 find_package(Boost 1.40.0 REQUIRED system program_options)
 
 find_package(Arrow REQUIRED)
+find_library(PARQUET_SHARED_LIB parquet REQUIRED)
+# Ensure the library is found
+if (NOT PARQUET_SHARED_LIB)
+    message(FATAL_ERROR "Parquet shared library not found.")
+endif()
+
 
 # Include Boost headers and libraries
 #if (Boost_FOUND)
@@ -29,4 +35,4 @@ add_executable(xdbcsinks main.cpp CSVSink/CSVSink.cpp PQSink/PQSink.cpp)
 set(USED_LIBS ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_REGEX_LIBRARY})
 
 # Link the CSV Sink to required libraries
-target_link_libraries(xdbcsinks PRIVATE xdbc spdlog::spdlog ${USED_LIBS} -larrow)
+target_link_libraries(xdbcsinks PRIVATE xdbc spdlog::spdlog ${USED_LIBS} -larrow ${PARQUET_SHARED_LIB})
