@@ -44,7 +44,7 @@ namespace xdbc {
         env.pts = pq;
 
 
-        spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2} bytes, TS: {3} bytes, iformat: {4} ",
+        spdlog::get("XDBC.CLIENT")->info("Creating Client: {0}, BPS: {1}, BS: {2} KiB, TS: {3} bytes, iformat: {4} ",
                                          _xdbcenv->env_name, env.buffers_in_bufferpool, env.buffer_size, env.tuple_size,
                                          env.iformat);
 
@@ -57,6 +57,7 @@ namespace xdbc {
         int total_workers = _xdbcenv->rcv_parallelism + _xdbcenv->decomp_parallelism +
                             _xdbcenv->ser_parallelism + _xdbcenv->write_parallelism;
 
+        //TODO: check and increase bufferpool size if necessary or exit
         int available_buffers_for_queues = _xdbcenv->buffers_in_bufferpool - total_workers;
 
         if (_xdbcenv->buffers_in_bufferpool < total_workers ||
@@ -526,9 +527,10 @@ namespace xdbc {
                     _xdbcenv->freeBufferIds->push(decompBuffId);
 
                 } else {
+
                     Header newHeader{};
                     newHeader.totalTuples = header->totalTuples;
-                    newHeader.totalSize = header->totalSize;
+                    newHeader.totalSize = header->uncompressedSize;
                     newHeader.intermediateFormat = header->intermediateFormat;
 
                     memcpy(decompressed_buffer.data(), &newHeader, sizeof(Header));
