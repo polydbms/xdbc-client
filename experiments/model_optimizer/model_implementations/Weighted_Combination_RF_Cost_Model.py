@@ -1,31 +1,48 @@
 import numpy as np
 import pandas as pd
+import xgboost
 from prettytable import PrettyTable
 from scipy.optimize import nnls, lsq_linear
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression, Ridge
+from xgboost import XGBRegressor
 
 from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
+## algo keywords
+#cluster -> uses clustering instead of one model per env
+#update -> uses prediction with weight history, instead of only using env-sig weights
+#net_trans -> transforms network using sigmoid like function
+#hist_ratio -> calculate ratio between weights and history weights instead of just combinig
 
 class Per_Environment_RF_Cost_Model:
-    def __init__(self, input_fields, metric='time', data_per_env=100, underlying="cost_model_rfs"):
+    def __init__(self, input_fields, metric='time', data_per_env=100, underlying="cost_model", cluster=True, regression_model='xgb', network_transformation=True, history_ratio=0.5, history_weight_decay_factor=0.9):
         """
        Initializes the Per_Environment_RF_Cost_Model, which trains and predicts using
-       Random Forest models for multiple environment.
+       Regression Models for multiple environments or clusters.
 
        Parameters:
            input_fields (list): List of feature names used for training and prediction.
            metric (str): Metric to optimize.
            underlying (str): Identifier-String for the underlying model.
+           cluster (bool): True if data should be clustered, False if one model per environment
+           regression_model (str): The underlying regression model to use [rfs, gdb, xgb]
+           network_transformation (bool): True if network values should be transformed with sigmoid like function for distance calculation. Has no effect if history_ratio is 1.
+           history_ratio (float): The ratio between the weights calculated from the environment signatures, and from the weight history. Should be between [0,1]. 0 meaning only weights from environments signatures, and 1 meaning only weights from history.
        """
         self.input_fields = input_fields
         self.metric = metric
-        self.models = {}  # dict to store rf's per environment
-        self.environments = []  # list of known environments
         self.underlying = underlying
         self.data_per_env = data_per_env
+        self.cluster = cluster
+        self.regression_model = regression_model
+        self.network_transformation = network_transformation
+        self.history_ratio = history_ratio
+        self.history_weight_decay_factor = history_weight_decay_factor
+
+        self.models = {}  # dict to store models's per environment
+        self.environments = []  # list of known environments
         self.weight_history = []
 
     def train(self, x_train, y_train):
@@ -42,7 +59,7 @@ class Per_Environment_RF_Cost_Model:
 
         combine_data = self.convert_dataframe(combine_data)
 
-        if 'cluster' in self.underlying:
+        if 'cluster' in self.underlying:# or self.cluster:
             # cluster data automatically
             grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=self.data_per_env, cluster_labes_avg=True, n_clusters=0)
         else:
@@ -58,16 +75,49 @@ class Per_Environment_RF_Cost_Model:
             X = group[self.input_fields].values
             y = group[self.metric].values
 
-            model = RandomForestRegressor(n_estimators=100,
-                                          max_depth=None,
-                                          min_samples_split=2,
-                                          min_samples_leaf=1,
-                                          bootstrap=True,
-                                          random_state=123)
+            if "_rfs_" in self.underlying:# or 'rfs' in self.regression_model:
+                model_name = "RandomForestRegressor"
+                model = RandomForestRegressor(
+                    n_estimators=100,
+                    max_depth=None,
+                    min_samples_split=2,
+                    min_samples_leaf=1,
+                    bootstrap=True,
+                    random_state=123)
+
+            elif "_gdb_" in self.underlying:# or 'gdb' in self.regression_model:
+                model_name = "GradientBoostingRegressor"
+                model = GradientBoostingRegressor(
+                    n_estimators=200,
+                    learning_rate=0.05,
+                    max_depth=None,
+                    subsample=0.8,
+                    min_samples_split=5,
+                    min_samples_leaf=4,
+                    random_state=123)
+
+            elif "_xgb_" in self.underlying:# or 'xgb' in self.regression_model:
+                model_name = "XGBRegressor"
+                model = XGBRegressor(
+                    objective="reg:squarederror",
+                    n_estimators=100,
+                    max_depth=None,
+                    learning_rate=0.05, #0.1
+                    min_child_weight=1,
+                    reg_lambda=1,
+                    reg_alpha=0,
+                    gamma=0.5,
+                    subsample=0.8,
+                    random_state=123)
+            else:
+                raise ValueError(f"Unkown underlying regression model in algorithm signature: {self.regression_model}")
+
+
             model.fit(X, y)
 
             self.models[env] = model
             self.environments.append(env)
+            print(f"Trained {model_name} for cluster {env} with length {len(group)}")
 
     def update(self, config, result, factor=10):
         """
@@ -100,8 +150,13 @@ class Per_Environment_RF_Cost_Model:
         # Calculate the difference between the true result and the predictions
         total_difference = 0
         for env, prediction in known_predictions.items():
-            difference = abs(prediction - result[self.metric])  # calculate the error for the model
-            weight = 1 / (difference + 1e-8)                    # 1 / error = weight
+            #difference = abs(prediction - result[self.metric])  # calculate the error for the model
+            #weight = 1 / (difference + 1e-8)                    # 1 / error = weight
+
+            squared_error = (prediction - result[self.metric])**2
+            weight = 1 / (squared_error + 1e-8)
+
+
             weight_vector[env] = weight                         # add to weight vector
             total_difference += weight
 
@@ -189,84 +244,127 @@ class Per_Environment_RF_Cost_Model:
 
         target_features = np.array([[target_server, target_client, target_network]])
 
-        #divide network by 100 to bring into the same value range as the other values
         known_features = np.array(known_features, dtype=float)
         target_features = np.array(target_features, dtype=float)
-        known_features[:, 2] /= 100
-        target_features[0][2] /= 100
 
-        weights = None
-        weights_normalized = None
+        if "net_trans" in self.underlying:# or self.network_transformation:
+            def transform_network(x):
+                transformed_network = 9.45 / (1 + 31 * np.exp(-0.03 * x))
+                return np.round(transformed_network,decimals=2)
+
+            known_features[:, 2] = transform_network(known_features[:, 2])
+            target_features[0][2] = transform_network(target_features[0][2])
+        else:
+            known_features[:, 2] /= 100
+            target_features[0][2] /= 100
+
+
+        environment_weights = None
+        environment_weights_normalized = None
 
         # Calculate the weights per model using one of these methods
         if weights_algorithm == "linear_regression":
 
             reg = LinearRegression(positive=True)  # use only positive weights
             reg.fit(known_features.transpose(), target_features.transpose())
-            weights = reg.coef_[0]
-            weights_normalized = weights / np.sum(weights)
+            environment_weights = reg.coef_[0]
+            environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
         elif weights_algorithm == "ridge_regression":
 
             reg = Ridge(positive=True, alpha=1.0)
             reg.fit(known_features.transpose(), target_features.transpose())
-            weights = reg.coef_[0]
-            weights_normalized = weights / np.sum(weights)
+            environment_weights = reg.coef_[0]
+            environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
         elif weights_algorithm == "random_forest_regression":
 
             reg = RandomForestRegressor(n_estimators=100, random_state=123)
             reg.fit(known_features.transpose(), target_features.transpose())
-            weights = reg.feature_importances_[0]
-            weights_normalized = weights / np.sum(weights)
+            environment_weights = reg.feature_importances_[0]
+            environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
         elif weights_algorithm == "least_squares_linear":
 
             res = lsq_linear(known_features.T, target_features[0], bounds=(0, np.inf))
-            weights = res.x[0]
-            weights_normalized = weights / np.sum(weights)
+            environment_weights = res.x[0]
+            environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
         elif weights_algorithm == "distances":
 
             distances = np.linalg.norm(known_features - target_features[0], axis=1)
             distances = np.where(distances == 0, 1e-8, distances)
-            weights = 1 / distances
-            weights_normalized = weights / np.sum(weights)
+            environment_weights = 1 / distances
+            environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
         elif weights_algorithm == "distances_test":
 
-            weights, residuals, rank, s = np.linalg.lstsq(known_features.T, target_features.flatten(), rcond=None)
-            weights_normalized = weights / np.sum(weights)
+            environment_weights, residuals, rank, s = np.linalg.lstsq(known_features.T, target_features.flatten(), rcond=None)
+            environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
 
 
         # Introducce weight history from update method
         total_weights = len(self.weight_history)
-        averaged_weights = np.zeros_like(weights)
+        history_weights = np.zeros_like(environment_weights)
         weight_decay_factor = 0.9 # todo whats a good value ?
 
-        # Calculate the actual added wieghts vector from the history
+        # Calculate the actual added weights vector from the history
         for idx, weight_vector in enumerate(self.weight_history):
             influence = weight_decay_factor ** (total_weights - idx - 1)
             for i, env in enumerate(self.models.keys()):
-                averaged_weights[i] += influence * weight_vector.get(env, 0)
+                history_weights[i] += influence * weight_vector.get(env, 0)
 
             # normalize
             normalization_factor = sum(weight_decay_factor ** (total_weights - idx - 1) for idx in range(total_weights))
-            averaged_weights /= normalization_factor
+            history_weights /= normalization_factor
 
-        if not np.all(averaged_weights == 0):
-            averaged_weights = np.where(averaged_weights == 0, 1e-8, averaged_weights)
-            averaged_weights /= np.sum(averaged_weights)
+        if not np.all(history_weights == 0):
+            history_weights = np.where(history_weights == 0, 1e-8, history_weights)
+            history_weights /= np.sum(history_weights)
 
         # Combine the weight vectors
-        final_weights = weights_normalized + averaged_weights
-        final_weights_normalized = final_weights / np.sum(final_weights)
+
+
+
+
+        combined_weights = (history_weights * self.history_ratio) + (environment_weights_normalized * (1 - self.history_ratio)) # combine both weight vectors
+        combined_weights_normalized = combined_weights / np.sum(combined_weights) # normalize
+
+
+
+
+
+        if "hist_ratio" in self.underlying:
+
+            hist_len = len(self.weight_history)
+
+            if hist_len == 0:
+                hist_weight_ratio = 0
+            else:
+                hist_weight_ratio = hist_len / ((hist_len * 1.2) + 4)
+
+            distance_weight_ratio = 1 - hist_weight_ratio
+
+            final_weights = (history_weights * hist_weight_ratio) + (environment_weights_normalized * distance_weight_ratio)
+            final_weights_normalized = final_weights / np.sum(final_weights)
+
+        elif "only_hist" in self.underlying:
+
+            if np.all(history_weights == 0):
+                averaged_weights = np.full(history_weights.shape, 1/history_weights.size)
+
+            # only use weights based on history, not based on target env.
+            final_weights = averaged_weights
+            final_weights_normalized = final_weights / np.sum(final_weights)
+        else:
+            final_weights = environment_weights_normalized + history_weights
+            final_weights_normalized = final_weights / np.sum(final_weights)
 
 
         #use normalized weights for combining predictions, non normalized for environments printing
-        combined_predictions = np.dot(weights_normalized, known_predictions.flatten())
-        combined_environment = np.dot(weights, known_features)
+        combined_predictions = np.dot(environment_weights_normalized, known_predictions.flatten())
+        combined_environment = np.dot(environment_weights, known_features)
 
         combined_predictions_final = np.dot(final_weights_normalized, known_predictions.flatten())
         combined_environment_final = np.dot(final_weights, known_features)
@@ -274,7 +372,7 @@ class Per_Environment_RF_Cost_Model:
 
         data_df = {'Env/Cluster' : [" ".join(map(str, row)) for row in known_features],
                    'Predictions': known_predictions[0],
-                   'Weights': weights_normalized,
+                   'Weights': environment_weights_normalized,
                    'Weights w/ hist.': final_weights_normalized,
                    'Hist. Weights': averaged_weights}
 
