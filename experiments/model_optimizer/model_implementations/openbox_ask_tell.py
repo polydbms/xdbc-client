@@ -39,7 +39,10 @@ class OpenBox_Ask_Tell():
         self.config_space = convert_from_general(config_space, 'open_box')
         self.metric = metric
         self.mode = mode
-        self.underlying = f"{underlying}_open_box_ndr"
+        if "open_box" not in underlying:
+            self.underlying = f"{underlying}_open_box"
+        else:
+            self.underlying = underlying
 
         self.history = None
         self.advisor = None
@@ -141,46 +144,6 @@ class OpenBox_Ask_Tell():
             file_list (list): List of file paths to load.
             training_data_per_env (int): Number of samples to use per environment (-1 for no limit).
         """
-        '''
-        # Group data by unique combinations of 'server_cpu', 'client_cpu', and 'network'
-        grouped_data = defaultdict(list)
-
-        df = data[(data['server_cpu'] > 0) & (data['client_cpu'] > 0) & (data['network'] > 0)]
-
-        for combination, group in df.groupby(['server_cpu', 'client_cpu', 'network']):
-
-            if training_data_per_env != -1:
-                group = group.head(training_data_per_env)
-                if f"_n_{training_data_per_env}" not in self.underlying:
-                    self.underlying += f"_n_{training_data_per_env}"
-
-            grouped_data[combination].append(group)
-
-        grouped_data = {key: pd.concat(frames, ignore_index=True) for key, frames in grouped_data.items()}
-
-        clusters = self._cluster_groups(grouped_data, column='time')
-
-        group_to_rows = {}
-        for group_key, group_df in grouped_data.items():
-            group_to_rows[group_key] = df[
-                (df['server_cpu'] == group_key[0]) &
-                (df['client_cpu'] == group_key[1]) &
-                (df['network'] == group_key[2])
-                ]
-
-        # Split data based on clusters
-        cluster_dataframes = {}
-        for cluster_index, cluster in enumerate(clusters):
-            # Create the cluster key
-            cluster_key = "cluster-" + "-".join(
-                f"{group_key[0]}_{group_key[1]}_{group_key[2]}" for group_key in cluster
-            )
-
-            # Combine rows for this cluster
-            cluster_rows = pd.concat([group_to_rows[group_key] for group_key in cluster], ignore_index=True)
-            cluster_dataframes[cluster_key] = cluster_rows
-        '''
-
         cluster_dataframes = Transfer_Data_Processor.process_data(data,training_data_per_env)
 
 
@@ -231,7 +194,7 @@ class OpenBox_Ask_Tell():
                 'read_par': row['read_par'],
                 'deser_par': row['deser_par'],
                 'comp_par': row['comp_par'],
-                'ser_par': 1,  # todo
+                'ser_par': 1,  # todo adapt to new search psacwe
             }
 
             metric = row[self.metric]

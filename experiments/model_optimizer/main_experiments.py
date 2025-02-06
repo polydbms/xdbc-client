@@ -18,10 +18,10 @@ from experiments.model_optimizer.model_implementations.own_random_search import 
 def main():
 
     algos_to_run = [
-        "cost_model_rfs_bay",       #test both rs and bay, with clustering or not, both using history updates
+        #"cost_model_rfs_bay",       #test both rs and bay, with clustering or not, both using history updates
         "cost_model_rfs_rs",
 
-        "cost_model_rfs_bay_cluster",
+        #"cost_model_rfs_bay_cluster",
         "cost_model_rfs_rs_cluster",
         
         
@@ -34,6 +34,7 @@ def main():
         #"tlbo_topov3_gp",
 
         "quantile",
+
         
 
     ]
@@ -51,9 +52,92 @@ def main():
                                              use_history=True)
 
     '''
+
+
+    # run all with n=300, train_transfers = 250
+    all_cost_model_variations_rs = [
+
+        #"cost_model_rfs_rs_exc_cluster_update_net_trans_hist_ratio",
+
+        "cost_model_rfs_rs_exc_cluster_update_net_trans",
+        #"cost_model_rfs_rs_exc_cluster_update_hist_ratio",
+        #"cost_model_rfs_rs_exc_update_net_trans_hist_ratio",
+
+        #"cost_model_rfs_rs_exc_cluster_update",
+        #"cost_model_rfs_rs_exc_cluster_net_trans",
+        #"cost_model_rfs_rs_exc_update_net_trans",
+        #"cost_model_rfs_rs_exc_update_hist_ratio",
+
+        #"cost_model_rfs_rs_exc_cluster",
+        #"cost_model_rfs_rs_exc_update",
+        #"cost_model_rfs_rs_exc_net_trans",
+
+        #"cost_model_rfs_rs_exc",
+
+        # cost model without target env, only using history
+        # if only history -> net_trans has no effect
+        # if only history -> only possible if update
+
+        "cost_model_rfs_rs_exc_cluster_update_only_hist",
+        #"cost_model_rfs_rs_exc_update_only_hist",
+
+    ]
+
+
+
+
+    algo_selection_promising = [
+        #"cost_model_rfs_rs_exc_cluster_update_net_trans",
+        #"cost_model_rfs_rs_exc_cluster_update_only_hist",
+        #"cost_model_gdb_rs_exc_cluster_update_net_trans", #todo test tuned
+        #"cost_model_gdb_rs_exc_cluster_update_only_hist",
+
+        #"cost_model_xgb_rs_exc_cluster_update_net_trans_tuned",
+        "cost_model_xgb_rs_exc_cluster_update_only_hist_tuned",
+
+        #"tlbo_rgpe_prf",
+        #"tlbo_topov3_prf",
+        #"quantile",
+        #"bayesian_open_box",
+
+    ]
+
+
+
+    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de"],#, "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
+                                             environments_to_run=[env_S4_C16_N1000],
+                                             algorithms_to_run=algo_selection_promising,
+                                             config_space=config_space_variable_parameters_generalized_1310k,
+                                             metric='time',
+                                             mode='min',
+                                             loop_count=25,
+                                             use_all_environments=False,
+                                             training_data_per_env=300,
+                                             max_training_transfers_per_iteration=250,
+                                             use_history=True,
+                                             override=True)
+
     execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
                                              environments_to_run=environment_list_test_new_main_envs,
-                                             algorithms_to_run=algos_to_run,
+                                             algorithms_to_run=algo_selection_promising,
+                                             config_space=config_space_variable_parameters_generalized_1310k,
+                                             metric='time',
+                                             mode='min',
+                                             loop_count=25,
+                                             use_all_environments=False,
+                                             training_data_per_env=300,
+                                             max_training_transfers_per_iteration=250,
+                                             use_history=True,
+                                             override=True)
+
+
+
+                                             
+
+    '''
+    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
+                                             environments_to_run=environment_list_test_new_main_envs,
+                                             algorithms_to_run=["cost_model_rfs_rs","cost_model_rfs_rs_cluster"],
                                              config_space=config_space_variable_parameters_generalized_1310k,
                                              metric='time',
                                              mode='min',
@@ -62,6 +146,8 @@ def main():
                                              training_data_per_env=200,
                                              max_training_transfers_per_iteration=150,
                                              use_history=True)
+    '''
+
 
 
 
@@ -175,23 +261,23 @@ def experiment_direct_optimization_loop(optimizer, environment, metric, config_s
         #run transfer
         result = data_transfer_wrapper.transfer(complete_config, i, max_retries=0, ssh=ssh)
 
-        #report the result
-        optimizer.report(suggested_config, result)
-
-
         # if a transfer times out, save how long that timeout took
         # kinda bad to need to move the retry logic this high up
-        if result['time'] == -1:
+        if result['transfer_id'] == -1:
             time_lost_too_timeouts = time_lost_too_timeouts + (datetime.now() - start).total_seconds()
 
             #try once more
             start = datetime.now()
 
             result = data_transfer_wrapper.transfer(complete_config, i, max_retries=0, ssh=ssh)
-            if result['time'] == -1:
+            if result['transfer_id'] == -1:
                 time_lost_too_timeouts = time_lost_too_timeouts + (datetime.now() - start).total_seconds()
                 loop_count = loop_count+1
                 # if failed twice, add another iteration to still get to the specified number of evaluations for that algorithm
+
+
+        #report the result
+        optimizer.report(suggested_config, result)
 
 
         #save results in csv etc.
@@ -243,7 +329,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
     best_time = -1
     count_real_transfers = 0
     count_training_transfers = 0
-
+    time_lost_too_timeouts = 0
     #create ssh connection if supplied
     ssh = None
     if ssh_host is not None:
@@ -285,17 +371,36 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         # Get weight table for best config
         cost_model.predict(data=best_predicted_config, target_environment=environment, print_wieghts=True)
 
+
+
+        start = datetime.now()
         # run the actual transfer
-        result = data_transfer_wrapper.transfer(best_predicted_config, i, ssh=ssh)
+        result = data_transfer_wrapper.transfer(best_predicted_config, i, max_retries=0, ssh=ssh)
+
+        # if a transfer times out, save how long that timeout took
+        # kinda bad to need to move the retry logic this high up
+        if result['transfer_id'] == -1:
+            time_lost_too_timeouts = time_lost_too_timeouts + (datetime.now() - start).total_seconds()
+
+            #try once more
+            start = datetime.now()
+
+            result = data_transfer_wrapper.transfer(best_predicted_config, i, max_retries=0, ssh=ssh)
+            if result['transfer_id'] == -1:
+                time_lost_too_timeouts = time_lost_too_timeouts + (datetime.now() - start).total_seconds()
+
+
+
+
         count_real_transfers = count_real_transfers + 1
         result_time = float(result[metric])
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] true data transfer completed in {result['time']} seconds \n")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] true data transfer completed in {result['time']} seconds")
 
         # add additional fields
         result['trial_id'] = trial_id
         result['algo'] = cost_model.underlying
         end_temp = datetime.now()
-        result['seconds_since_start_of_opt_run'] = ((end_temp - start_outer).total_seconds())
+        result['seconds_since_start_of_opt_run'] = ((end_temp - start_outer).total_seconds() - time_lost_too_timeouts)
         result['predicted_time'] = best_predicted_time
 
         # save results to file
@@ -327,7 +432,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
 # Initialization of Optimizers / Models
 #========================================================================
 
-def execute_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count, training_data_per_env, use_all_environments, max_training_transfers_per_iteration, use_history):
+def execute_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count, training_data_per_env, use_all_environments, max_training_transfers_per_iteration, use_history, override):
     '''
         should work with any algorithm that is specified in the available algorithm lists
     '''
@@ -341,8 +446,8 @@ def execute_run(algorithm, ssh_host, environment, config_space, metric, mode, lo
     elif algorithm in Own_Random_Search.available_algorithms:
         execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count)
 
-    elif algorithm in cost_model_algorithms:
-        execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, environment, max_training_transfers_per_iteration, loop_count, use_history, use_all_environments, training_data_per_env)
+    elif algorithm in cost_model_algorithms or override:
+        execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, environment, max_training_transfers_per_iteration, loop_count, use_history, use_all_environments, training_data_per_env, override)
 
     else:
         raise ValueError(f"Algorithm {algorithm} is not in available algorithms.")
@@ -393,7 +498,7 @@ def execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, en
     ssh.close()
 
 
-def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, environment, max_training_transfers_per_iteration, max_real_transfers, use_history, use_all_environments, training_data_per_env):
+def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, environment, max_training_transfers_per_iteration, max_real_transfers, use_history, use_all_environments, training_data_per_env, override):
     input_fields = [
                     #"client_cpu",
                     #"server_cpu",
@@ -419,6 +524,49 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
 
     cost_model = None
     search_optimizer = None
+
+
+    if "cost_model" in algorithm:
+        suffix = "cost_model"
+
+        if "_rfs_" in algorithm:
+            suffix = suffix + "_rfs"
+        elif "_gdb_" in algorithm:
+            suffix = suffix + "_gdb"
+        elif "_xgb_" in algorithm:
+            suffix = suffix + "_xgb"
+
+
+        if "_rs" in algorithm:
+            suffix = suffix + "_rs"
+            #optimizer = rs
+        elif "_bay" in algorithm:
+            suffix = suffix + "_bay"
+            #optimizer = bay
+
+
+        if use_all_environments:
+            suffix = suffix + "_all"
+        else:
+            suffix = suffix + "_exc"
+
+
+        if "_cluster" in algorithm:
+            suffix = suffix + "_cluster"
+
+
+        if "_update" in algorithm:
+            suffix = suffix + "_update"
+
+            if "_hist_ratio" in algorithm:
+                suffix = suffix + "_hist_ratio"
+
+
+        if "_net_trans" in algorithm:
+            suffix = suffix + "_net_trans"
+
+    print(f"Algorithm : {algorithm}    suffix : {suffix}")
+
     if use_history:
 
         if algorithm == "test_cost_model_rfs_rs":
@@ -462,6 +610,10 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
         elif algorithm == "cost_model_rfs_bay_cluster":
             cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_cluster")
             search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
+
+    if override:
+        cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying=algorithm)
+        search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
 
     if cost_model is None:
         raise ValueError(f"Cost Model could not be initialized: {algorithm}")
@@ -541,10 +693,27 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
     file_list = [glob.glob(f"{base_path}/{signature}_random_sample*.csv") for signature in environments_to_use]
     data_frames = []
 
+
+    '''
+    base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets"
+    file_list_currated = [glob.glob(f"{base_path_currated}/{signature}_currated_dataset*.csv") for signature in environments_to_use]
+    for file in file_list_currated:
+        if file:
+            df = pd.read_csv(file[0])
+            df = df[(df['time'] > time_threshold)]
+            data_frames.append(df)
+    '''
+
+
+
     for file in file_list:
         df = pd.read_csv(file[0])
         df = df[(df['time'] > time_threshold)]
         data_frames.append(df)
+
+
+
+
 
     data = pd.concat(data_frames, axis=0, ignore_index=True) if data_frames else pd.DataFrame()
 
@@ -690,7 +859,7 @@ def test_transfer_on_changing_environment(optimizer, environment1, environment2,
 
 def queue_function(queue, ssh_host):
     while not queue.empty():
-        environment, algo, config_space, metric, mode, loop_count, training_data_per_env, use_all_environments, max_training_transfers_per_iteration, use_history = queue.get()
+        environment, algo, config_space, metric, mode, loop_count, training_data_per_env, use_all_environments, max_training_transfers_per_iteration, use_history, override = queue.get()
         try:
             execute_run(algorithm=algo,
                         ssh_host=ssh_host,
@@ -701,7 +870,8 @@ def queue_function(queue, ssh_host):
                         loop_count=loop_count,
                         training_data_per_env=training_data_per_env,
                         max_training_transfers_per_iteration=max_training_transfers_per_iteration,
-                        use_history=use_history)
+                        use_history=use_history,
+                        override=override)
         finally:
             queue.task_done()
             print(f"\n\n[{datetime.today().strftime('%H:%M:%S')}] Optimization Runs left in Queue : {queue.qsize()}\n\n")
@@ -709,18 +879,19 @@ def queue_function(queue, ssh_host):
     print(f"\n\n[{datetime.today().strftime('%H:%M:%S')}] [{ssh_host}] Thread finished execution, Queue is empty.\n\n")
 
 
-def execute_optimization_runs_multi_threaded(ssh_hosts, environments_to_run, algorithms_to_run, config_space, metric, mode, loop_count, training_data_per_env=-1, use_all_environments=None, max_training_transfers_per_iteration=None, use_history=None):
+def execute_optimization_runs_multi_threaded(ssh_hosts, environments_to_run, algorithms_to_run, config_space, metric, mode, loop_count, training_data_per_env=-1, use_all_environments=None, max_training_transfers_per_iteration=None, use_history=None, override=False):
 
     queue = Queue()
 
-    for environment in environments_to_run:
-        for algo in algorithms_to_run:
-            queue.put((environment, algo, config_space, metric, mode, loop_count, training_data_per_env, use_all_environments, max_training_transfers_per_iteration, use_history))
+    for algo in algorithms_to_run:
+        for environment in environments_to_run:
+
+            queue.put((environment, algo, config_space, metric, mode, loop_count, training_data_per_env, use_all_environments, max_training_transfers_per_iteration, use_history, override))
 
     total_number_of_transfers = len(environments_to_run) * len(algorithms_to_run) * loop_count
     total_time_estimate = 0
 
-    overhead_per_run = 20  # seconds
+    overhead_per_run = 22  # seconds
 
     for env in environments_to_run:
         if env == env_S2_C2_N50:                        # average run time per transfer in seconds, calculated from random samples.

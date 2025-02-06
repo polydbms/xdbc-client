@@ -1,20 +1,13 @@
 import numpy as np
 import pandas as pd
-import xgboost
 from prettytable import PrettyTable
-from scipy.optimize import nnls, lsq_linear
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.linear_model import LinearRegression, Ridge
 from xgboost import XGBRegressor
 
 from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
-## algo keywords
-#cluster -> uses clustering instead of one model per env
-#update -> uses prediction with weight history, instead of only using env-sig weights
-#net_trans -> transforms network using sigmoid like function
-#hist_ratio -> calculate ratio between weights and history weights instead of just combinig
+#
 
 class Per_Environment_RF_Cost_Model:
     def __init__(self,

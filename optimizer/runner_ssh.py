@@ -9,10 +9,7 @@ from experiments.experiment_scheduler.ssh_handler import SSHConnection
 from optimizer.config.metrics_client import MetricsClient
 from optimizer.config.metrics_server import MetricsServer
 
-def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh=None, return_transfer_id=False, sleep=2, show_output=(False, False),include_setup=True):
-
-    if ssh is None:
-        ssh = SSHConnection("cloud-7.dima.tu-berlin.de", "bene")
+def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfer_id=False, sleep=2, show_output=(False, False),include_setup=True):
 
 
     if include_setup:
@@ -107,6 +104,7 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh=None, return_tr
                                 --tid="{config['date']}" \
                                 -m{mode} \"
                             """
+
 
             ssh.execute_cmd(command_client)
 
@@ -218,11 +216,13 @@ def copy_metrics(server_container, client_container, perf_dir,ssh):
         file_lock = threading.Lock()
 
         if data_server.startswith("transfer"):
-            raise ValueError("\n\n\n\n\n\n\nfoudn header in data file\n\n\n\n\n\n\n")
+            raise ValueError(f"\n\n\n\n\n\n\n [{ssh.hostname}] found header in server data file\n\n\n\n\n\n\n")
+            #print("\n\n\n\n\n\n\nfound header in data file\n\n\n\n\n\n\n")
 
 
         if data_client.startswith("transfer"):
-            raise ValueError("\n\n\n\n\n\n\nfoudn header in data file\n\n\n\n\n\n\n")
+            raise ValueError(f"\n\n\n\n\n\n\n [{ssh.hostname}] found header in client data file\n\n\n\n\n\n\n")
+            #print("\n\n\n\n\n\n\nfound header in data file\n\n\n\n\n\n\n")
 
         with file_lock:
 

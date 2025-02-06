@@ -26,11 +26,11 @@ def process_data(data, training_data_per_env=-1, cluster_labes_avg=False, n_clus
 
     # 1. Group the data
     grouped_data = defaultdict(list)
-    df = data[(data['server_cpu'] > 0) & (data['client_cpu'] > 0) & (data['network'] > 0)]
+    df = data[(data['server_cpu'] > 0) & (data['client_cpu'] > 0) & (data['network'] > 0) & (data['run'] > 0)]
     for combination, group in df.groupby(['server_cpu', 'client_cpu', 'network']):
         if training_data_per_env != -1:
             # 2. take first n entries
-            if len(df) <  training_data_per_env:
+            if len(group) < training_data_per_env:
                 print(f"Length of data is less than specified data per environment ({len(df)} vs {training_data_per_env})")
             group = group.head(training_data_per_env)
         grouped_data[combination].append(group)
@@ -40,14 +40,15 @@ def process_data(data, training_data_per_env=-1, cluster_labes_avg=False, n_clus
     # 3. Create cluster
     clusters = _cluster_groups(grouped_data, column='time', n_clusters=n_clusters)
 
+    grouped_df = pd.concat(grouped_data.values(), ignore_index=True)
 
     # 4. Group dataframes by their cluster
     group_to_rows = {}
     for group_key, group_df in grouped_data.items():
-        group_to_rows[group_key] = df[
-            (df['server_cpu'] == group_key[0]) &
-            (df['client_cpu'] == group_key[1]) &
-            (df['network'] == group_key[2])
+        group_to_rows[group_key] = grouped_df[
+            (grouped_df['server_cpu'] == group_key[0]) &
+            (grouped_df['client_cpu'] == group_key[1]) &
+            (grouped_df['network'] == group_key[2])
             ]
 
     cluster_dataframes = {}

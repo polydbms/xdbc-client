@@ -219,18 +219,18 @@ config_space_variable_parameters_generalized_1310k = \
      {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
      ]
 
-config_space_variable_parameters_generalized_42M = \
-    [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
-     {'name': "format", 'type': 'discrete', 'domain': [1, 2]},
-     {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
+config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M = \
+    [{'name': "compression", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]}, # remove either lzo or lz4, ss size from 10.5M to 8.4M
+     {'name': "format", 'type': 'categorical', 'domain': [1, 2]},
+     {'name': "client_bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]}, #todo change into min buffer count(threadcount) * factor 1.1 , 1.4, 1.7, 2 ?
+     {'name': "server_bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
      {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
      {'name': "send_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "write_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "decomp_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
-     {'name': "read_partitions", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "read_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "deser_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
-     {'name': "ser_par", 'type': 'discrete', 'domain': [1]},    # this parameter currently has no influence on the perfoamnce, so including for completness.
+     {'name': "ser_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "comp_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      ]
 
@@ -483,7 +483,7 @@ def unparse_environment(env_string):
             "network": network
         }
     except (IndexError, ValueError):
-        raise ValueError("Invalid input format. Expected format: 'SXX_CXX_NXXX'.")
+        raise ValueError(f"Invalid input format. Expected format: 'SXX_CXX_NXXX', got {env_string}")
 
 
 def unparse_environment_float(env_string):

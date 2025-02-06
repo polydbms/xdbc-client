@@ -26,14 +26,8 @@ def transfer(config,i=0,max_retries=1, ssh=None):
     #remove_rows_with_string("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_client_timings_bene.csv",'transfer_id')
     #remove_rows_with_string("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_server_timings_bene.csv",'transfer_id')
 
-
     if config['timeout'] is None:
         config['timeout'] = 500
-
-    # the extremely long runs are only when nocomp, so all others can get a smaller timeout to save some time
-    # todo change back if too many timeouts are observed
-    if config['timeout'] > 1000 and config["compression_lib"] is not "nocomp":
-        config['timeout'] = config['timeout'] / 2
 
     result = train_method(config, ssh)
 
@@ -126,7 +120,7 @@ def transfer(config,i=0,max_retries=1, ssh=None):
             "read_partitions": config["read_partitions"],
             "deser_par": config["deser_par"],
             "comp_par": config["comp_par"],
-            "time": config['timeout']*2, # todo test !!!!
+            "time": config['timeout']*2, # todo test !!!! # idea : report a really bad result
             "datasize": -1,
             "avg_cpu_server": -1,
             "avg_cpu_client": -1,
