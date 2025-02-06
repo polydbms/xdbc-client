@@ -268,39 +268,50 @@ all_hosts_cloud_7 = ["cloud-7.dima.tu-berlin.de",
                      "cloud-9.dima.tu-berlin.de",
                      "cloud-10.dima.tu-berlin.de"]
 
-username_cloud_11 = "bdidrich-ldap"
-all_hosts_cloud_11 = ["cloud-11.dima.tu-berlin.de",
-                      "cloud-12.dima.tu-berlin.de",
-                      #"cloud-13.dima.tu-berlin.de",
-                      "cloud-14.dima.tu-berlin.de",
-                      "cloud-15.dima.tu-berlin.de",
-                      #"cloud-16.dima.tu-berlin.de",
-                      #"cloud-17.dima.tu-berlin.de",
-                      #"cloud-18.dima.tu-berlin.de",
-                      "cloud-19.dima.tu-berlin.de",
-                      "cloud-20.dima.tu-berlin.de",
-                      "cloud-21.dima.tu-berlin.de",
-                      "cloud-22.dima.tu-berlin.de",
-                      "cloud-23.dima.tu-berlin.de",
-                      "cloud-24.dima.tu-berlin.de",
-                      "cloud-25.dima.tu-berlin.de",
-                      "cloud-26.dima.tu-berlin.de",
-                     # "cloud-27.dima.tu-berlin.de",
-                      "cloud-28.dima.tu-berlin.de",
-                     # "cloud-29.dima.tu-berlin.de",
-                    # cloud 30 exclusive for nils schubert
-                      "cloud-31.dima.tu-berlin.de"]#,
-                      #"cloud-32.dima.tu-berlin.de",
-                     # "cloud-33.dima.tu-berlin.de",
-                      #"cloud-34.dima.tu-berlin.de",
-                      #"cloud-35.dima.tu-berlin.de"] #23 nodes
+
+username_big_cluster = "bdidrich-ldap"
+big_cluster_main_host = "sr630-wn-a-01.dima.tu-berlin.de"
+reserved_hosts_big_cluster = [
+    "sr630-wn-a-15",
+    "sr630-wn-a-16",
+    "sr630-wn-a-17",
+    "sr630-wn-a-18",
+    "sr630-wn-a-19",
+    "sr630-wn-a-20",
+    "sr630-wn-a-21",
+    "sr630-wn-a-22",
+    "sr630-wn-a-23",
+    "sr630-wn-a-24",
+    "sr630-wn-a-25",
+    "sr630-wn-a-26",
+    "sr630-wn-a-27",
+    "sr630-wn-a-28",
+    "sr630-wn-a-29",
+    "sr630-wn-a-30",
+    "sr630-wn-a-31",
+    "sr630-wn-a-32",
+    "sr630-wn-a-33",
+    "sr630-wn-a-34",
+    "sr630-wn-a-35",
+    "sr630-wn-a-36",
+    "sr630-wn-a-37",
+    "sr630-wn-a-38",
+    "sr630-wn-a-39",
+    "sr630-wn-a-40",
+    "sr630-wn-a-41",
+    "sr630-wn-a-42",
+    "sr630-wn-a-43",
+    "sr630-wn-a-44",
+    "sr630-wn-a-45"
+]
+
 
 
 def get_username_for_host(ssh_host):
     if ssh_host in all_hosts_cloud_7:
         return username_cloud_7
-    if ssh_host in all_hosts_cloud_11:
-        return username_cloud_11
+    if ssh_host in reserved_hosts_big_cluster or ssh_host == big_cluster_main_host:
+        return username_big_cluster
     else:
         return "unknown ssh host"
 

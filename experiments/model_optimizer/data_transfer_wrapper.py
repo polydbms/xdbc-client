@@ -229,10 +229,6 @@ def train_method_seperate_params(xdbc_version: int, run: int, client_readmode: i
     }
 
 
-    if ssh is None:
-        ssh = SSHConnection("cloud-7.dima.tu-berlin.de", get_username_for_host("cloud-7.dima.tu-berlin.de"))
-
-
     # if file is not in dev/shm, copy it there
     ssh.execute_cmd(f"cp -R -u -p /home/{get_username_for_host(ssh.hostname)}/datasets/lineitem_sf10.csv /dev/shm/lineitem_sf10.csv")
 

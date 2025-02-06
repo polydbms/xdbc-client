@@ -7,6 +7,7 @@ from queue import Queue
 from experiments.experiment_scheduler.ssh_handler import SSHConnection
 from experiments.model_optimizer import Stopping_Rules, data_transfer_wrapper
 from experiments.model_optimizer.Helpers import *
+from experiments.model_optimizer.NestedSSHHandler import NestedSSHClient
 from experiments.model_optimizer.additional_environments import *
 from experiments.model_optimizer.model_implementations.Test_Cost_Model import *
 from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_Cost_Model import *
@@ -92,8 +93,8 @@ def main():
         #"cost_model_gdb_rs_exc_cluster_update_net_trans", #todo test tuned
         #"cost_model_gdb_rs_exc_cluster_update_only_hist",
 
-        #"cost_model_xgb_rs_exc_cluster_update_net_trans_tuned",
-        "cost_model_xgb_rs_exc_cluster_update_only_hist_tuned",
+        "cost_model_xgb_rs_exc_cluster_update_net_trans_tuned_1000_curdat",
+        "cost_model_xgb_rs_exc_cluster_update_only_hist_tuned_1000_curdat",
 
         #"tlbo_rgpe_prf",
         #"tlbo_topov3_prf",
@@ -104,19 +105,6 @@ def main():
 
 
 
-    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de"],#, "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
-                                             environments_to_run=[env_S4_C16_N1000],
-                                             algorithms_to_run=algo_selection_promising,
-                                             config_space=config_space_variable_parameters_generalized_1310k,
-                                             metric='time',
-                                             mode='min',
-                                             loop_count=25,
-                                             use_all_environments=False,
-                                             training_data_per_env=300,
-                                             max_training_transfers_per_iteration=250,
-                                             use_history=True,
-                                             override=True)
-
     execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
                                              environments_to_run=environment_list_test_new_main_envs,
                                              algorithms_to_run=algo_selection_promising,
@@ -126,9 +114,11 @@ def main():
                                              loop_count=25,
                                              use_all_environments=False,
                                              training_data_per_env=300,
-                                             max_training_transfers_per_iteration=250,
+                                             max_training_transfers_per_iteration=1000,
                                              use_history=True,
                                              override=True)
+
+
 
 
 
@@ -330,10 +320,16 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
     count_real_transfers = 0
     count_training_transfers = 0
     time_lost_too_timeouts = 0
-    #create ssh connection if supplied
-    ssh = None
-    if ssh_host is not None:
+
+    #create ssh connection
+    if ssh_host in reserved_hosts_big_cluster:
+        ssh = NestedSSHClient(jump_host=big_cluster_main_host,
+                              jump_username=get_username_for_host(big_cluster_main_host),
+                              target_host=ssh_host,
+                              target_username=get_username_for_host(ssh_host))
+    else:
         ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
+
 
     start_outer = datetime.now()
     for i in range(1, max_real_transfers+1):
@@ -454,7 +450,14 @@ def execute_run(algorithm, ssh_host, environment, config_space, metric, mode, lo
 
 
 def execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_space, metric, mode, loop_count):
-    ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
+    if ssh_host in reserved_hosts_big_cluster:
+        ssh = NestedSSHClient(jump_host=big_cluster_main_host,
+                              jump_username=get_username_for_host(big_cluster_main_host) ,
+                              target_host=ssh_host,
+                              target_username=get_username_for_host(ssh_host))
+    else:
+        ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
+
 
     optimizer = None
 
@@ -476,7 +479,14 @@ def execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_
 
 
 def execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, environment, config_space, metric, mode, loop_count, training_data_per_env):
-    ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
+    if ssh_host in reserved_hosts_big_cluster:
+        ssh = NestedSSHClient(jump_host=big_cluster_main_host,
+                              jump_username=get_username_for_host(big_cluster_main_host) ,
+                              target_host=ssh_host,
+                              target_username=get_username_for_host(ssh_host))
+    else:
+        ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
+
 
     global optimizer
 
@@ -694,7 +704,7 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
     data_frames = []
 
 
-    '''
+
     base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets"
     file_list_currated = [glob.glob(f"{base_path_currated}/{signature}_currated_dataset*.csv") for signature in environments_to_use]
     for file in file_list_currated:
@@ -702,7 +712,7 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
             df = pd.read_csv(file[0])
             df = df[(df['time'] > time_threshold)]
             data_frames.append(df)
-    '''
+
 
 
 

@@ -57,11 +57,28 @@ class Per_Environment_RF_Cost_Model:
         else:
             self.history_ratio = 0
 
+        if "cluster" in self.underlying:
+            self.cluster = True
+        else:
+            self.cluster = False
+
+        if "net_trans" in self.underlying:
+            self.network_transformation = True
+        else:
+            self.network_transformation = False
+
+        if "_rfs_" in self.underlying:
+            self.regression_model = "rfs"
+        elif "_gdb_" in self.underlying:
+            self.regression_model = "gdb"
+        elif "_xgb_" in self.underlying:
+            self.regression_model = "xgb"
+
 
 
     def train(self, x_train, y_train):
         """
-        Train the random forests models. Splits data per Environment, and trains one model for each environment.
+        Train the regression models. Splits data per Environment, and trains one model for each environment.
 
         Parameters:
            x_train (dataframe): Input data containing all fields from input fields.
@@ -73,7 +90,7 @@ class Per_Environment_RF_Cost_Model:
 
         combine_data = self.convert_dataframe(combine_data)
 
-        if 'cluster' in self.underlying:# or self.cluster:
+        if self.cluster:
             # cluster data automatically
             grouped = Transfer_Data_Processor.process_data(data=combine_data, training_data_per_env=self.data_per_env, cluster_labes_avg=True, n_clusters=0)
         else:
@@ -89,7 +106,7 @@ class Per_Environment_RF_Cost_Model:
             X = group[self.input_fields].values
             y = group[self.metric].values
 
-            if "_rfs_" in self.underlying:# or 'rfs' in self.regression_model:
+            if self.regression_model == 'rfs':
                 model_name = "RandomForestRegressor"
                 model = RandomForestRegressor(
                     n_estimators=100,
@@ -99,7 +116,7 @@ class Per_Environment_RF_Cost_Model:
                     bootstrap=True,
                     random_state=123)
 
-            elif "_gdb_" in self.underlying:# or 'gdb' in self.regression_model:
+            elif self.regression_model == 'gdb':
                 model_name = "GradientBoostingRegressor"
                 model = GradientBoostingRegressor(
                     n_estimators=200,
@@ -110,7 +127,7 @@ class Per_Environment_RF_Cost_Model:
                     min_samples_leaf=4,
                     random_state=123)
 
-            elif "_xgb_" in self.underlying:# or 'xgb' in self.regression_model:
+            elif self.regression_model == 'xgb':
                 model_name = "XGBRegressor"
                 model = XGBRegressor(
                     objective="reg:squarederror",
@@ -124,7 +141,7 @@ class Per_Environment_RF_Cost_Model:
                     subsample=0.8,
                     random_state=123)
             else:
-                raise ValueError(f"Unkown underlying regression model in algorithm signature: {self.regression_model}")
+                raise ValueError(f"Unkown underlying regression model: {self.regression_model}")
 
 
             model.fit(X, y)
@@ -181,7 +198,9 @@ class Per_Environment_RF_Cost_Model:
         self.total_history_updates = self.total_history_updates + 1
         self.continous_maintained_history_vector = (self.history_weight_decay_factor * self.continous_maintained_history_vector) + weight_array
         self.continous_maintained_history_vector = self.continous_maintained_history_vector / self.norm_total
+        self.continous_maintained_history_vector = self.continous_maintained_history_vector / sum(self.continous_maintained_history_vector)
 
+        # helper methods to convert data and transform compression to numeric feature
     def convert_dataframe(self, df, reverse=False):
         mapping = {"nocomp": 0, "zstd": 1, "lz4": 2, "lzo": 3, "snappy": 4}
         reverse_mapping = {v: k for k, v in mapping.items()}
@@ -247,7 +266,7 @@ class Per_Environment_RF_Cost_Model:
 
 
         # Transform network using a sigmoid like function
-        if "net_trans" in self.underlying:# or self.network_transformation:
+        if self.network_transformation:
             def transform_network(x):
                 transformed_network = 9.45 / (1 + 31 * np.exp(-0.03 * x))
                 return np.round(transformed_network,decimals=2)
@@ -281,7 +300,7 @@ class Per_Environment_RF_Cost_Model:
             if np.all(self.continous_maintained_history_vector == 0):
                 combined_weights = np.full(self.continous_maintained_history_vector.shape, 1/self.continous_maintained_history_vector.size)
             else:
-                combined_weights = self.continous_maintained_history_vector
+                combined_weights = self.continous_maintained_history_vector / sum(self.continous_maintained_history_vector)
 
         # Normalize weight vector to 1
         combined_weights_normalized = combined_weights / np.sum(combined_weights)
