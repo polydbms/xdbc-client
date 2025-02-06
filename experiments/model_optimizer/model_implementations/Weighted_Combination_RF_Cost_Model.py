@@ -17,7 +17,16 @@ from experiments.model_optimizer.Configs import *
 #hist_ratio -> calculate ratio between weights and history weights instead of just combinig
 
 class Per_Environment_RF_Cost_Model:
-    def __init__(self, input_fields, metric='time', data_per_env=100, underlying="cost_model", cluster=True, regression_model='xgb', network_transformation=True, history_ratio=0.5, history_weight_decay_factor=0.9):
+    def __init__(self,
+                 input_fields,
+                 metric='time',
+                 data_per_env=100,
+                 underlying="cost_model",
+                 cluster=True,
+                 regression_model='xgb',
+                 network_transformation=True,
+                 history_ratio=0.5,
+                 history_weight_decay_factor=0.9):
         """
        Initializes the Per_Environment_RF_Cost_Model, which trains and predicts using
        Regression Models for multiple environments or clusters.
@@ -41,9 +50,21 @@ class Per_Environment_RF_Cost_Model:
         self.history_ratio = history_ratio
         self.history_weight_decay_factor = history_weight_decay_factor
 
+        self.continous_maintained_history_vector = None
+        self.norm_total = 0
+        self.total_history_updates = 0
         self.models = {}  # dict to store models's per environment
         self.environments = []  # list of known environments
-        self.weight_history = []
+
+        #temporary
+        if "only_hist" in self.underlying:
+            self.history_ratio = 1
+        elif "update" in self.underlying:
+            self.history_ratio = 0.5
+        else:
+            self.history_ratio = 0
+
+
 
     def train(self, x_train, y_train):
         """
@@ -119,7 +140,9 @@ class Per_Environment_RF_Cost_Model:
             self.environments.append(env)
             print(f"Trained {model_name} for cluster {env} with length {len(group)}")
 
-    def update(self, config, result, factor=10):
+        self.continous_maintained_history_vector = np.zeros(len(self.models))
+
+    def update(self, config, result):
         """
         Updates the weight history by calculating a weight vector for the  configuration
         and result,depending on how close they are to the individual models' predictions.
@@ -127,7 +150,6 @@ class Per_Environment_RF_Cost_Model:
         Parameters:
             config (dict): Configuration which was executed.
             result (dict): Result of that execution contianing `self.metric`.
-            factor (int): Factor to amplify weights.
         """
 
         data = self.convert_dict(dict(config))
@@ -150,13 +172,9 @@ class Per_Environment_RF_Cost_Model:
         # Calculate the difference between the true result and the predictions
         total_difference = 0
         for env, prediction in known_predictions.items():
-            #difference = abs(prediction - result[self.metric])  # calculate the error for the model
-            #weight = 1 / (difference + 1e-8)                    # 1 / error = weight
 
-            squared_error = (prediction - result[self.metric])**2
-            weight = 1 / (squared_error + 1e-8)
-
-
+            squared_error = (prediction - result[self.metric])**2 # calculate the error for the model
+            weight = 1 / (squared_error + 1e-8)                   # 1 / error = weight
             weight_vector[env] = weight                         # add to weight vector
             total_difference += weight
 
@@ -164,37 +182,34 @@ class Per_Environment_RF_Cost_Model:
         for env in weight_vector:
             weight_vector[env] /= total_difference              # normalize weights to sum = 1
 
-        for env in weight_vector:
-            weight_vector[env] *= factor                        # add factor to control the influence od the weight vector
+        weight_array = np.array(list(weight_vector.values()))
 
-        self.weight_history.append(weight_vector)
+        self.norm_total = self.history_weight_decay_factor * (self.norm_total + 1)
+        self.total_history_updates = self.total_history_updates + 1
+        self.continous_maintained_history_vector = (self.history_weight_decay_factor * self.continous_maintained_history_vector) + weight_array
+        self.continous_maintained_history_vector = self.continous_maintained_history_vector / self.norm_total
 
     def convert_dataframe(self, df, reverse=False):
-
         mapping = {"nocomp": 0, "zstd": 1, "lz4": 2, "lzo": 3, "snappy": 4}
         reverse_mapping = {v: k for k, v in mapping.items()}
-
         field_name = "compression" if "compression" in df.columns else "compression_lib"
         if reverse:
             df[field_name] = df[field_name].map(reverse_mapping).fillna(df[field_name])
         else:
             df[field_name] = df[field_name].map(mapping).fillna(df[field_name])
-
         return df
 
     def convert_dict(self, data, reverse=False):
         mapping = {"nocomp": 0, "zstd": 1, "lz4": 2, "lzo": 3, "snappy": 4}
         reverse_mapping = {v: k for k, v in mapping.items()}
-
         field_name = "compression" if "compression" in data else "compression_lib"
         if reverse:
             data[field_name] = reverse_mapping.get(data[field_name], data[field_name])
         else:
             data[field_name] = mapping.get(data[field_name], data[field_name])
-
         return data
 
-    def predict(self, data, target_environment, weights_algorithm="distances", print_wieghts=False):
+    def predict(self, data, target_environment, print_wieghts=False):
         """
         Predict for a target environment using the cost model for that environment,
         or if the environment is not known, a linear combination of known models.
@@ -223,30 +238,22 @@ class Per_Environment_RF_Cost_Model:
             y = self.models[environment_to_string(target_environment)].predict(X)
             return {self.metric: y[0]}
 
-        # if not, collect known environment, their predictions, and use lr to estimate the weights for a linear combination
-
+        # Collect all known environments and their predictions
         known_features = []
         known_predictions = []
 
         for env, model in self.models.items():
             env_dict = unparse_environment_float(env)
-            env_server = round(env_dict['server_cpu'],2)
-            env_client = round(env_dict['client_cpu'],2)
-            env_network = round(env_dict['network'],2)
-
-            known_features.append([env_server, env_client, env_network])
-
+            known_features.append([round(env_dict['server_cpu'],2), round(env_dict['client_cpu'],2), round(env_dict['network'],2)])
             predictions = self.models[env].predict(X)
             known_predictions.append(predictions)
 
-        known_features = np.array(known_features)
-        known_predictions = np.array(known_predictions).T
-
-        target_features = np.array([[target_server, target_client, target_network]])
-
         known_features = np.array(known_features, dtype=float)
-        target_features = np.array(target_features, dtype=float)
+        known_predictions = np.array(known_predictions).T
+        target_features = np.array([[target_server, target_client, target_network]], dtype=float)
 
+
+        # Transform network using a sigmoid like function
         if "net_trans" in self.underlying:# or self.network_transformation:
             def transform_network(x):
                 transformed_network = 9.45 / (1 + 31 * np.exp(-0.03 * x))
@@ -259,147 +266,67 @@ class Per_Environment_RF_Cost_Model:
             target_features[0][2] /= 100
 
 
-        environment_weights = None
-        environment_weights_normalized = None
-
-        # Calculate the weights per model using one of these methods
-        if weights_algorithm == "linear_regression":
-
-            reg = LinearRegression(positive=True)  # use only positive weights
-            reg.fit(known_features.transpose(), target_features.transpose())
-            environment_weights = reg.coef_[0]
-            environment_weights_normalized = environment_weights / np.sum(environment_weights)
-
-        elif weights_algorithm == "ridge_regression":
-
-            reg = Ridge(positive=True, alpha=1.0)
-            reg.fit(known_features.transpose(), target_features.transpose())
-            environment_weights = reg.coef_[0]
-            environment_weights_normalized = environment_weights / np.sum(environment_weights)
-
-        elif weights_algorithm == "random_forest_regression":
-
-            reg = RandomForestRegressor(n_estimators=100, random_state=123)
-            reg.fit(known_features.transpose(), target_features.transpose())
-            environment_weights = reg.feature_importances_[0]
-            environment_weights_normalized = environment_weights / np.sum(environment_weights)
-
-        elif weights_algorithm == "least_squares_linear":
-
-            res = lsq_linear(known_features.T, target_features[0], bounds=(0, np.inf))
-            environment_weights = res.x[0]
-            environment_weights_normalized = environment_weights / np.sum(environment_weights)
-
-        elif weights_algorithm == "distances":
-
-            distances = np.linalg.norm(known_features - target_features[0], axis=1)
-            distances = np.where(distances == 0, 1e-8, distances)
-            environment_weights = 1 / distances
-            environment_weights_normalized = environment_weights / np.sum(environment_weights)
-
-        elif weights_algorithm == "distances_test":
-
-            environment_weights, residuals, rank, s = np.linalg.lstsq(known_features.T, target_features.flatten(), rcond=None)
-            environment_weights_normalized = environment_weights / np.sum(environment_weights)
+        # Calculate the distances between environment signatures
+        distances = np.linalg.norm(known_features - target_features[0], axis=1)
+        distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
+        environment_weights = 1 / distances
+        environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
 
+        # Use a combination of both weights or only environment weights
+        if self.history_ratio < 1:
 
-        # Introducce weight history from update method
-        total_weights = len(self.weight_history)
-        history_weights = np.zeros_like(environment_weights)
-        weight_decay_factor = 0.9 # todo whats a good value ?
+            # Dynamic history-ratio
+            # hist_weight_ratio = self.total_history_updates / ((self.total_history_updates * 1.2) + 4)
 
-        # Calculate the actual added weights vector from the history
-        for idx, weight_vector in enumerate(self.weight_history):
-            influence = weight_decay_factor ** (total_weights - idx - 1)
-            for i, env in enumerate(self.models.keys()):
-                history_weights[i] += influence * weight_vector.get(env, 0)
+            # Combine the environment & history weight vectors based on history_ratio
+            combined_weights = (self.continous_maintained_history_vector * self.history_ratio) + (environment_weights_normalized * (1 - self.history_ratio))
 
-            # normalize
-            normalization_factor = sum(weight_decay_factor ** (total_weights - idx - 1) for idx in range(total_weights))
-            history_weights /= normalization_factor
-
-        if not np.all(history_weights == 0):
-            history_weights = np.where(history_weights == 0, 1e-8, history_weights)
-            history_weights /= np.sum(history_weights)
-
-        # Combine the weight vectors
-
-
-
-
-        combined_weights = (history_weights * self.history_ratio) + (environment_weights_normalized * (1 - self.history_ratio)) # combine both weight vectors
-        combined_weights_normalized = combined_weights / np.sum(combined_weights) # normalize
-
-
-
-
-
-        if "hist_ratio" in self.underlying:
-
-            hist_len = len(self.weight_history)
-
-            if hist_len == 0:
-                hist_weight_ratio = 0
+        # Use only history weights
+        elif self.history_ratio == 1:
+            # Edge case if history is empty
+            if np.all(self.continous_maintained_history_vector == 0):
+                combined_weights = np.full(self.continous_maintained_history_vector.shape, 1/self.continous_maintained_history_vector.size)
             else:
-                hist_weight_ratio = hist_len / ((hist_len * 1.2) + 4)
+                combined_weights = self.continous_maintained_history_vector
 
-            distance_weight_ratio = 1 - hist_weight_ratio
+        # Normalize weight vector to 1
+        combined_weights_normalized = combined_weights / np.sum(combined_weights)
 
-            final_weights = (history_weights * hist_weight_ratio) + (environment_weights_normalized * distance_weight_ratio)
-            final_weights_normalized = final_weights / np.sum(final_weights)
+        # Multiply predictions with weights to get final prediction
+        prediction_w_history = np.dot(combined_weights_normalized, known_predictions.flatten())
 
-        elif "only_hist" in self.underlying:
+        if print_wieghts:
+            #use normalized weights for combining predictions, non normalized for environments printing
 
-            if np.all(history_weights == 0):
-                averaged_weights = np.full(history_weights.shape, 1/history_weights.size)
+            prediction = np.dot(environment_weights_normalized, known_predictions.flatten())
+            predicted_environment = np.dot(environment_weights, known_features)
 
-            # only use weights based on history, not based on target env.
-            final_weights = averaged_weights
-            final_weights_normalized = final_weights / np.sum(final_weights)
-        else:
-            final_weights = environment_weights_normalized + history_weights
-            final_weights_normalized = final_weights / np.sum(final_weights)
+            predicted_environment_w_history = np.dot(combined_weights, known_features)
 
+            data_df = {'Env/Cluster': [" ".join(map(str, row)) for row in known_features],
+                       'Predictions': known_predictions[0],
+                       'Weights': environment_weights_normalized,
+                       'Weights w/ hist.': combined_weights_normalized,
+                       'Hist. Weights': self.continous_maintained_history_vector}
 
-        #use normalized weights for combining predictions, non normalized for environments printing
-        combined_predictions = np.dot(environment_weights_normalized, known_predictions.flatten())
-        combined_environment = np.dot(environment_weights, known_features)
+            df_to_print = pd.DataFrame(data_df)
+            df_to_print = df_to_print.round(2)
 
-        combined_predictions_final = np.dot(final_weights_normalized, known_predictions.flatten())
-        combined_environment_final = np.dot(final_weights, known_features)
+            df_to_print = df_to_print.sort_values(by='Weights w/ hist.', ascending=True, inplace=False)
 
-
-        data_df = {'Env/Cluster' : [" ".join(map(str, row)) for row in known_features],
-                   'Predictions': known_predictions[0],
-                   'Weights': environment_weights_normalized,
-                   'Weights w/ hist.': final_weights_normalized,
-                   'Hist. Weights': averaged_weights}
-
-        df_to_print = pd.DataFrame(data_df)
-        df_to_print = df_to_print.round(2)
-
-        df_to_print = df_to_print.sort_values(by='Weights w/ hist.', ascending=True, inplace=False)
-
-        table = PrettyTable()
-        table.field_names = df_to_print.columns.tolist()
-        for row in df_to_print.itertuples(index=False):
-            table.add_row(row)
-
-        if print_wieghts == True:
+            table = PrettyTable()
+            table.field_names = df_to_print.columns.tolist()
+            for row in df_to_print.itertuples(index=False):
+                table.add_row(row)
 
             print(f"\nTarget Environment: S{target_environment['server_cpu']}_C{target_environment['client_cpu']}_N{target_environment['network']}")
             print(f"Feature vector: {target_features}")
             print(table)
 
-            print(f"Prediction :         { round(combined_predictions,2)}")
-            print(f"Prediction w/ hist.: { round(combined_predictions_final,2)}")
-            print(f"Estimated Environment :         { np.round(combined_environment,2)}")
-            print(f"Estimated Environment w/ hist.: { np.round(combined_environment_final,2)}")
+            print(f"Prediction :         { round(prediction,2)}")
+            print(f"Prediction w/ hist.: { round(prediction_w_history,2)}")
+            print(f"Estimated Environment :         { np.round(predicted_environment,2)}")
+            print(f"Estimated Environment w/ hist.: { np.round(predicted_environment_w_history,2)}")
 
-        # Depending on what cost model we created, return one of the combined predictions.
-        # ( the underlying_str is what I use the identify an algorithm after I ran it, so this way I can distinguish weather the update part was used or not)
-        if 'update' in self.underlying:
-            return {self.metric: combined_predictions_final}
-        else:
-            return {self.metric: combined_predictions}
+        return {self.metric: prediction_w_history}
