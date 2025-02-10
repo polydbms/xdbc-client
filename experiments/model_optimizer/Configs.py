@@ -24,95 +24,6 @@ DEFAULT_LOGGING = {
     }
 }
 
-#main environments :
-
-#cloud-cloud
-environment_1 = {
-    "server_cpu": 16,
-    "client_cpu": 16,
-    "network": 1000,
-    "timeout": 250
-}
-
-#cloud-fog
-environment_2 = {
-    "server_cpu": 16,
-    "client_cpu": 8,
-    "network": 100,
-    "timeout": 300
-}
-
-#fog-edge
-environment_3 = {
-    "server_cpu": 8,
-    "client_cpu": 1,
-    "network": 50,
-    "timeout": 400
-}
-
-
-
-# more environemts to sample from :
-
-# internal transfer
-environment_4 = {
-    "server_cpu": 16,
-    "client_cpu": 16,
-    "network": 10000,
-    "timeout": 250
-}
-
-# cloud endge, very slow connection
-environment_5 = {
-    "server_cpu": 16,
-    "client_cpu": 4,
-    "network": 10,
-    "timeout": 1500
-}
-
-#fog fog
-environment_6 = {
-    "server_cpu": 8,
-    "client_cpu": 8,
-    "network": 500,
-    "timeout": 300
-}
-
-# edge edge
-environment_7 = {
-    "server_cpu": 2,
-    "client_cpu": 2,
-    "network": 20,
-    "timeout": 900
-}
-
-#cloud edge with fast connection
-environment_8 = {
-    "server_cpu": 16,
-    "client_cpu": 1,
-    "network": 1000,
-    "timeout": 250
-}
-
-
-environment_9 = {
-    "server_cpu": 16,
-    "client_cpu": 1,
-    "network": 10,
-    "timeout": 1500
-}
-
-environments_list = [environment_1,environment_2,environment_3,environment_4,environment_5,environment_6,environment_7,environment_8,environment_9]
-
-env_S16_C16_N1000 = environment_1
-env_S16_C8_N100 = environment_2
-env_S8_C1_N50 = environment_3
-env_S16_C16_N10000 = environment_4
-env_S16_C4_N10 = environment_5
-env_S8_C8_N500 = environment_6
-env_S2_C2_N20 = environment_7
-env_S16_C1_N1000 = environment_8
-env_S16_C1_N10 = environment_9
 
 fixed_parameters = {
     "xdbc_version": 10,
@@ -136,7 +47,6 @@ variable_parameter_baseline = {
     "send_par": 2,
     "write_par": 2,
     "decomp_par": 2,
-    "read_partitions": 2,
     "read_par": 2,
     "deser_par": 2,
     "ser_par": 2,
@@ -175,34 +85,7 @@ config_space_variable_parameters_skopt = \
      ]
 '''
 
-config_space_variable_parameters_generalized_test_search_space = \
-    [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
-     {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
-     {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
-     {'name': "send_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "write_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "decomp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "read_partitions", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "read_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "deser_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "ser_par", 'type': 'discrete', 'domain': [1]},
-     {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     ]
 
-# ?? search space size
-config_space_variable_parameters_generalized_175k = \
-    [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
-     {'name': "bufpool_size", 'type': 'discrete', 'domain': [32,64,96,128]},
-     {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
-     {'name': "send_par", 'type': 'discrete', 'domain': [1, 2, 4]},
-     {'name': "write_par", 'type': 'discrete', 'domain': [1, 2, 4]},
-     {'name': "decomp_par", 'type': 'discrete', 'domain': [1, 2, 4]},
-     {'name': "read_partitions", 'type': 'discrete', 'domain': [1, 2, 4]},
-     {'name': "read_par", 'type': 'discrete', 'domain': [1, 2, 4]},
-     {'name': "deser_par", 'type': 'discrete', 'domain': [1, 2, 4]},
-     {'name': "ser_par", 'type': 'discrete', 'domain': [1]},    # this parameter currently has no influence on the perfoamnce, so including for completness.
-     {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 4]},
-     ]
 
 # ?? search space size
 config_space_variable_parameters_generalized_1310k = \
@@ -234,33 +117,6 @@ config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M = \
      {'name': "comp_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      ]
 
-config_space_variable_parameters_generalized_6250k = \
-    [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
-     {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
-     {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
-     {'name': "send_par", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     {'name': "write_par", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     {'name': "decomp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     {'name': "read_partitions", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     {'name': "read_par", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     {'name': "deser_par", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     {'name': "ser_par", 'type': 'discrete', 'domain': [1]},    # this parameter currently has no influence on the perfoamnce, so including for completness.
-     {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8, 16]},
-     ]
-
-config_space_variable_parameters_generalized_96636M = \
-    [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
-     {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 48, 64, 80, 96, 112, 128, 144, 160]},
-     {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 128, 256, 384, 512, 768, 1024, 1280]},
-     {'name': "send_par", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]},
-     {'name': "write_par", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]},
-     {'name': "decomp_par", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]},
-     {'name': "read_partitions", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]},
-     {'name': "read_par", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]},
-     {'name': "deser_par", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]},
-     {'name': "ser_par", 'type': 'discrete', 'domain': [1]},    # this parameter currently has no influence on the perfoamnce, so including for completness.
-     {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]},
-     ]
 
 username_cloud_7 = "bene"
 all_hosts_cloud_7 = ["cloud-7.dima.tu-berlin.de",
@@ -272,17 +128,17 @@ all_hosts_cloud_7 = ["cloud-7.dima.tu-berlin.de",
 username_big_cluster = "bdidrich-ldap"
 big_cluster_main_host = "sr630-wn-a-01.dima.tu-berlin.de"
 reserved_hosts_big_cluster = [
-    "sr630-wn-a-15",
-    "sr630-wn-a-16",
-    "sr630-wn-a-17",
-    "sr630-wn-a-18",
-    "sr630-wn-a-19",
-    "sr630-wn-a-20",
-    "sr630-wn-a-21",
-    "sr630-wn-a-22",
-    "sr630-wn-a-23",
-    "sr630-wn-a-24",
-    "sr630-wn-a-25",
+    #"sr630-wn-a-15",
+    #"sr630-wn-a-16",
+    #"sr630-wn-a-17",
+    #"sr630-wn-a-18",
+    #"sr630-wn-a-19",
+    #"sr630-wn-a-20",
+    #"sr630-wn-a-21",
+    #"sr630-wn-a-22",
+    #"sr630-wn-a-23",
+    #"sr630-wn-a-24",
+    #"sr630-wn-a-25",
     "sr630-wn-a-26",
     "sr630-wn-a-27",
     "sr630-wn-a-28",
@@ -294,15 +150,16 @@ reserved_hosts_big_cluster = [
     "sr630-wn-a-34",
     "sr630-wn-a-35",
     "sr630-wn-a-36",
-    "sr630-wn-a-37",
-    "sr630-wn-a-38",
-    "sr630-wn-a-39",
-    "sr630-wn-a-40",
-    "sr630-wn-a-41",
-    "sr630-wn-a-42",
-    "sr630-wn-a-43",
-    "sr630-wn-a-44",
-    "sr630-wn-a-45"
+    #"sr630-wn-a-37",
+    #"sr630-wn-a-38",
+    #"sr630-wn-a-39",
+    #"sr630-wn-a-40",
+    #"sr630-wn-a-41",
+    #"sr630-wn-a-42",
+    #"sr630-wn-a-43",
+    #"sr630-wn-a-44",
+    #"sr630-wn-a-45",
+    #"sr630-wn-a-46"
 ]
 
 
@@ -337,9 +194,11 @@ def create_complete_config(environment, metric, library="syne_tune",config=None)
     Returns:
         : Library-specific complete configuration.
     """
+
+    '''
     if library == "syne_tune" or library == "syne-tune" or library == "synetune":
 
-        config_space = convert_from_general(config_space=config_space_variable_parameters_generalized_175k,
+        config_space = convert_from_general(config_space=config,
                                             library='syne_tune')
 
         # add fixed parameters to the config space
@@ -355,6 +214,8 @@ def create_complete_config(environment, metric, library="syne_tune",config=None)
         #config_space['timeout'] = choice([240])
 
         return config_space
+
+    '''
 
     '''
     if library == "skopt" or library == "scikit_optimize":
@@ -377,9 +238,11 @@ def create_complete_config(environment, metric, library="syne_tune",config=None)
         return config_space
     '''
 
+    '''
+
     if library == "openbox" or library == "open_box":
 
-        config_space = convert_from_general(config_space=config_space_variable_parameters_generalized_175k, library='open_box')
+        config_space = convert_from_general(config_space=config, library='open_box')
 
         for key, value in fixed_parameters.items():
             config_space.add_variable(sp.Categorical(key, [value]))
@@ -391,6 +254,8 @@ def create_complete_config(environment, metric, library="syne_tune",config=None)
         config_space.add_variable(sp.Categorical('metric', [metric]))
 
         return config_space
+    '''
+
 
     if library == "dict_add" or library == 'dict':
 
@@ -408,7 +273,8 @@ def create_complete_config(environment, metric, library="syne_tune",config=None)
 
         #add any missing variable parameters :
         for key, value in variable_parameter_baseline.items():
-            if config_copy[key] is None:
+            #if config_copy[key] is None:
+            if key not in config_copy.keys():
                 config_copy[key] = value
 
         return config_copy
@@ -461,16 +327,8 @@ def get_config_space_string(config_space):
     config_space_string = ""
     if config_space == config_space_variable_parameters_generalized_1310k:
         config_space_string = "1310k"
-    elif config_space == config_space_variable_parameters_generalized_175k:
-        config_space_string = "175k"
-    elif config_space == config_space_variable_parameters_generalized_6250k:
-        config_space_string = "6250k"
-    elif config_space == config_space_variable_parameters_generalized_96636M:
-        config_space_string = "96636M"
-    elif config_space == config_space_variable_parameters_generalized_test_search_space:
-        config_space_string = "test_search_space"
-    elif config_space == config_space_variable_parameters_generalized_42M:
-        config_space_string = "42M"
+    elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M:
+        config_space_string = "10_5M"
     return config_space_string
 
 
