@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
@@ -8,11 +9,13 @@ from queue import Queue
 from experiments.experiment_scheduler.ssh_handler import SSHConnection
 from experiments.model_optimizer import data_transfer_wrapper
 from experiments.model_optimizer.Configs import *
-from experiments.model_optimizer.additional_environments import *
+from experiments.model_optimizer.NestedSSHHandler import NestedSSHClient
+from experiments.model_optimizer.environments import *
 from experiments.model_optimizer.model_implementations.syne_tune_ask_tell import Syne_Tune_Ask_Tell
 
 
-def process_configuration(queue, environment, ssh_host, output_file, lock):
+
+def process_configuration(queue, ssh_host):
     """
     #todo
 
@@ -24,21 +27,32 @@ def process_configuration(queue, environment, ssh_host, output_file, lock):
         lock (lock): Lock to lock the output file to not permit parallel writes.
     """
     while not queue.empty():
-        config_id, config = queue.get()
+        config_id, config, environment, output_file, lock = queue.get()
         try:
-            print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh_host}] starting to execute config {config_id} for environment {environment_to_string(environment)} {config}")
+            print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh_host}] starting config {config_id} for environment {environment_to_string(environment)} {config}")
 
             complete_config = create_complete_config(environment=environment, metric='time', library='dict', config=config)
 
             #run transfer
-            ssh = SSHConnection(host=ssh_host, username="bene")
+            if ssh_host in reserved_hosts_big_cluster:
+                ssh = NestedSSHClient(jump_host=big_cluster_main_host,
+                                      jump_username=get_username_for_host(big_cluster_main_host) ,
+                                      target_host=ssh_host,
+                                      target_username=get_username_for_host(ssh_host))
+            else:
+                ssh = SSHConnection(ssh_host, get_username_for_host(ssh_host))
+
             result = data_transfer_wrapper.transfer(config=complete_config, max_retries=1, ssh=ssh, i=config['config_id'])
             ssh.close()
-            
+
             if result['transfer_id'] == -1:
                 result['time'] = -1
 
             result['config_id'] = config_id
+
+            result['client_bufpool_factor'] = complete_config['client_bufpool_factor']
+            result['server_bufpool_factor'] = complete_config['server_bufpool_factor']
+
             with lock:
                 df = pd.DataFrame(result, index=[0])
                 if os.path.isfile(output_file):
@@ -46,7 +60,7 @@ def process_configuration(queue, environment, ssh_host, output_file, lock):
                 else:
                     df.to_csv(output_file, mode='a', header=True, index=False)
 
-            print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh_host}] finished executing  config {config_id} for environment {environment_to_string(environment)} in {result['time']} seconds")
+            print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh_host}] finished config {config_id} for environment {environment_to_string(environment)} in {result['time']} seconds")
 
         finally:
             queue.task_done()
@@ -67,6 +81,8 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count, enviro
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+
+    queue = Queue()
 
     for environment in environments:
         output_file = os.path.join(output_dir, f"{environment_to_string(environment)}_random_samples.csv")
@@ -90,25 +106,26 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count, enviro
             print(f"[{datetime.today().strftime('%H:%M:%S')}] All configurations already executed for {environment_to_string(environment)} with N = {count}.")
             continue
 
-        queue = Queue()
-        for config_id, config in remaining_configs:
-            queue.put((config_id, config)) # todo have on generall queue, to not have to wait for one env to finish until it can start with hte nxt one.
-
         lock = threading.Lock()
 
-        # start threads
-        threads = []
-        for i in range(len(ssh_hosts)):
-            thread = threading.Thread(target=process_configuration,
-                                      args=(queue, environment, ssh_hosts[i], output_file, lock))
-            thread.start()
-            threads.append(thread)
+        for config_id, config in remaining_configs:
+            queue.put((config_id, config, environment, output_file, lock))
 
-        # wait for threads to finish
-        for thread in threads:
-            thread.join()
 
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] Completed execution for {environment_to_string(environment)}. Results saved to {output_file}.")
+
+    # start threads
+    threads = []
+    for i in range(len(ssh_hosts)):
+        thread = threading.Thread(target=process_configuration,
+                                      args=(queue, ssh_hosts[i]))
+        thread.start()
+        threads.append(thread)
+
+    # wait for threads to finish
+    for thread in threads:
+        thread.join()
+
+    print(f"[{datetime.today().strftime('%H:%M:%S')}] Completed execution for N={count}. Results saved to {output_file}.")
 
 
 def generate_random_configurations(n=1000):
@@ -143,7 +160,7 @@ def generate_random_configurations(n=1000):
         results = pd.concat([results, df], axis=0)
 
 
-CONFIG_SPACE = config_space_variable_parameters_generalized_1310k
+CONFIG_SPACE = config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M
 
 if __name__ == "__main__":
 
@@ -154,11 +171,12 @@ if __name__ == "__main__":
     config_file = f"random_samples_{config_space_string}/grid_configurations_FIXED.csv"
     output_dir = f"random_samples_{config_space_string}"
 
-    #ssh_hosts = ["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
-    ssh_hosts = ["cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"]
+    ssh_hosts = reserved_hosts_big_cluster
 
-    environments = environment_list_test_new_base_envs
+    environments = environment_list_base_envs
 
-    for i in [4, 20, 32, 44, 66, 88, 100, 120, 150, 175, 200, 210, 215, 220, 225, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]:
+    for i in [8,50, 500, 600, 700, 800, 900,  1000]:
         print(f"starting executing with n = {i}")
         execute_all_configurations(config_file, output_dir, ssh_hosts, i, environments)
+
+

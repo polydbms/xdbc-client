@@ -220,7 +220,7 @@ def get_next_trial_id(path="C:/Users/bened/Desktop/Uni/repos/xdbc-client/experim
 
     for file in all_files:
         df = pd.read_csv(file)
-        df = df[df['time'].notna()]
+        df = df[df['transfer_id'] > 0]
         trial_ids = df['trial_id'].unique().tolist()
         all_trial_ids.append(trial_ids)
 

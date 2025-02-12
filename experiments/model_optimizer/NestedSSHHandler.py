@@ -1,8 +1,10 @@
+import threading
 import warnings
 
 import paramiko
 
 from experiments.experiment_scheduler.ssh_handler import SSHConnectionError
+from experiments.model_optimizer.Configs import reserved_hosts_big_cluster
 
 
 class NestedSSHClient:
@@ -12,33 +14,38 @@ class NestedSSHClient:
         self.target_host = target_host
         self.target_username = target_username
 
-        self.hostname = target_host # for logging
+        self.hostname = target_host
 
         self.jump_client = None
         self.target_client = None
 
         self._connect()
 
+    global_lock = threading.Lock()
+
     def _connect(self):
-        self.jump_client = paramiko.SSHClient()
-        self.jump_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.jump_client.connect(
-            self.jump_host,
-            username=self.jump_username
-        )
+        with NestedSSHClient.global_lock:
+            self.jump_client = paramiko.SSHClient()
+            self.jump_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.jump_client.connect(
+                self.jump_host,
+                username=self.jump_username
+            )
 
-        transport = self.jump_client.get_transport()
-        dest_addr = (self.target_host, 22)
-        local_addr = ('127.0.0.1', 0)
-        channel = transport.open_channel("direct-tcpip", dest_addr, local_addr)
-
-        self.target_client = paramiko.SSHClient()
-        self.target_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.target_client.connect(
-            self.target_host,
-            username=self.target_username,
-            sock=channel
-        )
+            transport = self.jump_client.get_transport()
+            dest_addr = (self.target_host, 22)
+            local_addr = ('127.0.0.1', 0)
+            channel = transport.open_channel("direct-tcpip", dest_addr, local_addr)
+            transport.set_keepalive(60)
+            #todo !!!
+            self.target_client = paramiko.SSHClient()
+            self.target_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self.target_client.connect(
+                self.target_host,
+                username=self.target_username,
+                sock=channel
+            )
+            self.target_client.get_transport().set_keepalive(60)
 
     def execute_cmd(self, cmd, background=False):
 
@@ -66,7 +73,17 @@ class NestedSSHClient:
             self.jump_client.close()
 
 
+
 if __name__ == "__main__":
+
+
+    #executed for 26 - 46
+    #ssh.execute_cmd("make -C ./xdbc-client/.")
+    #ssh.execute_cmd("make -C ./xdbc-server/.")
+
+
+
+    '''
 
     jump_host = "sr630-wn-a-01.dima.tu-berlin.de"
     jump_username = "bdidrich-ldap"
@@ -84,3 +101,8 @@ if __name__ == "__main__":
     print("Output:", stdout)
 
     ssh.close()
+
+    '''
+
+
+

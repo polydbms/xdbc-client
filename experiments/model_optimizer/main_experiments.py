@@ -8,7 +8,7 @@ from experiments.experiment_scheduler.ssh_handler import SSHConnection
 from experiments.model_optimizer import Stopping_Rules, data_transfer_wrapper
 from experiments.model_optimizer.Helpers import *
 from experiments.model_optimizer.NestedSSHHandler import NestedSSHClient
-from experiments.model_optimizer.additional_environments import *
+from experiments.model_optimizer.environments import *
 from experiments.model_optimizer.model_implementations.Test_Cost_Model import *
 from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_Cost_Model import *
 from experiments.model_optimizer.model_implementations.openbox_ask_tell import OpenBox_Ask_Tell
@@ -18,99 +18,34 @@ from experiments.model_optimizer.model_implementations.own_random_search import 
 
 def main():
 
-    algos_to_run = [
-        #"cost_model_rfs_bay",       #test both rs and bay, with clustering or not, both using history updates
-        "cost_model_rfs_rs",
-
-        #"cost_model_rfs_bay_cluster",
-        "cost_model_rfs_rs_cluster",
-        
-        
-        "bayesian_open_box",
-
-        "tlbo_rgpe_prf",
-        "tlbo_topov3_prf",
-
-        #"tlbo_rgpe_gp",
-        #"tlbo_topov3_gp",
-
-        "quantile",
-
-        
-
-    ]
-    '''
-    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de"],#, "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
-                                             environments_to_run=[env_S16_C4_N1000],#environment_list_test_new_main_envs,
-                                             algorithms_to_run=["cost_model_rfs_bay", "cost_model_rfs_bay_cluster"],
-                                             config_space=config_space_variable_parameters_generalized_1310k,
-                                             metric='time',
-                                             mode='min',
-                                             loop_count=2,
-                                             use_all_environments=False,
-                                             training_data_per_env=200,
-                                             max_training_transfers_per_iteration=150,
-                                             use_history=True)
-
-    '''
-
-
-    # run all with n=300, train_transfers = 250
-    all_cost_model_variations_rs = [
-
-        #"cost_model_rfs_rs_exc_cluster_update_net_trans_hist_ratio",
-
-        "cost_model_rfs_rs_exc_cluster_update_net_trans",
-        #"cost_model_rfs_rs_exc_cluster_update_hist_ratio",
-        #"cost_model_rfs_rs_exc_update_net_trans_hist_ratio",
-
-        #"cost_model_rfs_rs_exc_cluster_update",
-        #"cost_model_rfs_rs_exc_cluster_net_trans",
-        #"cost_model_rfs_rs_exc_update_net_trans",
-        #"cost_model_rfs_rs_exc_update_hist_ratio",
-
-        #"cost_model_rfs_rs_exc_cluster",
-        #"cost_model_rfs_rs_exc_update",
-        #"cost_model_rfs_rs_exc_net_trans",
-
-        #"cost_model_rfs_rs_exc",
-
-        # cost model without target env, only using history
-        # if only history -> net_trans has no effect
-        # if only history -> only possible if update
-
-        "cost_model_rfs_rs_exc_cluster_update_only_hist",
-        #"cost_model_rfs_rs_exc_update_only_hist",
-
-    ]
-
-
-
-
     algo_selection_promising = [
-        #"cost_model_rfs_rs_exc_cluster_update_net_trans",
-        #"cost_model_rfs_rs_exc_cluster_update_only_hist",
-        #"cost_model_gdb_rs_exc_cluster_update_net_trans", #todo test tuned
-        #"cost_model_gdb_rs_exc_cluster_update_only_hist",
+        #"cost_model_xgb_rs_exc_cluster_update_net_trans",
+        #"cost_model_xgb_rs_exc_cluster_update_only_hist",
 
-        "cost_model_xgb_rs_exc_cluster_update_net_trans_tuned_1000_curdat",
-        "cost_model_xgb_rs_exc_cluster_update_only_hist_tuned_1000_curdat",
-
-        #"tlbo_rgpe_prf",
+        #"tlbo_rgpe_prf",-
         #"tlbo_topov3_prf",
         #"quantile",
         #"bayesian_open_box",
-
     ]
 
 
 
-    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
-                                             environments_to_run=environment_list_test_new_main_envs,
-                                             algorithms_to_run=algo_selection_promising,
-                                             config_space=config_space_variable_parameters_generalized_1310k,
-                                             metric='time',
-                                             mode='min',
+    algos_to_run = [
+                    'random_search',
+                    "hyperband",
+                    "asha",
+                    "bayesian_open_box",
+                    ]
+
+
+
+
+    execute_optimization_runs_multi_threaded(ssh_hosts=reserved_hosts_big_cluster,
+                                             environments_to_run=environment_list_main_envs,
+                                             algorithms_to_run=['bayesian_open_box'],
+                                             config_space=config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE,
+                                             metric='uncompressed_throughput',
+                                             mode='max',
                                              loop_count=25,
                                              use_all_environments=False,
                                              training_data_per_env=300,
@@ -122,21 +57,6 @@ def main():
 
 
 
-                                             
-
-    '''
-    execute_optimization_runs_multi_threaded(ssh_hosts=["cloud-7.dima.tu-berlin.de", "cloud-8.dima.tu-berlin.de", "cloud-9.dima.tu-berlin.de", "cloud-10.dima.tu-berlin.de"],
-                                             environments_to_run=environment_list_test_new_main_envs,
-                                             algorithms_to_run=["cost_model_rfs_rs","cost_model_rfs_rs_cluster"],
-                                             config_space=config_space_variable_parameters_generalized_1310k,
-                                             metric='time',
-                                             mode='min',
-                                             loop_count=25,
-                                             use_all_environments=False,
-                                             training_data_per_env=200,
-                                             max_training_transfers_per_iteration=150,
-                                             use_history=True)
-    '''
 
 
 
@@ -201,17 +121,15 @@ def main():
     print(f"Average Factor : {sum_factors / iterations}")
     '''
 
-
 cost_model_algorithms = ["test_cost_model_rfs_rs", "test_cost_model_rfs_bay",
                          "cost_model_rfs_rs", "cost_model_rfs_bay",
                          "cost_model_rfs_rs_cluster", "cost_model_rfs_bay_cluster"]
-
 
 #========================================================================
 # The actual optimization loops
 #========================================================================
 
-def experiment_direct_optimization_loop(optimizer, environment, metric, config_space, loop_count, trial_id=-1, ssh=None):
+def experiment_direct_optimization_loop(optimizer, environment, metric, mode, config_space, loop_count, trial_id=-1, ssh=None):
 
     print(f"\n----------------------------- \n now starting with optimizer {optimizer.underlying} with environment {environment_to_string(environment)} for {loop_count} iterations on [{ssh.hostname}]\n ----------------------------- \n")
 
@@ -289,15 +207,13 @@ def experiment_direct_optimization_loop(optimizer, environment, metric, config_s
         results = pd.concat([results, df], axis=0)
 
         end = datetime.now()
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{optimizer.underlying}] completed transfer #{i} in {(end - start).total_seconds()} seconds (result time was {result['time']})")
-
-        #should_stop = Stopping_Rules.get_decision("no_improvment_iterations", results['time'].values)
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{optimizer.underlying}] completed transfer #{i} in {(end - start).total_seconds()} seconds (result was {result[metric]})")
 
         #print(f"Rule no_improvment_iterations : " + str(should_stop))
         i += 1
 
 
-def experiment_indirect_optimization(cost_model, optimizer, environment, metric, config_space, max_training_transfers_per_iteration, max_real_transfers, ssh_host, trial_id=-1):
+def experiment_indirect_optimization(cost_model, optimizer, environment, metric, mode, config_space, max_training_transfers_per_iteration, max_real_transfers, ssh_host, trial_id=-1):
 
     print(f"\n----------------------------- \n now starting with cost model {cost_model.underlying} with environment {environment_to_string(environment)} for {max_real_transfers} real transfers on [{ssh_host}]\n ----------------------------- \n")
 
@@ -316,7 +232,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
 
     # loop variables
     best_config = None
-    best_time = -1
+    best_metric = -1
     count_real_transfers = 0
     count_training_transfers = 0
     time_lost_too_timeouts = 0
@@ -335,7 +251,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
     for i in range(1, max_real_transfers+1):
 
         best_predicted_config = None
-        best_predicted_time = -1
+        best_predicted_metric = -1
 
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] now starting to run {max_training_transfers_per_iteration} surrogate transfers")
 
@@ -349,20 +265,24 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
 
             #get the cost prediction for that configuration
             result_cost_model = cost_model.predict(data=complete_config, target_environment=environment, print_wieghts=False)
-            result_time = float(result_cost_model[metric])
-            #print(f"{i_inner} predicted time : {result_time}")
+            result_metric = float(result_cost_model[metric])
 
             #if found configuration is new best, update
-            if best_predicted_time == -1 or best_predicted_time > result_time:
-                best_predicted_config = complete_config
-                best_predicted_time = result_time
+            if mode == 'min':
+                if best_predicted_metric == -1 or best_predicted_metric > result_metric:
+                    best_predicted_config = complete_config
+                    best_predicted_metric = result_metric
+            elif mode == 'max':
+                if best_predicted_metric == -1 or best_predicted_metric < result_metric:
+                    best_predicted_config = complete_config
+                    best_predicted_metric = result_metric
 
             #report result to optimizer
             optimizer.report(suggested_config, result_cost_model)
         end_inner = datetime.now()
 
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] running {max_training_transfers_per_iteration} surrogate transfers took {(end_inner - start_inner).total_seconds()} seconds")
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] best found configuration has predicted time of {best_predicted_time}")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] best found configuration has predicted metric of {best_predicted_metric}")
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] now running best predicted config {best_predicted_config}")
         # Get weight table for best config
         cost_model.predict(data=best_predicted_config, target_environment=environment, print_wieghts=True)
@@ -390,14 +310,14 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
 
         count_real_transfers = count_real_transfers + 1
         result_time = float(result[metric])
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] true data transfer completed in {result['time']} seconds")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] true data transfer completed in {result['time']} seconds, result metric was {result[metric]} ({metric})")
 
         # add additional fields
         result['trial_id'] = trial_id
         result['algo'] = cost_model.underlying
         end_temp = datetime.now()
         result['seconds_since_start_of_opt_run'] = ((end_temp - start_outer).total_seconds() - time_lost_too_timeouts)
-        result['predicted_time'] = best_predicted_time
+        result['predicted_metric'] = best_predicted_metric
 
         # save results to file
         df = pd.DataFrame(result, index=[0])
@@ -413,14 +333,19 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         optimizer.reset()
 
         #if real execution result is new best, update
-        if best_time == -1 or best_time > result_time:
-            best_config = best_predicted_config
-            best_time = result_time
+        if mode == 'min':
+            if best_metric == -1 or best_metric > result_metric:
+                best_config = best_predicted_config
+                best_metric = result_metric
+        elif mode == 'max':
+            if best_metric == -1 or best_metric < result_metric:
+                best_config = best_predicted_config
+                best_metric = result_metric
 
     end_outer = datetime.now()
 
     print(f"[{datetime.today().strftime('%H:%M:%S')}] [{cost_model.underlying}] running {count_real_transfers} real transfers with {max_training_transfers_per_iteration * count_real_transfers} training transfers took {(end_outer - start_outer).total_seconds()} seconds")
-    print(f"[{datetime.today().strftime('%H:%M:%S')}] [{cost_model.underlying}] best found configuration has time of {best_time}")
+    print(f"[{datetime.today().strftime('%H:%M:%S')}] [{cost_model.underlying}] best found configuration has metric of {best_metric} ({metric})")
     print(f"[{datetime.today().strftime('%H:%M:%S')}] [{cost_model.underlying}] best config : {best_config}")
 
 
@@ -473,7 +398,7 @@ def execute_optimization_algorithm_run(algorithm, ssh_host, environment, config_
     else:
         raise ValueError(f"Algorithm {algorithm} is not in available transfer algorithms of any supported library wrapper.")
 
-    experiment_direct_optimization_loop(optimizer=optimizer, environment=environment, metric=metric, config_space=config_space, loop_count=loop_count, ssh=ssh)
+    experiment_direct_optimization_loop(optimizer=optimizer, environment=environment, metric=metric, mode=mode, config_space=config_space, loop_count=loop_count, ssh=ssh)
 
     ssh.close()
 
@@ -503,7 +428,7 @@ def execute_transfer_algorithm_run(algorithm, ssh_host, use_all_environments, en
 
     optimizer.load_transfer_learning_history_per_env_from_dataframe(data=data, training_data_per_env=training_data_per_env)
 
-    experiment_direct_optimization_loop(optimizer=optimizer, environment=environment, metric=metric, config_space=config_space, loop_count=loop_count, ssh=ssh)
+    experiment_direct_optimization_loop(optimizer=optimizer, environment=environment, metric=metric, mode=mode, config_space=config_space, loop_count=loop_count, ssh=ssh)
 
     ssh.close()
 
@@ -518,17 +443,17 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
                     #"source_system",   # potentialy relevant if variety in training data, also the format
                     #"target_system",
                     #"table",
-                    "bufpool_size",
+                    "client_bufpool_factor",
+                    "server_bufpool_factor",
                     "buffer_size",
                     "compression",
                     "send_par",
                     #"rcv_par",
                     "write_par",
                     "decomp_par",
-                    "read_partitions",
                     "read_par",
                     "deser_par",
-                    #"ser_par",         # add in the future
+                    "ser_par",
                     "comp_par"
                     ]
 
@@ -575,7 +500,7 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
         if "_net_trans" in algorithm:
             suffix = suffix + "_net_trans"
 
-    print(f"Algorithm : {algorithm}    suffix : {suffix}")
+    #print(f"Algorithm : {algorithm}    suffix : {suffix}")
 
     if use_history:
 
@@ -630,9 +555,9 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
 
     data, suffix = get_transfer_learning_data_for_environment(environment, use_all_environments)
 
-    data['bufpool_size'] = data['server_bufferpool_size']
+    x = data[input_fields]
+    y = data[metric]
 
-    x, y = split_data(data, metric=metric)
     cost_model.train(x, y)
 
     experiment_indirect_optimization(cost_model=cost_model,
@@ -640,6 +565,7 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
                                      environment=environment,
                                      config_space=config_space,
                                      metric=metric,
+                                     mode=mode,
                                      max_training_transfers_per_iteration=max_training_transfers_per_iteration,
                                      max_real_transfers=max_real_transfers,
                                      ssh_host=ssh_host)
@@ -647,43 +573,46 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
 
 def get_transfer_learning_data_for_environment(target_environment, use_all_environments, except_N_most_similar=2):
 
-    base_path = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/random_samples_1310k"
+    base_path = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/random_samples_10_5M"
     environments_to_use = []
     suffix = ""
 
     if use_all_environments:
 
-        if target_environment in environment_list_test_new_base_envs:
-            environments_to_use = environment_list_test_new_base_envs
+        if target_environment in environment_list_base_envs:
+            environments_to_use = environment_list_base_envs
             suffix = "_all_envs"
 
 
-    # environments sorted by similarity to the key-environemt. calculated using spearman rank coefficient on a sample size of about 80 samples per environment.
+    # environments sorted by similarity to the key-environemt. calculated using spearman rank coefficient on a sample size of 100 samples per environment.
     dict_environment_most_similars = {
-            "S2_C2_N50": ['S2_C2_N50', 'S2_C8_N50', 'S4_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C16_N50', 'S16_C4_N50', 'S4_C16_N150', 'S2_C8_N150', 'S2_C2_N150', 'S8_C8_N150', 'S8_C2_N150', 'S16_C8_N150', 'S16_C16_N150', 'S16_C4_N150', 'S4_C16_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S2_C8_N50": ['S2_C8_N50', 'S2_C2_N50', 'S4_C16_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C4_N50', 'S8_C2_N50', 'S2_C8_N150', 'S4_C16_N150', 'S2_C2_N150', 'S8_C8_N150', 'S16_C8_N150', 'S8_C2_N150', 'S16_C16_N150', 'S16_C4_N150', 'S4_C16_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S4_C16_N50": ['S4_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C4_N50', 'S2_C2_N50', 'S2_C8_N50', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C2_N150', 'S16_C4_N150', 'S4_C16_N150', 'S2_C8_N150', 'S2_C2_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S8_C8_N50": ['S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C4_N50', 'S4_C16_N50', 'S2_C2_N50', 'S2_C8_N50', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C2_N150', 'S16_C4_N150', 'S4_C16_N150', 'S2_C8_N150', 'S16_C16_N1000', 'S2_C2_N150', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S8_C2_N50": ['S8_C2_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N50', 'S16_C4_N50', 'S4_C16_N50', 'S2_C2_N50', 'S2_C8_N50', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S2_C8_N150', 'S8_C8_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S16_C4_N50": ['S16_C4_N50', 'S16_C16_N50', 'S8_C2_N50', 'S8_C8_N50', 'S16_C8_N50', 'S4_C16_N50', 'S2_C2_N50', 'S2_C8_N50', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S2_C8_N150', 'S8_C8_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S16_C8_N50": ['S16_C8_N50', 'S8_C8_N50', 'S16_C16_N50', 'S8_C2_N50', 'S16_C4_N50', 'S4_C16_N50', 'S2_C2_N50', 'S2_C8_N50', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C2_N150', 'S16_C4_N150', 'S4_C16_N150', 'S2_C2_N150', 'S2_C8_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S16_C16_N50": ['S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C4_N50', 'S8_C2_N50', 'S4_C16_N50', 'S2_C8_N50', 'S2_C2_N50', 'S8_C8_N150', 'S16_C8_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C2_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S2_C8_N150', 'S2_C2_N150', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-            "S2_C2_N150": ['S2_C2_N150', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N50', 'S8_C2_N150', 'S16_C16_N150', 'S8_C8_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C2_N1000', 'S4_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S16_C16_N50', 'S8_C2_N50', 'S16_C4_N50'],
-            "S2_C8_N150": ['S2_C8_N150', 'S2_C2_N150', 'S2_C8_N1000', 'S2_C2_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N50', 'S8_C2_N150', 'S16_C16_N150', 'S8_C8_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C2_N1000', 'S4_C16_N50', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S8_C8_N50', 'S8_C8_N1000', 'S16_C8_N50', 'S8_C2_N50', 'S16_C16_N50', 'S16_C4_N50'],
-            "S4_C16_N150": ['S4_C16_N150', 'S8_C2_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S16_C4_N150', 'S8_C2_N1000', 'S4_C16_N1000', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S2_C8_N150', 'S2_C2_N50', 'S2_C2_N150', 'S2_C8_N50', 'S4_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C4_N50', 'S16_C16_N50', 'S2_C8_N1000', 'S2_C2_N1000'],
-            "S8_C8_N150": ['S8_C8_N150', 'S16_C16_N150', 'S8_C2_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C8_N50', 'S2_C2_N50', 'S4_C16_N50', 'S16_C16_N50', 'S8_C2_N50', 'S16_C8_N50', 'S16_C4_N50', 'S8_C8_N50', 'S2_C8_N150', 'S2_C2_N150', 'S2_C8_N1000', 'S2_C2_N1000'],
-            "S8_C2_N150": ['S8_C2_N150', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C2_N1000', 'S8_C8_N1000', 'S4_C16_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S2_C8_N150', 'S4_C16_N50', 'S8_C8_N50', 'S8_C2_N50', 'S16_C8_N50', 'S2_C2_N150', 'S16_C16_N50', 'S16_C4_N50', 'S2_C8_N1000', 'S2_C2_N1000'],
-            "S16_C4_N150": ['S16_C4_N150', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C2_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S2_C8_N150', 'S2_C2_N150', 'S2_C8_N1000', 'S2_C2_N1000'],
-            "S16_C8_N150": ['S16_C8_N150', 'S16_C16_N150', 'S8_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S4_C16_N150', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C8_N50', 'S2_C2_N50', 'S4_C16_N50', 'S16_C16_N50', 'S8_C2_N50', 'S16_C8_N50', 'S16_C4_N50', 'S8_C8_N50', 'S2_C8_N150', 'S2_C2_N150', 'S2_C8_N1000', 'S2_C2_N1000'],
-            "S16_C16_N150": ['S16_C16_N150', 'S8_C8_N150', 'S16_C8_N150', 'S8_C2_N150', 'S16_C4_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C2_N1000', 'S8_C8_N1000', 'S4_C16_N1000', 'S2_C8_N50', 'S2_C2_N50', 'S4_C16_N50', 'S8_C2_N50', 'S16_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S8_C8_N50', 'S2_C8_N150', 'S2_C2_N150', 'S2_C8_N1000', 'S2_C2_N1000'],
-            "S2_C2_N1000": ['S2_C2_N1000', 'S2_C8_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S8_C2_N1000', 'S4_C16_N150', 'S8_C8_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S16_C16_N1000', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C8_N150', 'S16_C8_N150', 'S4_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C16_N50', 'S16_C4_N50'],
-            "S2_C8_N1000": ['S2_C8_N1000', 'S2_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S8_C2_N1000', 'S4_C16_N150', 'S8_C8_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S16_C16_N1000', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C8_N150', 'S16_C8_N150', 'S4_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C16_N50', 'S16_C4_N50'],
-            "S4_C16_N1000": ['S4_C16_N1000', 'S8_C2_N1000', 'S8_C8_N1000', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S4_C16_N150', 'S8_C2_N150', 'S16_C4_N150', 'S16_C16_N150', 'S8_C8_N150', 'S16_C8_N150', 'S2_C8_N1000', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C2_N150', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C16_N50', 'S16_C4_N50'],
-            "S8_C8_N1000": ['S8_C8_N1000', 'S16_C4_N1000', 'S16_C8_N1000', 'S16_C16_N1000', 'S8_C2_N1000', 'S16_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S8_C8_N150', 'S8_C2_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S2_C8_N1000', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S4_C16_N50'],
-            "S8_C2_N1000": ['S8_C2_N1000', 'S8_C8_N1000', 'S16_C4_N1000', 'S16_C8_N1000', 'S16_C16_N1000', 'S4_C16_N1000', 'S16_C16_N150', 'S16_C4_N150', 'S8_C2_N150', 'S16_C8_N150', 'S8_C8_N150', 'S4_C16_N150', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S8_C8_N50', 'S4_C16_N50', 'S16_C8_N50', 'S8_C2_N50', 'S16_C4_N50', 'S16_C16_N50'],
-            "S16_C4_N1000": ['S16_C4_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S16_C16_N1000', 'S8_C2_N1000', 'S16_C8_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C8_N150', 'S8_C2_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S2_C8_N150', 'S8_C2_N50', 'S2_C2_N150', 'S2_C8_N1000', 'S16_C4_N50', 'S2_C2_N1000', 'S8_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C8_N50'],
-            "S16_C8_N1000": ['S16_C8_N1000', 'S16_C4_N1000', 'S16_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S16_C8_N150', 'S8_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S8_C2_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S2_C8_N150', 'S8_C2_N50', 'S2_C2_N150', 'S16_C4_N50', 'S8_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S2_C8_N1000', 'S16_C8_N50', 'S2_C2_N1000'],
-            "S16_C16_N1000": ['S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S2_C8_N150', 'S8_C2_N50', 'S8_C8_N50', 'S16_C4_N50', 'S2_C2_N150', 'S16_C16_N50', 'S4_C16_N50', 'S16_C8_N50', 'S2_C8_N1000', 'S2_C2_N1000'],
+        "S2_C2_N50": ['S2_C2_N50', 'S2_C8_N50', 'S4_C16_N150', 'S8_C2_N150', 'S4_C16_N50', 'S8_C16_N150', 'S8_C8_N150', 'S8_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S8_C2_N50', 'S4_C16_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S2_C2_N1000', 'S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S2_C8_N1000', 'S16_C4_N1000', 'S8_C2_N1000', 'S16_C16_N1000', 'S16_C8_N1000'],
+        "S2_C8_N50": ['S2_C8_N50', 'S2_C2_N50', 'S4_C16_N150', 'S8_C2_N150', 'S4_C16_N50', 'S8_C16_N150', 'S8_C8_N150', 'S8_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S8_C2_N50', 'S8_C8_N1000', 'S16_C4_N150', 'S2_C2_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N50', 'S8_C16_N50', 'S2_C8_N1000', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C4_N1000', 'S8_C2_N1000', 'S16_C16_N1000', 'S16_C8_N1000'],
+        "S4_C16_N50": ['S4_C16_N50', 'S8_C2_N50', 'S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C16_N150', 'S8_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C2_N150', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S8_C8_N50": ['S8_C8_N50', 'S16_C8_N50', 'S8_C16_N50', 'S16_C16_N50', 'S16_C4_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N150', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S4_C16_N1000', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S8_C2_N50": ['S8_C2_N50', 'S16_C4_N50', 'S8_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S4_C16_N1000', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S8_C16_N50": ['S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S16_C8_N1000', 'S16_C16_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S16_C4_N50": ['S16_C4_N50', 'S16_C8_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S16_C8_N1000', 'S16_C16_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S16_C8_N50": ['S16_C8_N50', 'S16_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S8_C16_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S2_C2_N50', 'S16_C4_N1000', 'S2_C8_N50', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S16_C16_N50": ['S16_C16_N50', 'S16_C8_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C4_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S2_C2_N150": ['S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C4_N1000', 'S16_C8_N150', 'S8_C2_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
+        "S2_C8_N150": ['S2_C8_N150', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N1000', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N50', 'S16_C4_N150', 'S8_C2_N50', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N1000', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
+        "S4_C16_N150": ['S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N150', 'S8_C16_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S8_C8_N1000', 'S4_C16_N1000', 'S16_C4_N150', 'S4_C16_N50', 'S16_C8_N150', 'S16_C16_N150', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S8_C2_N50', 'S2_C8_N1000', 'S16_C4_N1000', 'S8_C16_N50', 'S8_C2_N1000', 'S8_C8_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
+        "S8_C8_N150": ['S8_C8_N150', 'S8_C16_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N50', 'S8_C2_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C2_N150', 'S16_C4_N1000', 'S8_C16_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S8_C2_N150": ['S8_C2_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N1000', 'S16_C4_N1000', 'S8_C2_N50', 'S4_C16_N50', 'S4_C16_N150', 'S8_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C16_N1000', 'S8_C8_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S8_C16_N150": ['S8_C16_N150', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N50', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C2_N150', 'S16_C4_N1000', 'S16_C16_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S16_C4_N150": ['S16_C4_N150', 'S16_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S4_C16_N50', 'S8_C2_N150', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S8_C2_N1000', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S16_C8_N150": ['S16_C8_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S16_C16_N150": ['S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
+        "S2_C2_N1000": ['S2_C2_N1000', 'S2_C8_N1000', 'S2_C8_N150', 'S2_C2_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C8_N150', 'S8_C16_N150', 'S4_C16_N50', 'S16_C4_N1000', 'S16_C4_N150', 'S8_C2_N50', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
+        "S2_C8_N1000": ['S2_C8_N1000', 'S2_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C8_N150', 'S8_C16_N150', 'S4_C16_N50', 'S16_C4_N1000', 'S8_C2_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
+        "S4_C16_N1000": ['S4_C16_N1000', 'S2_C2_N1000', 'S2_C2_N150', 'S2_C8_N1000', 'S2_C8_N150', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C8_N150', 'S8_C16_N150', 'S16_C4_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N50', 'S16_C16_N1000', 'S8_C2_N50', 'S16_C8_N1000', 'S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N50'],
+        "S8_C8_N1000": ['S8_C8_N1000', 'S8_C16_N1000', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N150', 'S8_C2_N150', 'S16_C8_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N50', 'S4_C16_N1000', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
+        "S8_C2_N1000": ['S8_C2_N1000', 'S8_C2_N150', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C16_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S4_C16_N150', 'S4_C16_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C2_N50', 'S4_C16_N50', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N50', 'S2_C8_N1000', 'S2_C8_N150', 'S2_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50'],
+        "S8_C16_N1000": ['S8_C16_N1000', 'S8_C8_N1000', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N150', 'S8_C2_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N50', 'S4_C16_N1000', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
+        "S16_C4_N1000": ['S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S8_C16_N1000', 'S8_C2_N150', 'S16_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N1000', 'S8_C2_N50', 'S4_C16_N50', 'S8_C8_N50', 'S4_C16_N150', 'S16_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
+        "S16_C8_N1000": ['S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C16_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N150', 'S8_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S8_C8_N50', 'S4_C16_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C2_N50', 'S8_C2_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
+        "S16_C16_N1000": ['S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C16_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S8_C8_N50', 'S4_C16_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C16_N50', 'S16_C4_N50', 'S8_C2_N50', 'S8_C2_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000']
     }
 
     if environment_to_string(target_environment) in dict_environment_most_similars.keys():
@@ -705,20 +634,20 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
 
 
 
-    base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets"
-    file_list_currated = [glob.glob(f"{base_path_currated}/{signature}_currated_dataset*.csv") for signature in environments_to_use]
-    for file in file_list_currated:
-        if file:
-            df = pd.read_csv(file[0])
-            df = df[(df['time'] > time_threshold)]
-            data_frames.append(df)
+    #base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets"
+    #file_list_currated = [glob.glob(f"{base_path_currated}/{signature}_currated_dataset*.csv") for signature in environments_to_use]
+    #for file in file_list_currated:
+    #    if file:
+    #        df = pd.read_csv(file[0])
+    #        df = df[(df['time'] > time_threshold)]
+    #        data_frames.append(df)
 
 
 
 
     for file in file_list:
         df = pd.read_csv(file[0])
-        df = df[(df['time'] > time_threshold)]
+        df = df[(df['transfer_id'] > 0)]
         data_frames.append(df)
 
 
@@ -876,7 +805,8 @@ def queue_function(queue, ssh_host):
                         use_all_environments=use_all_environments,
                         environment=environment,
                         config_space=config_space,
-                        metric=metric, mode=mode,
+                        metric=metric,
+                        mode=mode,
                         loop_count=loop_count,
                         training_data_per_env=training_data_per_env,
                         max_training_transfers_per_iteration=max_training_transfers_per_iteration,
@@ -905,23 +835,25 @@ def execute_optimization_runs_multi_threaded(ssh_hosts, environments_to_run, alg
 
     for env in environments_to_run:
         if env == env_S2_C2_N50:                        # average run time per transfer in seconds, calculated from random samples.
-            total_time_estimate = total_time_estimate + ((125 + overhead_per_run) * len(algorithms_to_run) * loop_count)
-        if env == env_S8_C2_N50:
-            total_time_estimate = total_time_estimate + ((120 + overhead_per_run) * len(algorithms_to_run) * loop_count)
-        if env == env_S16_C16_N50:
-            total_time_estimate = total_time_estimate + ((120 + overhead_per_run) * len(algorithms_to_run) * loop_count)
-        if env == env_S2_C2_N150:
-            total_time_estimate = total_time_estimate + ((80 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+        if env == env_S2_C8_N50:
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+        if env == env_S4_C16_N50:
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+
+        if env == env_S8_C8_N150:
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S8_C2_N150:
-            total_time_estimate = total_time_estimate + ((55 + overhead_per_run) * len(algorithms_to_run) * loop_count)
-        if env == env_S16_C16_N150:
-            total_time_estimate = total_time_estimate + ((55 + overhead_per_run) * len(algorithms_to_run) * loop_count)
-        if env == env_S2_C2_N1000:
-            total_time_estimate = total_time_estimate + ((76 + overhead_per_run) * len(algorithms_to_run) * loop_count)
-        if env == env_S8_C2_N1000:
-            total_time_estimate = total_time_estimate + ((45 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+        if env == env_S8_C16_N150:
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+
+        if env == env_S16_C4_N1000:
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+        if env == env_S16_C8_N1000:
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S16_C16_N1000:
-            total_time_estimate = total_time_estimate + ((45 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
 
     print(total_time_estimate)
 
@@ -941,7 +873,7 @@ def execute_optimization_runs_multi_threaded(ssh_hosts, environments_to_run, alg
     threads = []
     for i in range(len(ssh_hosts)):
         thread = threading.Thread(target=queue_function, args=(queue, ssh_hosts[i]))
-        time.sleep(2.5)  # so no threads start at the same time, bc filenames depend on timestamp
+        time.sleep(1.5)  # so no threads start at the same time, bc filenames depend on timestamp
         thread.start()
         threads.append(thread)
 

@@ -18,7 +18,8 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
         ssh.execute_cmd("docker compose -f xdbc-client/docker-xdbc.yml up -d")
         ssh.execute_cmd("docker exec xdbcclient bash -c \"ldconfig\"")
         ssh.execute_cmd('docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo \'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time\' > /tmp/xdbc_server_timings.csv"')
-        ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
+        #ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
+        ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /xdbc-client/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /xdbc-client/xdbc_client_timings.csv"')
 
 
 
@@ -180,8 +181,6 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
         target_kill_str = f"docker exec {env['client_container']} bash -c rm -rf /dev/shm/output*"
         ssh.execute_cmd(target_kill_str,True)
 
-    #ssh.close()
-
     if return_transfer_id:
         return result
     else:
@@ -195,12 +194,13 @@ def check_file_exists(container, file_path, ssh):
     rc = 0
     if result != None:
         rc = 1
-    return rc # result.returncode == 0  # 0 means the file exists
+    return rc
 
 
 def copy_metrics(server_container, client_container, perf_dir,ssh):
     file_path_server = '/tmp/xdbc_server_timings.csv'
-    file_path_client = '/tmp/xdbc_client_timings.csv'
+    #file_path_client = '/tmp/xdbc_client_timings.csv'
+    file_path_client = '/xdbc-client/xdbc_client_timings.csv'
 
     if (not check_file_exists(server_container, file_path_server,ssh) or
             not check_file_exists(client_container, file_path_client,ssh)):
@@ -216,13 +216,15 @@ def copy_metrics(server_container, client_container, perf_dir,ssh):
         file_lock = threading.Lock()
 
         if data_server.startswith("transfer"):
+            print(f"\n\n [{ssh.hostname}] found header in server data file\n\n")
+
             raise ValueError(f"\n\n\n\n\n\n\n [{ssh.hostname}] found header in server data file\n\n\n\n\n\n\n")
-            #print("\n\n\n\n\n\n\nfound header in data file\n\n\n\n\n\n\n")
 
 
         if data_client.startswith("transfer"):
+            print(f"\n\n [{ssh.hostname}] found header in client data file\n\n")
+
             raise ValueError(f"\n\n\n\n\n\n\n [{ssh.hostname}] found header in client data file\n\n\n\n\n\n\n")
-            #print("\n\n\n\n\n\n\nfound header in data file\n\n\n\n\n\n\n")
 
         with file_lock:
 
@@ -306,6 +308,6 @@ def write_to_csv(filename, env, config, result):
              env['server_cpu'], config['read_par'],
              config['read_partitions'],
              config['deser_par'],
-#             config['ser_par'],
+             config['ser_par'],
              config['comp_par']] +
             [result['time'], result['size'], result['avg_cpu_server'], result['avg_cpu_client']])

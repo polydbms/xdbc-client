@@ -131,6 +131,10 @@ class OpenBox_Ask_Tell():
         """
         complete_config = self.current_suggestions[frozenset(config.items())]
         metric_value = Metrics.get_metric(self.metric, result)
+
+        # openbox always minimizes the objective
+        if self.mode == 'max':
+            metric_value = metric_value * -1
         observation = Observation(config=complete_config, objectives=metric_value)
         self.advisor.update_observation(observation)
 
@@ -154,7 +158,7 @@ class OpenBox_Ask_Tell():
 
         #for env_key, df in grouped_data.items():
         for env_key, df in cluster_dataframes.items():
-            df = df[df['time'].notna() & (df['time'] > 0)]
+            df = df[df['time'].notna() & (df['transfer_id'] > 0)]
 
             if training_data_per_env != -1:
                 #df = df.head(training_data_per_env)
@@ -184,20 +188,25 @@ class OpenBox_Ask_Tell():
 
         for _, row in df.iterrows():
             config = {
-                'compression_lib': row['compression'],
-                'bufpool_size': float(row['server_bufferpool_size'] / row['buffer_size']),
+                'compression': row['compression'],
+                'format': row['format'],
+                'client_bufpool_factor': row['client_bufpool_factor'],
+                'server_bufpool_factor': row['server_bufpool_factor'],
                 'buffer_size': row['buffer_size'],
                 'send_par': row['send_par'],
                 'write_par': row['write_par'],
                 'decomp_par': row['decomp_par'],
-                'read_partitions': row['read_partitions'],
                 'read_par': row['read_par'],
                 'deser_par': row['deser_par'],
-                'comp_par': row['comp_par'],
-                'ser_par': 1,  # todo adapt to new search psacwe
+                'ser_par': row['ser_par'],
+                'comp_par': row['comp_par']
             }
 
             metric = row[self.metric]
+
+            if self.mode == 'max':
+                metric = metric * -1
+
             observation = Observation(config=Configuration(self.config_space, config), objectives=metric)
             history.update_observation(observation)
 

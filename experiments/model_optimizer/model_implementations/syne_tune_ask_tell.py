@@ -150,7 +150,10 @@ class Syne_Tune_Ask_Tell():
         """
         metric_value = {self.metric: Metrics.get_metric(self.metric, result)}
         trial = self.current_suggestions[frozenset(config.items())]
-        self.scheduler.tell(trial, metric_value)
+        try:
+            self.scheduler.tell(trial, metric_value)
+        except:
+            print("oh no")
 
     def load_transfer_learning_history_per_env_from_dataframe(self, data, training_data_per_env=-1):
         """
@@ -171,16 +174,12 @@ class Syne_Tune_Ask_Tell():
 
         #for env_key, df in grouped_data.items():
         for env_key, df in cluster_dataframes.items():
-            df = df[df['time'].notna() & (df['time'] > 0)]
+            df = df[df['time'].notna() & (df['transfer_id'] > 0)]
 
             if training_data_per_env != -1:
                 #df = df.head(training_data_per_env)
                 if f"_n_{training_data_per_env}" not in self.underlying:
                     self.underlying += f"_n_{training_data_per_env}"
-
-            df['compression_lib'] = df['compression']
-            df['bufpool_size'] = df['buffer_size'] / df['client_bufferpool_size']
-            df['ser_par'] = 1
 
             transfer_learning_evaluations[env_key] = TransferLearningTaskEvaluations(
                 configuration_space=self.config_space,

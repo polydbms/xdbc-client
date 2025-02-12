@@ -3,11 +3,9 @@ import pandas as pd
 from prettytable import PrettyTable
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from xgboost import XGBRegressor
-
 from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
-#
 
 class Per_Environment_RF_Cost_Model:
     def __init__(self,
@@ -21,18 +19,19 @@ class Per_Environment_RF_Cost_Model:
                  history_ratio=0.5,
                  history_weight_decay_factor=0.9):
         """
-       Initializes the Per_Environment_RF_Cost_Model, which trains and predicts using
-       Regression Models for multiple environments or clusters.
+        Initializes the Per_Environment_RF_Cost_Model, which trains and predicts using
+        Regression Models for multiple environments or clusters.
 
-       Parameters:
-           input_fields (list): List of feature names used for training and prediction.
-           metric (str): Metric to optimize.
-           underlying (str): Identifier-String for the underlying model.
-           cluster (bool): True if data should be clustered, False if one model per environment
-           regression_model (str): The underlying regression model to use [rfs, gdb, xgb]
-           network_transformation (bool): True if network values should be transformed with sigmoid like function for distance calculation. Has no effect if history_ratio is 1.
-           history_ratio (float): The ratio between the weights calculated from the environment signatures, and from the weight history. Should be between [0,1]. 0 meaning only weights from environments signatures, and 1 meaning only weights from history.
-       """
+        Parameters:
+            input_fields (list): List of feature names used for training and prediction.
+            metric (str): Metric to optimize.
+            underlying (str): Identifier-String for the underlying model.
+            cluster (bool): True if data should be clustered, False if one model per environment
+            regression_model (str): The underlying regression model to use [rfs, gdb, xgb]
+            network_transformation (bool): True if network values should be transformed with sigmoid like function for distance calculation. Has no effect if history_ratio is 1.
+            history_ratio (float): The ratio between the weights calculated from the environment signatures, and from the weight history. Should be between [0,1]. 0 meaning only weights from environments signatures, and 1 meaning only weights from history.
+            history_weight_decay_factor (float): The decay factor with which to calculate the history weights.
+         """
         self.input_fields = input_fields
         self.metric = metric
         self.underlying = underlying
@@ -163,7 +162,6 @@ class Per_Environment_RF_Cost_Model:
         """
 
         data = self.convert_dict(dict(config))
-        data["compression"] = data["compression_lib"]
 
         if isinstance(data, dict):
             data = pd.DataFrame([data])
@@ -200,7 +198,7 @@ class Per_Environment_RF_Cost_Model:
         self.continous_maintained_history_vector = self.continous_maintained_history_vector / self.norm_total
         self.continous_maintained_history_vector = self.continous_maintained_history_vector / sum(self.continous_maintained_history_vector)
 
-        # helper methods to convert data and transform compression to numeric feature
+    # helper methods to convert data and transform compression to numeric feature
     def convert_dataframe(self, df, reverse=False):
         mapping = {"nocomp": 0, "zstd": 1, "lz4": 2, "lzo": 3, "snappy": 4}
         reverse_mapping = {v: k for k, v in mapping.items()}
@@ -234,7 +232,6 @@ class Per_Environment_RF_Cost_Model:
         """
 
         data = self.convert_dict(dict(data))
-        data["compression"] = data["compression_lib"]
 
         target_server = target_environment['server_cpu']
         target_client = target_environment['client_cpu']

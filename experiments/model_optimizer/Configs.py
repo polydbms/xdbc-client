@@ -54,59 +54,13 @@ variable_parameter_baseline = {
 }
 
 
-'''
-config_space_variable_parameters_gpyopt = \
-    [{'name': "compression_lib", 'type': 'categorical', 'domain': (0, 1, 2, 3, 4)},
-     {'name': "bufpool_size", 'type': 'discrete', 'domain': (8, 16, 24, 32)},
-     {'name': "buff_size", 'type': 'discrete', 'domain': (64, 256, 512, 1024)},
-     {'name': "send_par", 'type': 'discrete', 'domain': (1, 2, 4)},
-     {'name': "client_write_par", 'type': 'discrete', 'domain': (1, 2, 4)},
-     {'name': "client_decomp_par", 'type': 'discrete', 'domain': (1, 2, 4)},
-     {'name': "server_read_partitions", 'type': 'discrete', 'domain': (1, 2, 4)},
-     {'name': "server_read_par", 'type': 'discrete', 'domain': (1, 2, 4)},
-     {'name': "server_deser_par", 'type': 'discrete', 'domain': (1, 2, 4)},
-     {'name': "server_comp_par", 'type': 'discrete', 'domain': (1, 2, 4)},
-     ]
-'''
 
-
-'''
-config_space_variable_parameters_skopt = \
-    [Categorical(["nocomp", "zstd", "lz4", "lzo", "snappy"], name="compression_lib"),
-     Integer(8, 32, name="bufpool_size"),
-     Integer(64, 1024, name="buff_size"),
-     Integer(1, 4, name="send_par"),
-     Integer(1, 4, name="client_write_par"),
-     Integer(1, 4, name="client_decomp_par"),
-     Integer(1, 4, name="server_read_partitions"),
-     Integer(1, 4, name="server_read_par"),
-     Integer(1, 4, name="server_deser_par"),
-     Integer(1, 4, name="server_comp_par"),
-     ]
-'''
-
-
-
-# ?? search space size
-config_space_variable_parameters_generalized_1310k = \
-    [{'name': "compression_lib", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
-     {'name': "bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
-     {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
-     {'name': "send_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "write_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "decomp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "read_partitions", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "read_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "deser_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     {'name': "ser_par", 'type': 'discrete', 'domain': [1]},    # this parameter currently has no influence on the perfoamnce, so including for completness.
-     {'name': "comp_par", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
-     ]
 
 config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M = \
     [{'name': "compression", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]}, # remove either lzo or lz4, ss size from 10.5M to 8.4M
      {'name': "format", 'type': 'categorical', 'domain': [1, 2]},
-     {'name': "client_bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]}, #todo change into min buffer count(threadcount) * factor 1.1 , 1.4, 1.7, 2 ?
-     {'name': "server_bufpool_size", 'type': 'discrete', 'domain': [32, 64, 96, 128]},
+     {'name': "client_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 4, 8]}, # sum(threadcounts) * 2 * factor
+     {'name': "server_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
      {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
      {'name': "send_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "write_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
@@ -115,6 +69,21 @@ config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M = \
      {'name': "deser_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "ser_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "comp_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
+     ]
+
+config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE = \
+    [{'name': "compression", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]}, # remove either lzo or lz4, ss size from 10.5M to 8.4M
+     {'name': "format", 'type': 'categorical', 'domain': [1, 2]},
+     {'name': "client_bufpool_factor", 'type': 'integer', 'lower': 1, 'upper': 8},
+     {'name': "server_bufpool_factor", 'type': 'integer', 'lower': 1,  'upper': 8},
+     {'name': "buffer_size", 'type': 'integer', 'lower': 64, 'upper': 1024},
+     {'name': "send_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "write_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "decomp_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "read_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "deser_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "ser_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "comp_par", 'type': 'integer', 'lower': 1, 'upper': 16},
      ]
 
 
@@ -139,20 +108,23 @@ reserved_hosts_big_cluster = [
     #"sr630-wn-a-23",
     #"sr630-wn-a-24",
     #"sr630-wn-a-25",
-    "sr630-wn-a-26",
-    "sr630-wn-a-27",
-    "sr630-wn-a-28",
-    "sr630-wn-a-29",
-    "sr630-wn-a-30",
+
+    #"sr630-wn-a-26",
+    #"sr630-wn-a-27",
+    #"sr630-wn-a-28",
+    #"sr630-wn-a-29",
+    #"sr630-wn-a-30",
+
     "sr630-wn-a-31",
     "sr630-wn-a-32",
     "sr630-wn-a-33",
     "sr630-wn-a-34",
     "sr630-wn-a-35",
     "sr630-wn-a-36",
-    #"sr630-wn-a-37",
-    #"sr630-wn-a-38",
-    #"sr630-wn-a-39",
+    "sr630-wn-a-37",
+    "sr630-wn-a-38",
+    "sr630-wn-a-39",
+
     #"sr630-wn-a-40",
     #"sr630-wn-a-41",
     #"sr630-wn-a-42",
@@ -194,68 +166,6 @@ def create_complete_config(environment, metric, library="syne_tune",config=None)
     Returns:
         : Library-specific complete configuration.
     """
-
-    '''
-    if library == "syne_tune" or library == "syne-tune" or library == "synetune":
-
-        config_space = convert_from_general(config_space=config,
-                                            library='syne_tune')
-
-        # add fixed parameters to the config space
-        for key, value in fixed_parameters.items():
-            config_space[key] = choice([value])
-
-        # add environment parameters to the config space
-        for key, value in environment.items():
-            config_space[key] = choice([value])
-
-        # add the metric to return as a parameter
-        config_space['metric'] = choice([metric])
-        #config_space['timeout'] = choice([240])
-
-        return config_space
-
-    '''
-
-    '''
-    if library == "skopt" or library == "scikit_optimize":
-        return config_space
-
-    if library == "gpyopt" or library == "gpy_opt":
-
-        # add fixed parameters to the config space
-        for key, value in fixed_parameters.items():
-            config_space_variable_parameters_gpyopt.append({'name': key, 'type': 'discrete', 'domain': (value)})
-
-        # add environment parameters to the config space
-        for key, value in environment.items():
-            config_space[key] = choice([value])
-
-        # add the metric to return as a parameter
-        config_space['metric'] = choice([metric])
-        #config_space['timeout'] = choice([240])
-
-        return config_space
-    '''
-
-    '''
-
-    if library == "openbox" or library == "open_box":
-
-        config_space = convert_from_general(config_space=config, library='open_box')
-
-        for key, value in fixed_parameters.items():
-            config_space.add_variable(sp.Categorical(key, [value]))
-
-        # add environment parameters to the config space
-        for key, value in environment.items():
-            config_space.add_variable(sp.Categorical(key, [value]))
-
-        config_space.add_variable(sp.Categorical('metric', [metric]))
-
-        return config_space
-    '''
-
 
     if library == "dict_add" or library == 'dict':
 
@@ -325,10 +235,11 @@ def convert_from_general(config_space, library):
 
 def get_config_space_string(config_space):
     config_space_string = ""
-    if config_space == config_space_variable_parameters_generalized_1310k:
-        config_space_string = "1310k"
-    elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M:
+
+    if config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M:
         config_space_string = "10_5M"
+    elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE:
+        config_space_string = "10_5M_flex"
     return config_space_string
 
 
