@@ -59,8 +59,8 @@ variable_parameter_baseline = {
 config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M = \
     [{'name': "compression", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]}, # remove either lzo or lz4, ss size from 10.5M to 8.4M
      {'name': "format", 'type': 'categorical', 'domain': [1, 2]},
-     {'name': "client_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 4, 8]}, # sum(threadcounts) * 2 * factor
-     {'name': "server_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 4, 8]},
+     {'name': "client_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 4, 6]}, # sum(threadcounts) * 2 * factor
+     {'name': "server_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 4, 6]},
      {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
      {'name': "send_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},
      {'name': "write_par", 'type': 'discrete', 'domain': [1, 4, 8, 16]},

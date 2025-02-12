@@ -8,7 +8,7 @@ class Metric(Enum):
     average_throughput = 4
     resource_utilization = 5
     wait_to_proc_time_ratio = 6
-    even_load_distribution_mse = 7
+    #even_load_distribution_mse = 7 # load changed to queue load
     uncompressed_throughput = 8
 
 
@@ -79,8 +79,8 @@ def get_metric(metric_p, result):
         return wait_to_proc_time_ratio(result)
 
     #average difference between individual load and average load. lower is better
-    elif metric_p == Metric.even_load_distribution_mse.name or metric_p == Metric.even_load_distribution_mse:
-        return even_load_distribution_mse(result)
+    #elif metric_p == Metric.even_load_distribution_mse.name or metric_p == Metric.even_load_distribution_mse:
+    #    return even_load_distribution_mse(result)
 
     elif metric_p == Metric.uncompressed_throughput.name or metric_p == Metric.uncompressed_throughput:
         if result['table'] == 'lineitem_sf10':

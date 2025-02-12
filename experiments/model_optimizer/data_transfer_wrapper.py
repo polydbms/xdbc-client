@@ -227,11 +227,7 @@ def train_method(config_p,ssh):
     ssh.execute_cmd('docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo \'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time\' > /tmp/xdbc_server_timings.csv"')
 
 
-    if ssh.hostname in all_hosts_cloud_7:
-        ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
-        ssh.execute_cmd(f"cp -R -u -p /home/{get_username_for_host(ssh.hostname)}/datasets/lineitem_sf10.csv /dev/shm/lineitem_sf10.csv")
-    else:
-        ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /xdbc-client/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /xdbc-client/xdbc_client_timings.csv"')
+    ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
 
 
     try:

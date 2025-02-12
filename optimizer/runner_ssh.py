@@ -13,13 +13,11 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
 
 
     if include_setup:
-        ssh.execute_cmd("cp -R -u -p /home/bene/xdbc-server/lineitem_sf10.csv /dev/shm/lineitem_sf10.csv")
         ssh.execute_cmd("docker compose -f xdbc-client/docker-xdbc.yml down")
         ssh.execute_cmd("docker compose -f xdbc-client/docker-xdbc.yml up -d")
         ssh.execute_cmd("docker exec xdbcclient bash -c \"ldconfig\"")
-        ssh.execute_cmd('docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo \'transfer_id,total_time,read_wait_time,read_time,deser_wait_time,deser_time,compression_wait_time,compression_time,network_wait_time,network_time\' > /tmp/xdbc_server_timings.csv"')
-        #ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /tmp/xdbc_client_timings.csv"')
-        ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /xdbc-client/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_time,decomp_wait_time,decomp_time,write_wait_time,write_time\' > /xdbc-client/xdbc_client_timings.csv"')
+        ssh.execute_cmd('docker exec xdbcserver bash -c "[ ! -f /tmp/xdbc_server_timings.csv ] && echo \'transfer_id,total_time,read_wait_time,read_proc_time,read_throughput,read_throughput_pb,free_load,deser_wait_time,deser_proc_time,deser_throughput,deser_throughput_pb,deser_load,comp_wait_time,comp_proc_time,comp_throughput,comp_throughput_pb,comp_load,send_wait_time,send_proc_time,send_throughput,send_throughput_pb,send_load\' > /tmp/xdbc_server_timings.csv"')
+        ssh.execute_cmd('docker exec xdbcclient bash -c "[ ! -f /tmp/xdbc_client_timings.csv ] && echo \'transfer_id,total_time,rcv_wait_time,rcv_proc_time,rcv_throughput,rcv_throughput_pb,free_load,decomp_wait_time,decomp_proc_time,decomp_throughput,decomp_throughput_pb,decomp_load,ser_wait_time,ser_proc_time,ser_throughput,ser_throughput_pb,ser_load,write_wait_time,write_proc_time,write_throughput,write_throughput_pb,write_load\' > /tmp/xdbc_client_timings.csv"')
 
 
 
@@ -53,6 +51,8 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
     if 'format' not in config.keys():
         config['format'] = config['src_format']
 
+    config['skip_ser'] = 0# ??? todo !!!!!
+
     config['run'] = 1
     config['date'] = int(time.time_ns())
     config['xdbc_version'] = 10
@@ -63,6 +63,7 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
         config['compression_lib'] = "nocomp"
 
     result = {}
+    profiling_interval = 1000
 
     #print("----------------------------------------")
     #print("XDBC SSH-Runner with config:")
@@ -70,7 +71,8 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
 
     try:
 
-        command_server = f"docker exec -d xdbcserver bash -c " + f""" \" ./xdbc-server/build/xdbc-server \
+        command_server = (f"docker exec -d xdbcserver bash -c " +
+                          f""" \" ./xdbc-server/build/xdbc-server \
                          --network-parallelism={config['send_par']} \
                          --read-partitions=1 \
                          --read-parallelism={config['read_par']} \
@@ -80,9 +82,11 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
                           --dp={config['deser_par']} \
                           -p{config['server_buffpool_size']} \
                           -f{config['format']} \
+                          --skip-deserializer={config['skip_ser']} \
                           --tid="{config['date']}" \
-                          --system={env['src']} \"
-                        """
+                          --system={env['src']} \
+                          --profiling-interval={profiling_interval}"
+                        """)
         ssh.execute_cmd(command_server, True)
 
         time.sleep(sleep)
@@ -91,7 +95,7 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
         a = datetime.datetime.now()
 
         if env['target'] == 'csv':
-
+            '''
             command_client = f"""docker exec -it {env['client_container']} bash -c \" ./xdbc-client/tests/build/test_xclient \
                                  --server-host={env['server_container']} \
                                 --table="{env['table']}" \
@@ -105,9 +109,25 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
                                 --tid="{config['date']}" \
                                 -m{mode} \"
                             """
-
-
+            '''
+            command_client = f"""docker exec -it {env['client_container']} bash -c \" ./xdbc-client/Sinks/build/xdbcsinks \
+                                 --server-host={env['server_container']} \
+                                --table="{env['table']}" \
+                                -f{config['format']} \
+                                -b{config['buffer_size']} \
+                                -p{config['client_buffpool_size']} \
+                                -n{config['rcv_par']} \
+                                -w{config['write_par']} \
+                                -d{config['decomp_par']} \
+                                -s{config['ser_par']} \
+                                --skip-serializer={config['skip_ser']} \
+                                --target={env['target']} \
+                                --tid="{config['date']}" \
+                                --profiling-interval={profiling_interval} \"
+                                
+                            """
             ssh.execute_cmd(command_client)
+            #print("nn")
 
 
         elif env['target'] == 'pandas':
@@ -199,8 +219,8 @@ def check_file_exists(container, file_path, ssh):
 
 def copy_metrics(server_container, client_container, perf_dir,ssh):
     file_path_server = '/tmp/xdbc_server_timings.csv'
-    #file_path_client = '/tmp/xdbc_client_timings.csv'
-    file_path_client = '/xdbc-client/xdbc_client_timings.csv'
+    file_path_client = '/tmp/xdbc_client_timings.csv'
+    #file_path_client = '/xdbc-client/xdbc_client_timings.csv'
 
     if (not check_file_exists(server_container, file_path_server,ssh) or
             not check_file_exists(client_container, file_path_client,ssh)):
@@ -245,7 +265,7 @@ def copy_metrics(server_container, client_container, perf_dir,ssh):
                     file_client.write("\n")
                     file_client.write(data_client)
 
-        x = print_metrics(perf_dir, True)
+        #x = print_metrics(perf_dir, True)
 
 
     except subprocess.CalledProcessError as e:
