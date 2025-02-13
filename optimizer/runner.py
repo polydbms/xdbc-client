@@ -3,11 +3,11 @@ import time
 import datetime
 import csv
 import os
-from config.metrics_client import MetricsClient
-from config.metrics_server import MetricsServer
+from optimizer.config.metrics_client import MetricsClient
+from optimizer.config.metrics_server import MetricsServer
 
 
-def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, sleep=2, show_output=(False, False)):
+def run_xdbserver_and_xdbclient(config, env, perf_dir, sleep=2, show_output=(False, False)):
     show_server_output, show_client_output = show_output
     show_stdout_server = None if show_server_output else subprocess.DEVNULL
     show_stdout_client = None if show_client_output else subprocess.DEVNULL
@@ -27,16 +27,16 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, sleep=2, show_outpu
     measurement_path = os.path.abspath(os.path.join(perf_dir, 'xdbc_general_stats.csv'))
     config['host'] = os.uname().nodename
 
-    config['client_readmode'] = mode
     config['read_partitions'] = 1
     # config['buffer_size'] = 1024
     # config['bufferpool_size'] = 65536
 
     config['run'] = 1
     config['date'] = int(time.time_ns())
-    config['xdbc_version'] = 10
+    config['xdbc_version'] = 11
     config['system_source'] = env["src"]
     config['system_dest'] = env["target"]
+    profiling_interval = 1000
 
     if 'compression_lib' not in config:
         config['compression_lib'] = "nocomp"
@@ -49,40 +49,51 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, sleep=2, show_outpu
 
     try:
 
-        subprocess.run(["docker", "exec", "-d", "xdbcserver", "bash", "-c",
-                        f"""./xdbc-server/build/xdbc-server \
-                        --network-parallelism={config['send_par']} \
-                         --read-partitions=1 \
-                         --read-parallelism={config['read_par']} \
-                          -c{config['compression_lib']} \
-                          --compression-parallelism={config['comp_par']} \
-                          --buffer-size={config['buffer_size']} \
-                          --dp={config['deser_par']} \
-                          -p{config['server_buffpool_size']} \
-                          -f{config['format']} \
-                          --tid="{config['date']}" \
-                          --system={env['src']}
-                        """], check=True, stdout=show_stdout_server)
+        server_command = (
+            f"./xdbc-server/build/xdbc-server "
+            f"--network-parallelism={config['send_par']} "
+            f"--read-partitions=1 "
+            f"--read-parallelism={config['read_par']} "
+            f"-c{config['compression_lib']} "
+            f"--compression-parallelism={config['comp_par']} "
+            f"--buffer-size={config['buffer_size']} "
+            f"--dp={config['deser_par']} "
+            f"-p{config['server_buffpool_size']} "
+            f"-f{config['format']} "
+            f"--skip-deserializer={config['skip_deser']} "
+            f"--tid=\"{config['date']}\" "
+            f"--system={env['src']} "
+            f"--profiling-interval={profiling_interval}"
+        )
+
+        print("Server command to execute:")
+        print(server_command)
+
+        subprocess.run(["docker", "exec", "-d", "xdbcserver", "bash", "-c", server_command],
+                       check=True,
+                       stdout=show_stdout_server)
 
         time.sleep(sleep)
 
         start_data_size = measure_network(client_path, env['client_container'])
         a = datetime.datetime.now()
 
-        if env['target'] == 'csv':
+        if env['target'] == 'csv' or env['target'] == 'parquet':
             subprocess.run(["docker", "exec", "-it", env['client_container'], "bash", "-c",
-                            f"""./xdbc-client/tests/build/test_xclient \
+                            f"""./xdbc-client/Sinks/build/xdbcsinks \
                                 --server-host={env['server_container']} \
                                 --table="{env['table']}" \
                                 -f{config['format']} \
                                 -b{config['buffer_size']} \
                                 -p{config['client_buffpool_size']} \
                                 -n{config['rcv_par']} \
-                                -r{config['write_par']} \
                                 -d{config['decomp_par']} \
-                                -s1 \
-                                --tid="{config['date']}" \
-                                -m{mode}
+                                -s{config['ser_par']} \
+                                -w{config['write_par']} \
+                                --skip-serializer={config['skip_ser']} \
+                                --target={env['target']} \
+                                --tid=\"{config['date']}\" \
+                                --profiling-interval={profiling_interval}
                             """], check=True, stdout=show_stdout_client)
         elif env['target'] == 'pandas':
             print("Running pandas")
@@ -95,11 +106,14 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, sleep=2, show_outpu
                             --bufferpool_size {config['client_buffpool_size']} \
                             --sleep_time 1 \
                             --rcv_par {config['rcv_par']} \
+                            --ser_par {config['write_par']} \
                             --write_par {config['write_par']} \
                             --decomp_par {config['decomp_par']} \
                             --transfer_id {config['date']} \
                             --server_host {env['server_container']} \
-                            --server_port "1234"
+                            --server_port "1234" \
+                            --source {env['src']} \
+                            --skip_ser {config['skip_ser']} \
                             """], check=True, stdout=show_stdout_client)
 
         elif env['target'] == 'spark':
@@ -136,7 +150,7 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, sleep=2, show_outpu
         result['avg_cpu_server'] = 0
         result['avg_cpu_client'] = 0
 
-        print(f"Total Data Transfer Size: {result['size']}")
+        print(f"Total Data Transfer Size: {result['size']} bytes")
         write_csv_header(measurement_path)
         write_to_csv(measurement_path, env, config, result)
         copy_metrics(env['server_container'], env['client_container'], perf_dir)
@@ -181,9 +195,22 @@ def copy_metrics(server_container, client_container, perf_dir):
                        stdout=subprocess.DEVNULL)
         # subprocess.run(["docker", "cp", f"{client_container}:{file_path_client}", absolute_perf_dir], check=True,
         #               stdout=subprocess.DEVNULL)
-        subprocess.run(
-            f"docker exec {client_container} tail -n 1 {file_path_client} >> {absolute_perf_dir}/xdbc_client_timings.csv",
-            shell=True)
+
+        # for the client we need to only grab the last line, as we have different client containers
+        # we also need to include the header if our file is empty
+        local_file_path = f"{absolute_perf_dir}/xdbc_client_timings.csv"
+        if not os.path.exists(local_file_path) or os.stat(local_file_path).st_size == 0:
+            copy_command = (
+                f"docker exec {client_container} sh -c 'head -n 1 {file_path_client}; tail -n 1 {file_path_client}' >> {local_file_path}"
+            )
+        else:
+            # If the local file is not empty, copy only the last line
+            copy_command = f"docker exec {client_container} sh -c 'tail -n 1 {file_path_client}' >> {local_file_path}"
+
+        # Execute the appropriate command
+        subprocess.run(copy_command, shell=True, check=True)
+
+
     except subprocess.CalledProcessError as e:
         print(f"Error during file copy: {e}")
         return False
@@ -214,11 +241,13 @@ def measure_network(client_path, container):
 
 
 def write_csv_header(filename, config=None):
-    header = ['date', 'xdbc_version', 'host', 'run', 'source_system', 'target_system', 'table', 'compression',
-              'format', 'send_par', 'rcv_par', 'server_bufferpool_size', 'client_bufferpool_size', 'buffer_size',
-              'network', 'network_latency', 'network_loss', 'client_readmode', 'client_cpu', 'write_par', 'decomp_par',
-              'server_cpu', 'read_par', 'read_partitions', 'deser_par', 'comp_par', 'time', 'datasize',
-              'avg_cpu_server', 'avg_cpu_client']
+    header = ['date', 'xdbc_version', 'host', 'run',
+              'server_cpu', 'client_cpu', 'network', 'network_latency', 'network_loss',
+              'source_system', 'target_system', 'table', 'server_bufferpool_size', 'client_bufferpool_size',
+              'buffer_size', 'compression', 'format', 'skip_ser', 'skip_deser',
+              'read_par', 'read_partitions', 'deser_par', 'comp_par', 'send_par',
+              'rcv_par', 'decomp_par', 'ser_par', 'write_par',
+              'time', 'datasize', 'avg_cpu_server', 'avg_cpu_client']
 
     directory = os.path.dirname(filename)
     if directory and not os.path.exists(directory):
@@ -234,17 +263,13 @@ def write_to_csv(filename, env, config, result):
     with open(filename, mode="a", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            [config['date']] + [config['xdbc_version'], config['host']] +
-            [config['run'], env['src'], env['target'], env['table'],
-             config['compression_lib'],
-             config['format'], config['send_par'], config['rcv_par'],
-             config['server_buffpool_size'], config['client_buffpool_size'],
-             config['buffer_size'], env['network'], env['network_latency'], env['network_loss'],
-             config['client_readmode'],
-             env['client_cpu'], config['write_par'],
-             config['decomp_par'],
-             env['server_cpu'], config['read_par'],
-             config['read_partitions'],
-             config['deser_par'],
-             config['comp_par']] +
-            [result['time'], result['size'], result['avg_cpu_server'], result['avg_cpu_client']])
+            [
+                config['date'], config['xdbc_version'], config['host'], config['run'],
+                env['server_cpu'], env['client_cpu'], env['network'], env['network_latency'], env['network_loss'],
+                env['src'], env['target'], env['table'], config['server_buffpool_size'], config['client_buffpool_size'],
+                config['buffer_size'], config['compression_lib'], config['format'], config['skip_ser'],
+                config['skip_deser'], config['read_par'], config['read_partitions'], config['deser_par'],
+                config['comp_par'], config['send_par'], config['rcv_par'], config['decomp_par'], config['ser_par'],
+                config['write_par'], result['time'], result['size'], result['avg_cpu_server'], result['avg_cpu_client']
+            ]
+        )
