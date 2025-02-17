@@ -47,33 +47,10 @@ class Per_Environment_RF_Cost_Model:
         self.total_history_updates = 0
         self.models = {}  # dict to store models's per environment
         self.environments = []  # list of known environments
+        self.env_features = {}  # each environment’s [server_cpu, client_cpu, network]
 
-        #temporary
-        if "only_hist" in self.underlying:
-            self.history_ratio = 1
-        elif "update" in self.underlying:
-            self.history_ratio = 0.5
-        else:
-            self.history_ratio = 0
-
-        if "cluster" in self.underlying:
-            self.cluster = True
-        else:
-            self.cluster = False
-
-        if "net_trans" in self.underlying:
-            self.network_transformation = True
-        else:
-            self.network_transformation = False
-
-        if "_rfs_" in self.underlying:
-            self.regression_model = "rfs"
-        elif "_gdb_" in self.underlying:
-            self.regression_model = "gdb"
-        elif "_xgb_" in self.underlying:
-            self.regression_model = "xgb"
-
-
+        self.compression_mapping = {"nocomp": 0, "zstd": 1, "lz4": 2, "lzo": 3, "snappy": 4}
+        self.reverse_compression_mapping = {v: k for k, v in self.compression_mapping.items()}
 
     def train(self, x_train, y_train):
         """
@@ -147,6 +124,14 @@ class Per_Environment_RF_Cost_Model:
 
             self.models[env] = model
             self.environments.append(env)
+
+            env_dict = unparse_environment_float(env)
+            self.env_features[env] = [
+                round(env_dict['server_cpu'], 2),
+                round(env_dict['client_cpu'], 2),
+                round(env_dict['network'], 2)
+            ]
+
             print(f"Trained {model_name} for cluster {env} with length {len(group)}")
 
         self.continous_maintained_history_vector = np.zeros(len(self.models))
@@ -242,10 +227,10 @@ class Per_Environment_RF_Cost_Model:
 
         X = data[self.input_fields].values
 
-        # if the target environment is known, use its model directly
-        if environment_to_string(target_environment) in self.environments:
-            y = self.models[environment_to_string(target_environment)].predict(X)
-            return {self.metric: y[0]}
+        # if the target environment is known, use its model directly #todo temporary disable
+        #if environment_to_string(target_environment) in self.environments:
+        #    y = self.models[environment_to_string(target_environment)].predict(X)
+        #    return {self.metric: y[0]}
 
         # Collect all known environments and their predictions
         known_features = []
