@@ -31,14 +31,14 @@ def process_data(data, training_data_per_env=-1, cluster_labes_avg=False, n_clus
         if training_data_per_env != -1:
             # 2. take first n entries
             if len(group) < training_data_per_env:
-                print(f"Length of data is less than specified data per environment ({len(df)} vs {training_data_per_env})")
+                print(f"Length of data is less than specified data per environment ({len(group)} vs {training_data_per_env})")
             group = group.head(training_data_per_env)
         grouped_data[combination].append(group)
     grouped_data = {key: pd.concat(frames, ignore_index=True) for key, frames in grouped_data.items()}
 
 
     # 3. Create cluster
-    clusters = _cluster_groups(grouped_data, column='time', n_clusters=n_clusters)
+    clusters = _cluster_groups(grouped_data, column='uncompressed_throughput', n_clusters=n_clusters)
 
     grouped_df = pd.concat(grouped_data.values(), ignore_index=True)
 
@@ -103,15 +103,19 @@ def _cluster_groups(grouped_data, column, n_clusters):
     optimal_clusters = _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=len(group_keys) - 1)
 
     # -1 = no clusters
-    # 0 = optimal number
+    # 0 = optimal number *2
     # else : custom number
 
     if n_clusters == -1:
         actual_clusters = len(group_keys)  # min(optimal_clusters*2, len(group_keys) - 1) # todo optimal number of clusters seems too low ?
     elif n_clusters == 0:
-        actual_clusters = min(optimal_clusters*2, len(group_keys) - 1)
+        actual_clusters = min((optimal_clusters*2), len(group_keys) - 1) #todo !!!! maybe limit how many different environments can be in the same cluster ?
     else:
         actual_clusters = n_clusters
+
+    actual_clusters = int(len(group_keys) / 2)
+
+
 
     clustering = AgglomerativeClustering(n_clusters=actual_clusters, affinity='precomputed', linkage='average')
     labels = clustering.fit_predict(similarity_matrix)

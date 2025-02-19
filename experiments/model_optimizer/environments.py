@@ -6,91 +6,91 @@ environment_101 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 20,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_102 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 50,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_103 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 100,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_104 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 150,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_105 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 200,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_106 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 300,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_107 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 400,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_108 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 500,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_109 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 600,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_110 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 700,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_111 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 800,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_112 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 900,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_113 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 #all environments with cpu == 16
@@ -110,112 +110,112 @@ environment_301 = {
     "server_cpu": 2,
     "client_cpu": 2,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_302 = {
     "server_cpu": 2,
     "client_cpu": 4,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_303 = {
     "server_cpu": 2,
     "client_cpu": 8,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_304 = {
     "server_cpu": 2,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_305 = {
     "server_cpu": 4,
     "client_cpu": 2,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_306 = {
     "server_cpu": 4,
     "client_cpu": 4,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_307 = {
     "server_cpu": 4,
     "client_cpu": 8,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_308 = {
     "server_cpu": 4,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_309 = {
     "server_cpu": 8,
     "client_cpu": 2,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_310 = {
     "server_cpu": 8,
     "client_cpu": 4,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_311 = {
     "server_cpu": 8,
     "client_cpu": 8,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_312 = {
     "server_cpu": 8,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_313 = {
     "server_cpu": 16,
     "client_cpu": 2,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_314 = {
     "server_cpu": 16,
     "client_cpu": 4,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_315 = {
     "server_cpu": 16,
     "client_cpu": 8,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 environment_316 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 550
 }
 
 envs_scale_compute_test = [environment_301,environment_302,environment_303,
@@ -232,163 +232,167 @@ environment_1 = {
     "server_cpu": 2,
     "client_cpu": 2,
     "network": 50,
-    "timeout": 350
+    "timeout": 500
 }
 environment_2 = {
     "server_cpu": 2,
     "client_cpu": 8,
     "network": 50,
-    "timeout": 350
+    "timeout": 450
 }
 environment_3 = {
     "server_cpu": 4,
     "client_cpu": 16,
     "network": 50,
-    "timeout": 350
+    "timeout": 450
 }
 environment_4 = {
     "server_cpu": 8,
     "client_cpu": 8,
     "network": 50,
-    "timeout": 350
+    "timeout": 450
 }
 environment_5 = {
     "server_cpu": 8,
     "client_cpu": 2,
     "network": 50,
-    "timeout": 350
+    "timeout": 500
 }
 environment_6 = {
     "server_cpu": 8,
     "client_cpu": 16,
     "network": 50,
-    "timeout": 350
+    "timeout": 400
 }
 environment_7 = {
     "server_cpu": 16,
     "client_cpu": 4,
     "network": 50,
-    "timeout": 350
+    "timeout": 400
 }
 environment_8 = {
     "server_cpu": 16,
     "client_cpu": 8,
     "network": 50,
-    "timeout": 350
+    "timeout": 400
 }
 environment_9 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 50,
-    "timeout": 350
+    "timeout": 400
 }
+
+
 environment_10 = {
     "server_cpu": 2,
     "client_cpu": 2,
     "network": 150,
-    "timeout": 350
+    "timeout": 500
 }
 environment_11 = {
     "server_cpu": 2,
     "client_cpu": 8,
     "network": 150,
-    "timeout": 350
+    "timeout": 450
 }
 environment_12 = {
     "server_cpu": 4,
     "client_cpu": 16,
     "network": 150,
-    "timeout": 350
+    "timeout": 300
 }
 environment_13 = {
     "server_cpu": 8,
     "client_cpu": 8,
     "network": 150,
-    "timeout": 350
+    "timeout": 300
 }
 environment_14 = {
     "server_cpu": 8,
     "client_cpu": 2,
     "network": 150,
-    "timeout": 350
+    "timeout": 500
 }
 environment_15 = {
     "server_cpu": 8,
     "client_cpu": 16,
     "network": 150,
-    "timeout": 350
+    "timeout": 300
 }
 environment_16 = {
     "server_cpu": 16,
     "client_cpu": 4,
     "network": 150,
-    "timeout": 350
+    "timeout": 300
 }
 environment_17 = {
     "server_cpu": 16,
     "client_cpu": 8,
     "network": 150,
-    "timeout": 350
+    "timeout": 300
 }
 environment_18 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 150,
-    "timeout": 350
+    "timeout": 300
 }
+
+
 environment_19 = {
     "server_cpu": 2,
     "client_cpu": 2,
     "network": 1000,
-    "timeout": 350
+    "timeout": 500
 }
 environment_20 = {
     "server_cpu": 2,
     "client_cpu": 8,
     "network": 1000,
-    "timeout": 350
+    "timeout": 450
 }
 environment_21 = {
     "server_cpu": 4,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 300
 }
 environment_22 = {
     "server_cpu": 8,
     "client_cpu": 8,
     "network": 1000,
-    "timeout": 350
+    "timeout": 300
 }
 environment_23 = {
     "server_cpu": 8,
     "client_cpu": 2,
     "network": 1000,
-    "timeout": 350
+    "timeout": 500
 }
 environment_24 = {
     "server_cpu": 8,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 300
 }
 environment_25 = {
     "server_cpu": 16,
     "client_cpu": 4,
     "network": 1000,
-    "timeout": 350
+    "timeout": 300
 }
 environment_26 = {
     "server_cpu": 16,
     "client_cpu": 8,
     "network": 1000,
-    "timeout": 350
+    "timeout": 300
 }
 environment_27 = {
     "server_cpu": 16,
     "client_cpu": 16,
     "network": 1000,
-    "timeout": 350
+    "timeout": 300
 }
 
 env_S2_C2_N50 = environment_1
@@ -451,4 +455,32 @@ environment_list_main_envs = [env_S2_C2_N50,
                               env_S16_C4_N1000,
                               env_S16_C8_N1000,
                               env_S16_C16_N1000]
+
+environment_list_main_envs_3_times_sorted_slowest_first = [
+    env_S2_C2_N50, env_S2_C2_N50, env_S2_C2_N50,
+    env_S8_C2_N150, env_S8_C2_N150, env_S8_C2_N150,
+    env_S2_C8_N50, env_S2_C8_N50, env_S2_C8_N50,
+
+    env_S4_C16_N50, env_S4_C16_N50, env_S4_C16_N50,
+    env_S16_C4_N1000, env_S16_C4_N1000, env_S16_C4_N1000,
+    env_S8_C8_N150, env_S8_C8_N150, env_S8_C8_N150,
+
+    env_S8_C16_N150, env_S8_C16_N150, env_S8_C16_N150,
+    env_S16_C8_N1000, env_S16_C8_N1000, env_S16_C8_N1000,
+    env_S16_C16_N1000, env_S16_C16_N1000, env_S16_C16_N1000
+]
+
+environment_list_main_envs_2_times_sorted_slowest_first = [
+    env_S2_C2_N50, env_S2_C2_N50,
+    env_S8_C2_N150, env_S8_C2_N150,
+    env_S2_C8_N50, env_S2_C8_N50,
+
+    env_S4_C16_N50, env_S4_C16_N50,
+    env_S16_C4_N1000, env_S16_C4_N1000,
+    env_S8_C8_N150, env_S8_C8_N150,
+
+    env_S8_C16_N150, env_S8_C16_N150,
+    env_S16_C8_N1000, env_S16_C8_N1000,
+    env_S16_C16_N1000, env_S16_C16_N1000
+]
 

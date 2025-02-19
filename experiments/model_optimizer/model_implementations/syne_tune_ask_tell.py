@@ -148,7 +148,10 @@ class Syne_Tune_Ask_Tell():
             result (dict): The result of that configuration.
 
         """
-        metric_value = {self.metric: Metrics.get_metric(self.metric, result)}
+        if self.metric in result.keys():
+            metric_value = result[self.metric]
+        else:
+            metric_value = {self.metric: Metrics.get_metric(self.metric, result)}
         trial = self.current_suggestions[frozenset(config.items())]
         try:
             self.scheduler.tell(trial, metric_value)

@@ -2,12 +2,12 @@ import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from xgboost import XGBRegressor, DMatrix
+from xgboost import XGBRegressor
 from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
 
-class Per_Environment_RF_Cost_Model2:
+class Per_Environment_RF_Cost_Model:
     def __init__(self,
                  input_fields,
                  metric='time',
@@ -135,10 +135,6 @@ class Per_Environment_RF_Cost_Model2:
             print(f"Trained {model_name} for cluster {env} with length {len(group)}")
 
         self.continous_maintained_history_vector = np.zeros(len(self.models))
-        self.continous_maintained_constant_vector = np.zeros(len(self.models))
-        self.len_history = 0
-
-
 
     def update(self, config, result):
         """
@@ -152,42 +148,60 @@ class Per_Environment_RF_Cost_Model2:
 
         data = self.convert_dict(dict(config))
 
+        if isinstance(data, dict):
+            data = pd.DataFrame([data])
 
-        X = np.array([[data[field] for field in self.input_fields]], dtype=float)
+        X = data[self.input_fields].values
 
         # Collect all prediction of the known models
-        known_predictions = []
+        known_predictions = {}
         for env, model in self.models.items():
-            pred = model.predict(X)[0]
-            known_predictions.append(pred)
-        known_predictions = np.array(known_predictions)
+            prediction = model.predict(X)
+            known_predictions[env] = prediction[0]
+
+        # dict {env-key : weight }
+        weight_vector = {}
 
         # Calculate the difference between the true result and the predictions
-        errors = (known_predictions - result[self.metric]) ** 2
-        weights = 1 / (errors + 1e-8)
-        weights_normalized = weights / np.sum(weights)
+        total_difference = 0
+        for env, prediction in known_predictions.items():
 
-        #calculate constant error term
-        const = (known_predictions - result[self.metric])
-        self.len_history = self.len_history + 1
-        self.continous_maintained_constant_vector = (self.continous_maintained_constant_vector * ( (self.len_history - 1) / self.len_history )) + (const * (1 / self.len_history))
+            squared_error = (prediction - result[self.metric])**2 # calculate the error for the model
+            weight = 1 / (squared_error + 1e-8)                   # 1 / error = weight
+            weight_vector[env] = weight                         # add to weight vector
+            total_difference += weight
+
+        # Create a weight vector
+        for env in weight_vector:
+            weight_vector[env] /= total_difference              # normalize weights to sum = 1
+
+        weight_array = np.array(list(weight_vector.values()))
 
         self.norm_total = self.history_weight_decay_factor * (self.norm_total + 1)
         self.total_history_updates = self.total_history_updates + 1
-        self.continous_maintained_history_vector = (self.history_weight_decay_factor * self.continous_maintained_history_vector) + weights_normalized
+        self.continous_maintained_history_vector = (self.history_weight_decay_factor * self.continous_maintained_history_vector) + weight_array
         self.continous_maintained_history_vector = self.continous_maintained_history_vector / self.norm_total
         self.continous_maintained_history_vector = self.continous_maintained_history_vector / sum(self.continous_maintained_history_vector)
 
+    # helper methods to convert data and transform compression to numeric feature
     def convert_dataframe(self, df, reverse=False):
+        mapping = {"nocomp": 0, "zstd": 1, "lz4": 2, "lzo": 3, "snappy": 4}
+        reverse_mapping = {v: k for k, v in mapping.items()}
         field_name = "compression" if "compression" in df.columns else "compression_lib"
-        mapping = self.reverse_compression_mapping if reverse else self.compression_mapping
-        df[field_name] = df[field_name].map(mapping).fillna(df[field_name])
+        if reverse:
+            df[field_name] = df[field_name].map(reverse_mapping).fillna(df[field_name])
+        else:
+            df[field_name] = df[field_name].map(mapping).fillna(df[field_name])
         return df
 
     def convert_dict(self, data, reverse=False):
+        mapping = {"nocomp": 0, "zstd": 1, "lz4": 2, "lzo": 3, "snappy": 4}
+        reverse_mapping = {v: k for k, v in mapping.items()}
         field_name = "compression" if "compression" in data else "compression_lib"
-        mapping = self.reverse_compression_mapping if reverse else self.compression_mapping
-        data[field_name] = mapping.get(data.get(field_name, None), data.get(field_name, None))
+        if reverse:
+            data[field_name] = reverse_mapping.get(data[field_name], data[field_name])
+        else:
+            data[field_name] = mapping.get(data[field_name], data[field_name])
         return data
 
     def predict(self, data, target_environment, print_wieghts=False):
@@ -203,46 +217,47 @@ class Per_Environment_RF_Cost_Model2:
         """
 
         data = self.convert_dict(dict(data))
-        if isinstance(data, dict):
-            X = np.array([[data[field] for field in self.input_fields]], dtype=float)
-        elif isinstance(data, pd.DataFrame):
-            X = data[self.input_fields].values
-        else:
-            X = np.asarray(data)
 
         target_server = target_environment['server_cpu']
         target_client = target_environment['client_cpu']
         target_network = target_environment['network']
-        target_features = np.array([[target_server, target_client, target_network]], dtype=float)
 
+        if isinstance(data, dict):
+            data = pd.DataFrame([data])
 
+        X = data[self.input_fields].values
 
         # if the target environment is known, use its model directly #todo temporary disable
         #if environment_to_string(target_environment) in self.environments:
         #    y = self.models[environment_to_string(target_environment)].predict(X)
         #    return {self.metric: y[0]}
 
-        env_keys = list(self.env_features.keys())
-        known_features = np.array([self.env_features[env] for env in env_keys], dtype=float)
-
         # Collect all known environments and their predictions
+        known_features = []
         known_predictions = []
-        for env in env_keys:
-            model = self.models[env]
-            pred = model.predict(X)[0]
-            known_predictions.append(pred)
-        known_predictions = np.array(known_predictions)
+
+        for env, model in self.models.items():
+            env_dict = unparse_environment_float(env)
+            known_features.append([round(env_dict['server_cpu'],2), round(env_dict['client_cpu'],2), round(env_dict['network'],2)])
+            predictions = self.models[env].predict(X)
+            known_predictions.append(predictions)
+
+        known_features = np.array(known_features, dtype=float)
+        known_predictions = np.array(known_predictions).T
+        target_features = np.array([[target_server, target_client, target_network]], dtype=float)
 
 
         # Transform network using a sigmoid like function
         if self.network_transformation:
             def transform_network(x):
-                return np.round(9.45 / (1 + 31 * np.exp(-0.03 * x)), 2)
+                transformed_network = 9.45 / (1 + 31 * np.exp(-0.03 * x))
+                return np.round(transformed_network,decimals=2)
+
             known_features[:, 2] = transform_network(known_features[:, 2])
-            target_features[0, 2] = transform_network(target_features[0, 2])
+            target_features[0][2] = transform_network(target_features[0][2])
         else:
             known_features[:, 2] /= 100
-            target_features[0, 2] /= 100
+            target_features[0][2] /= 100
 
 
         # Calculate the distances between environment signatures
@@ -265,12 +280,7 @@ class Per_Environment_RF_Cost_Model2:
         elif self.history_ratio == 1:
             # Edge case if history is empty
             if np.all(self.continous_maintained_history_vector == 0):
-
-                if target_environment is not None:
-                    combined_weights = environment_weights_normalized
-                else:
-                    combined_weights = np.full(self.continous_maintained_history_vector.shape, 1/self.continous_maintained_history_vector.size)
-
+                combined_weights = np.full(self.continous_maintained_history_vector.shape, 1/self.continous_maintained_history_vector.size)
             else:
                 combined_weights = self.continous_maintained_history_vector / sum(self.continous_maintained_history_vector)
 
@@ -280,10 +290,6 @@ class Per_Environment_RF_Cost_Model2:
         # Multiply predictions with weights to get final prediction
         prediction_w_history = np.dot(combined_weights_normalized, known_predictions.flatten())
 
-
-        predictions_with_constant = known_predictions.flatten() - self.continous_maintained_constant_vector
-        prediction_w_constant = np.dot(combined_weights_normalized, predictions_with_constant)
-        '''
         if print_wieghts:
             #use normalized weights for combining predictions, non normalized for environments printing
 
@@ -316,26 +322,5 @@ class Per_Environment_RF_Cost_Model2:
             print(f"Prediction w/ hist.: { round(prediction_w_history,2)}")
             print(f"Estimated Environment :         { np.round(predicted_environment,2)}")
             print(f"Estimated Environment w/ hist.: { np.round(predicted_environment_w_history,2)}")
-        '''
-        if print_wieghts:
-            table = PrettyTable()
-            table.field_names = ['Env/Cluster', 'Prediction', 'Env Weight', 'Combined Weight', 'History Weight', 'Constant Vector', 'Prediction + Constant']
-            for i, env in enumerate(env_keys):
-                table.add_row([
-                    env,
-                    round(known_predictions[i], 2),
-                    round(environment_weights_normalized[i], 2),
-                    round(combined_weights_normalized[i], 2),
-                    round(self.continous_maintained_history_vector[i], 2),
-                    round(self.continous_maintained_constant_vector[i],2),
-                    round(predictions_with_constant[i],2)
-                ])
-            print(f"\nTarget Environment: S{target_server}_C{target_client}_N{target_network}")
-            print("Feature vector:", target_features)
-            print(table)
-            weighted_pred = np.dot(environment_weights_normalized, known_predictions.flatten())
-            print(f"Prediction (env weights): {round(weighted_pred, 2)}")
-            print(f"Prediction (combined weights): {round(prediction_w_history, 2)}")
-            print(f"Prediction (with constant ): {round(prediction_w_constant, 2)}")
 
-        return {self.metric: prediction_w_constant}
+        return {self.metric: prediction_w_history}

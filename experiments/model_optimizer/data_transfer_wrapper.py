@@ -69,7 +69,7 @@ def transfer(config,i=0,max_retries=1, ssh=None):
             save_failed_config(config)
         except:
             pass
-
+        '''
         dummy_result = {
             "transfer_id": -1,
             "total_time_x": -1,
@@ -148,10 +148,107 @@ def transfer(config,i=0,max_retries=1, ssh=None):
             "even_load_distribution_mse": -1,
             "uncompressed_throughput": (7715741636 / 1000 / 1000) / config['timeout']*2
         }
+        '''
+        dummy_result={
+            "transfer_id":-1,
+            "total_time_x":-1,
+
+            "rcv_wait_time":-1,
+            "rcv_proc_time":-1,
+            "rcv_throughput":-1,
+            "rcv_throughput_pb":-1,
+
+            "free_load_x":-1,
+
+            "decomp_wait_time":-1,
+            "decomp_proc_time":-1,
+            "decomp_throughput":-1,
+            "decomp_throughput_pb":-1,
+            "decomp_load":-1,
+
+            "ser_wait_time":-1,
+            "ser_proc_time":-1,
+            "ser_throughput":-1,
+            "ser_throughput_pb":-1,
+            "ser_load":-1,
+
+            "write_wait_time":-1,
+            "write_proc_time":-1,
+            "write_throughput":-1,
+            "write_throughput_pb":-1,
+            "write_load":-1,
+
+            "total_time_y":-1,
+
+            "read_wait_time":-1,
+            "read_proc_time":-1,
+            "read_throughput":-1,
+            "read_throughput_pb":-1,
+
+            "free_load_y":-1,
+
+            "deser_wait_time":-1,
+            "deser_proc_time":-1,
+            "deser_throughput":-1,
+            "deser_throughput_pb":-1,
+            "deser_load":-1,
+
+            "comp_wait_time":-1,
+            "comp_proc_time":-1,
+            "comp_throughput":-1,
+            "comp_throughput_pb":-1,
+            "comp_load":-1,
+
+            "send_wait_time":-1,
+            "send_proc_time":-1,
+            "send_throughput":-1,
+            "send_throughput_pb":-1,
+            "send_load":-1,
+
+            "date":-1,
+            "xdbc_version":-1,
+            "host":ssh.hostname,
+            "run":-1,
+
+            "source_system":-1,
+            "target_system":-1,
+            "table":config["table"],
+            "compression":config["compression"],
+            "format":config['format'],
+            "send_par":config['send_par'],
+            "rcv_par":config['rcv_par'],
+            "server_bufferpool_size":-1,
+            "client_bufferpool_size":-1,
+            "buffer_size":config['buffer_size'],
+            "network":config['network'],
+            "network_latency":-1,
+            "network_loss":-1,
+            "client_readmode":config['client_readmode'],
+            "client_cpu":config['client_cpu'],
+            "write_par":config['write_par'],
+            "decomp_par":config['decomp_par'],
+            "server_cpu":config['server_cpu'],
+            "read_par":config['read_par'],
+            "read_partitions":-1,
+            "deser_par":config['deser_par'],
+            "ser_par":config['ser_par'],
+            "comp_par":config['comp_par'],
+            "time":config['timeout']*2,
+            "datasize":-1,
+            "avg_cpu_server":-1,
+            "avg_cpu_client":-1,
+            "timestamp_end":-1,
+            "throughput":-1,
+            "average_throughput":-1,
+            "resource_utilization":-1,
+            "wait_to_proc_time_ratio":-1,
+            "uncompressed_throughput":(7715741636 / 1000 / 1000) / config['timeout']*2,
+            #"client_bufpool_factor":-1,
+            #"server_bufpool_factor":-1
+        }
 
         return dummy_result
     else:
-        #ssh.close()
         return result
 
 
@@ -216,6 +313,7 @@ def train_method(config_p,ssh):
         "comp_par":config_p['comp_par'],
     }
 
+
     timeout = config_p['timeout']
 
 
@@ -261,19 +359,23 @@ def load_complete_result(result):
 
     with file_lock:
 
-        client_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_client_timings_bene.csv")
-        server_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_server_timings_bene.csv")
-        general_stats = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_general_stats_bene.csv")
+        try:
 
-        df_both_timings = pd.merge(client_timings,server_timings,on='transfer_id')
-        df_complete = pd.merge(df_both_timings,general_stats,left_on="transfer_id",right_on="date")
-        df_result = df_complete[(df_complete.transfer_id == result['transfer_id'])]
+            client_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_client_timings_bene.csv")
+            server_timings = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_server_timings_bene.csv")
+            general_stats = pd.read_csv("C:/Users/bened/Desktop/Uni/repos/xdbc-client/optimizer/local_measurements/xdbc_general_stats_bene.csv")
 
-        df_result['timestamp_end'] = str(datetime.now())
-        df_result['transfer_id'] = df_result['transfer_id'].astype(str)
-        result['transfer_id'] = str(result['transfer_id'])
+            df_both_timings = pd.merge(client_timings,server_timings,on='transfer_id')
+            df_complete = pd.merge(df_both_timings,general_stats,left_on="transfer_id",right_on="date")
+            df_result = df_complete[(df_complete.transfer_id == result['transfer_id'])]
 
-        result = df_result.iloc[0].to_dict()
-        result = add_all_metrics_to_result(result)
+            df_result['timestamp_end'] = str(datetime.now())
+            df_result['transfer_id'] = df_result['transfer_id'].astype(str)
+            result['transfer_id'] = str(result['transfer_id'])
+
+            result = df_result.iloc[0].to_dict()
+            result = add_all_metrics_to_result(result)
+        except:
+            print(f"failed to load data transfer result for transfer id {result['transfer_id']}")
 
         return result

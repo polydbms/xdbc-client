@@ -48,10 +48,11 @@ def process_configuration(queue, ssh_host):
             if result['transfer_id'] == -1:
                 result['time'] = -1
 
-            result['config_id'] = config_id
+
 
             result['client_bufpool_factor'] = complete_config['client_bufpool_factor']
             result['server_bufpool_factor'] = complete_config['server_bufpool_factor']
+            result['config_id'] = config_id
 
             with lock:
                 df = pd.DataFrame(result, index=[0])
@@ -165,7 +166,7 @@ CONFIG_SPACE = config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10
 if __name__ == "__main__":
 
     #generate_random_configurations()
-
+    #'''
     config_space_string = get_config_space_string(CONFIG_SPACE)
 
     config_file = f"random_samples_{config_space_string}/grid_configurations_FIXED.csv"
@@ -175,8 +176,11 @@ if __name__ == "__main__":
 
     environments = environment_list_base_envs
 
-    for i in [8,50, 500, 600, 700, 800, 900,  1000]:
+    for i in [450,
+              #500, 600, 700, 800, 900,  1000
+              ]:
         print(f"starting executing with n = {i}")
         execute_all_configurations(config_file, output_dir, ssh_hosts, i, environments)
+    #'''
 
 

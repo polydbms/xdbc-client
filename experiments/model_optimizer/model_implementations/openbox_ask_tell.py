@@ -130,7 +130,10 @@ class OpenBox_Ask_Tell():
 
         """
         complete_config = self.current_suggestions[frozenset(config.items())]
-        metric_value = Metrics.get_metric(self.metric, result)
+        if self.metric in result.keys():
+            metric_value = result[self.metric]
+        else:
+            metric_value = Metrics.get_metric(self.metric, result)
 
         # openbox always minimizes the objective
         if self.mode == 'max':
@@ -190,8 +193,8 @@ class OpenBox_Ask_Tell():
             config = {
                 'compression': row['compression'],
                 'format': row['format'],
-                'client_bufpool_factor': row['client_bufpool_factor'],
-                'server_bufpool_factor': row['server_bufpool_factor'],
+                'client_bufpool_factor': int(row['client_bufpool_factor']),
+                'server_bufpool_factor': int(row['server_bufpool_factor']),
                 'buffer_size': row['buffer_size'],
                 'send_par': row['send_par'],
                 'write_par': row['write_par'],

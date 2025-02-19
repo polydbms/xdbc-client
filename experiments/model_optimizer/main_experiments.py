@@ -9,8 +9,10 @@ from experiments.model_optimizer import Stopping_Rules, data_transfer_wrapper
 from experiments.model_optimizer.Helpers import *
 from experiments.model_optimizer.NestedSSHHandler import NestedSSHClient
 from experiments.model_optimizer.environments import *
-from experiments.model_optimizer.model_implementations.Test_Cost_Model import *
-from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_Cost_Model import *
+from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_Cost_Model import \
+    Per_Environment_RF_Cost_Model2
+from experiments.model_optimizer.model_implementations.lhs_search_optimizer import LHS_Search_Optimizer
+from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_Cost_Model_old import *
 from experiments.model_optimizer.model_implementations.openbox_ask_tell import OpenBox_Ask_Tell
 from experiments.model_optimizer.model_implementations.syne_tune_ask_tell import Syne_Tune_Ask_Tell
 from experiments.model_optimizer.model_implementations.own_random_search import Own_Random_Search
@@ -19,8 +21,9 @@ from experiments.model_optimizer.model_implementations.own_random_search import 
 def main():
 
     algo_selection_promising = [
-        #"cost_model_xgb_rs_exc_cluster_update_net_trans",
-        #"cost_model_xgb_rs_exc_cluster_update_only_hist",
+        "cost_model_xgb_rs_exc_cluster_net_trans",
+        "cost_model_xgb_rs_exc_cluster_update_net_trans",
+        "cost_model_xgb_rs_exc_cluster_update_only_hist",
 
         #"tlbo_rgpe_prf",-
         #"tlbo_topov3_prf",
@@ -31,27 +34,39 @@ def main():
 
 
     algos_to_run = [
-                    'random_search',
-                    "hyperband",
-                    "asha",
-                    "bayesian_open_box",
+                    #"random_search",
+
+                    #"bayesian_open_box",
+                    "cost_model_xgb_rs_exc_cluster_update_only_hist_v18",
+            
+                    "tlbo_rgpe_prf",
+                    "tlbo_topov3_prf",
+                    "quantile",
+                    #"asha",
+                    #"hyperband",
                     ]
 
-
-
-
     execute_optimization_runs_multi_threaded(ssh_hosts=reserved_hosts_big_cluster,
-                                             environments_to_run=environment_list_main_envs,
-                                             algorithms_to_run=['bayesian_open_box'],
-                                             config_space=config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE,
+                                             environments_to_run=environment_list_main_envs_3_times_sorted_slowest_first,
+                                             algorithms_to_run=algos_to_run,
+                                             config_space=config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_EX_BufSiz,
                                              metric='uncompressed_throughput',
                                              mode='max',
                                              loop_count=25,
-                                             use_all_environments=False,
-                                             training_data_per_env=300,
+                                             use_all_environments=True,
+                                             training_data_per_env=200,
                                              max_training_transfers_per_iteration=1000,
                                              use_history=True,
                                              override=True)
+    
+
+
+
+
+
+
+
+
 
 
 
@@ -135,8 +150,8 @@ def experiment_direct_optimization_loop(optimizer, environment, metric, mode, co
 
     #setup stuff, create files etc.
 
-    if trial_id == -1:
-        trial_id = get_next_trial_id()
+    #if trial_id == -1:
+    #    trial_id = get_next_trial_id()
 
     config_space_string = get_config_space_string(config_space)
 
@@ -219,8 +234,8 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
 
     # create files etc
     global result
-    if trial_id == -1:
-        trial_id = get_next_trial_id()
+    #if trial_id == -1:
+    #    trial_id = get_next_trial_id()
 
     config_space_string = get_config_space_string(config_space)
 
@@ -282,7 +297,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         end_inner = datetime.now()
 
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] running {max_training_transfers_per_iteration} surrogate transfers took {(end_inner - start_inner).total_seconds()} seconds")
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] best found configuration has predicted metric of {best_predicted_metric}")
+        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] best found configuration has predicted metric of {best_predicted_metric}  ({metric})")
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] now running best predicted config {best_predicted_config}")
         # Get weight table for best config
         cost_model.predict(data=best_predicted_config, target_environment=environment, print_wieghts=True)
@@ -457,105 +472,54 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
                     "comp_par"
                     ]
 
-    cost_model = None
-    search_optimizer = None
+    if "_rs" in algorithm:
+        #search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
+        #search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="grid_search")
+        search_optimizer = LHS_Search_Optimizer(config_space=config_space ,n_samples=max_training_transfers_per_iteration)
+    #elif "_bay" in algorithm:
+    #    search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian_syne_tune")
 
-
-    if "cost_model" in algorithm:
-        suffix = "cost_model"
-
-        if "_rfs_" in algorithm:
-            suffix = suffix + "_rfs"
-        elif "_gdb_" in algorithm:
-            suffix = suffix + "_gdb"
-        elif "_xgb_" in algorithm:
-            suffix = suffix + "_xgb"
-
-
-        if "_rs" in algorithm:
-            suffix = suffix + "_rs"
-            #optimizer = rs
-        elif "_bay" in algorithm:
-            suffix = suffix + "_bay"
-            #optimizer = bay
-
-
-        if use_all_environments:
-            suffix = suffix + "_all"
-        else:
-            suffix = suffix + "_exc"
-
-
-        if "_cluster" in algorithm:
-            suffix = suffix + "_cluster"
-
-
-        if "_update" in algorithm:
-            suffix = suffix + "_update"
-
-            if "_hist_ratio" in algorithm:
-                suffix = suffix + "_hist_ratio"
-
-
-        if "_net_trans" in algorithm:
-            suffix = suffix + "_net_trans"
-
-    #print(f"Algorithm : {algorithm}    suffix : {suffix}")
-
-    if use_history:
-
-        if algorithm == "test_cost_model_rfs_rs":
-            cost_model = Enhanced_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="test_cost_model_rfs_rs_exc_w_update")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
-
-        if algorithm == "test_cost_model_rfs_bay":
-            cost_model = Enhanced_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="test_cost_model_rfs_bay_exc_w_update")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
-
-        elif algorithm == "cost_model_rfs_rs":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_w_update")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
-
-        elif algorithm == "cost_model_rfs_bay":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_w_update")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
-
-        elif algorithm == "cost_model_rfs_rs_cluster":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_w_update_cluster")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
-
-        elif algorithm == "cost_model_rfs_bay_cluster":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_w_update_cluster")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
-
+    if "only_hist" in algorithm:
+        history_ratio = 1
+    elif "update" in algorithm:
+        history_ratio = 0.5
     else:
+        history_ratio = 0
 
-        if algorithm == "cost_model_rfs_rs":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
+    if "cluster" in algorithm:
+        cluster = True
+    else:
+        cluster = False
 
-        elif algorithm == "cost_model_rfs_bay":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
+    if "net_trans" in algorithm:
+        network_transformation = True
+    else:
+        network_transformation = False
 
-        elif algorithm == "cost_model_rfs_rs_cluster":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_rs_exc_cluster")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
+    if "_rfs_" in algorithm:
+        regression_model = "rfs"
+    elif "_gdb_" in algorithm:
+        regression_model = "gdb"
+    elif "_xgb_" in algorithm:
+        regression_model = "xgb"
 
-        elif algorithm == "cost_model_rfs_bay_cluster":
-            cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying="cost_model_rfs_bay_exc_cluster")
-            search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="bayesian")
 
-    if override:
-        cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields, metric=metric, data_per_env=training_data_per_env, underlying=algorithm)
-        search_optimizer = Syne_Tune_Ask_Tell(config_space=config_space, metric=metric, mode=mode, underlying="random_search")
+    cost_model = Per_Environment_RF_Cost_Model2(input_fields=input_fields,
+                                               metric=metric,
+                                               data_per_env=training_data_per_env,
+                                               underlying=algorithm,
+                                               cluster=cluster,
+                                               regression_model=regression_model,
+                                               network_transformation=network_transformation,
+                                               history_ratio=history_ratio
+                                               )
 
     if cost_model is None:
         raise ValueError(f"Cost Model could not be initialized: {algorithm}")
 
     data, suffix = get_transfer_learning_data_for_environment(environment, use_all_environments)
 
-    x = data[input_fields]
+    x = data#[input_fields]
     y = data[metric]
 
     cost_model.train(x, y)
@@ -571,7 +535,7 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
                                      ssh_host=ssh_host)
 
 
-def get_transfer_learning_data_for_environment(target_environment, use_all_environments, except_N_most_similar=2):
+def get_transfer_learning_data_for_environment(target_environment, use_all_environments, except_N_most_similar=1):
 
     base_path = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/random_samples_10_5M"
     environments_to_use = []
@@ -584,35 +548,35 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
             suffix = "_all_envs"
 
 
-    # environments sorted by similarity to the key-environemt. calculated using spearman rank coefficient on a sample size of 100 samples per environment.
+    # environments sorted by similarity to the key-environemt. calculated using spearman rank coefficient on a sample size of 400 samples per environment.
     dict_environment_most_similars = {
-        "S2_C2_N50": ['S2_C2_N50', 'S2_C8_N50', 'S4_C16_N150', 'S8_C2_N150', 'S4_C16_N50', 'S8_C16_N150', 'S8_C8_N150', 'S8_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S8_C2_N50', 'S4_C16_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S2_C2_N1000', 'S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S2_C8_N1000', 'S16_C4_N1000', 'S8_C2_N1000', 'S16_C16_N1000', 'S16_C8_N1000'],
-        "S2_C8_N50": ['S2_C8_N50', 'S2_C2_N50', 'S4_C16_N150', 'S8_C2_N150', 'S4_C16_N50', 'S8_C16_N150', 'S8_C8_N150', 'S8_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S8_C2_N50', 'S8_C8_N1000', 'S16_C4_N150', 'S2_C2_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N50', 'S8_C16_N50', 'S2_C8_N1000', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C4_N1000', 'S8_C2_N1000', 'S16_C16_N1000', 'S16_C8_N1000'],
-        "S4_C16_N50": ['S4_C16_N50', 'S8_C2_N50', 'S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C16_N150', 'S8_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C2_N150', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S8_C8_N50": ['S8_C8_N50', 'S16_C8_N50', 'S8_C16_N50', 'S16_C16_N50', 'S16_C4_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N150', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S4_C16_N1000', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S8_C2_N50": ['S8_C2_N50', 'S16_C4_N50', 'S8_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S4_C16_N1000', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S8_C16_N50": ['S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S16_C8_N1000', 'S16_C16_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S16_C4_N50": ['S16_C4_N50', 'S16_C8_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S16_C8_N1000', 'S16_C16_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S16_C8_N50": ['S16_C8_N50', 'S16_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S8_C16_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S2_C2_N50', 'S16_C4_N1000', 'S2_C8_N50', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S16_C16_N50": ['S16_C16_N50', 'S16_C8_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C4_N50', 'S8_C2_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C4_N1000', 'S4_C16_N150', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S2_C2_N150": ['S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C4_N1000', 'S16_C8_N150', 'S8_C2_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
-        "S2_C8_N150": ['S2_C8_N150', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N1000', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N50', 'S16_C4_N150', 'S8_C2_N50', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N1000', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
-        "S4_C16_N150": ['S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N150', 'S8_C16_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S8_C8_N1000', 'S4_C16_N1000', 'S16_C4_N150', 'S4_C16_N50', 'S16_C8_N150', 'S16_C16_N150', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S8_C2_N50', 'S2_C8_N1000', 'S16_C4_N1000', 'S8_C16_N50', 'S8_C2_N1000', 'S8_C8_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
-        "S8_C8_N150": ['S8_C8_N150', 'S8_C16_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N50', 'S8_C2_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C2_N150', 'S16_C4_N1000', 'S8_C16_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S8_C2_N150": ['S8_C2_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N1000', 'S16_C4_N1000', 'S8_C2_N50', 'S4_C16_N50', 'S4_C16_N150', 'S8_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C16_N1000', 'S8_C8_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S8_C16_N150": ['S8_C16_N150', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N50', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S8_C2_N150', 'S16_C4_N1000', 'S16_C16_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N1000', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S16_C4_N150": ['S16_C4_N150', 'S16_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S4_C16_N50', 'S8_C2_N150', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S8_C2_N1000', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S16_C8_N150": ['S16_C8_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S16_C16_N150": ['S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C8_N150', 'S8_C16_N150', 'S8_C2_N150', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S2_C2_N1000', 'S2_C8_N1000'],
-        "S2_C2_N1000": ['S2_C2_N1000', 'S2_C8_N1000', 'S2_C8_N150', 'S2_C2_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C8_N150', 'S8_C16_N150', 'S4_C16_N50', 'S16_C4_N1000', 'S16_C4_N150', 'S8_C2_N50', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
-        "S2_C8_N1000": ['S2_C8_N1000', 'S2_C2_N1000', 'S2_C2_N150', 'S2_C8_N150', 'S4_C16_N1000', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C8_N150', 'S8_C16_N150', 'S4_C16_N50', 'S16_C4_N1000', 'S8_C2_N50', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N1000', 'S16_C8_N1000'],
-        "S4_C16_N1000": ['S4_C16_N1000', 'S2_C2_N1000', 'S2_C2_N150', 'S2_C8_N1000', 'S2_C8_N150', 'S4_C16_N150', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C2_N150', 'S8_C8_N150', 'S8_C16_N150', 'S16_C4_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S4_C16_N50', 'S16_C16_N1000', 'S8_C2_N50', 'S16_C8_N1000', 'S8_C16_N50', 'S16_C4_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N50'],
-        "S8_C8_N1000": ['S8_C8_N1000', 'S8_C16_N1000', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N150', 'S8_C2_N150', 'S16_C8_N150', 'S16_C16_N150', 'S16_C4_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N50', 'S4_C16_N1000', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
-        "S8_C2_N1000": ['S8_C2_N1000', 'S8_C2_N150', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C16_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S16_C8_N150', 'S4_C16_N150', 'S4_C16_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C2_N50', 'S4_C16_N50', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N50', 'S2_C8_N1000', 'S2_C8_N150', 'S2_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C8_N50', 'S16_C16_N50'],
-        "S8_C16_N1000": ['S8_C16_N1000', 'S8_C8_N1000', 'S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N150', 'S8_C8_N150', 'S4_C16_N150', 'S8_C2_N150', 'S16_C16_N150', 'S16_C8_N150', 'S16_C4_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N50', 'S4_C16_N1000', 'S8_C2_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
-        "S16_C4_N1000": ['S16_C4_N1000', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S8_C16_N1000', 'S8_C2_N150', 'S16_C8_N150', 'S16_C4_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C8_N150', 'S8_C2_N1000', 'S8_C2_N50', 'S4_C16_N50', 'S8_C8_N50', 'S4_C16_N150', 'S16_C8_N50', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
-        "S16_C8_N1000": ['S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S8_C16_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S8_C16_N150', 'S8_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S8_C8_N50', 'S4_C16_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C2_N50', 'S8_C2_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000'],
-        "S16_C16_N1000": ['S16_C16_N1000', 'S16_C8_N1000', 'S16_C4_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S8_C16_N150', 'S16_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S16_C4_N150', 'S8_C2_N150', 'S8_C8_N50', 'S4_C16_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C16_N50', 'S16_C4_N50', 'S8_C2_N50', 'S8_C2_N1000', 'S4_C16_N150', 'S2_C2_N50', 'S2_C8_N50', 'S4_C16_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C8_N150', 'S2_C8_N1000']
+        "S2_C2_N50": ['S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C8_N50', 'S2_C8_N150', 'S16_C4_N50', 'S2_C8_N1000', 'S16_C4_N150', 'S4_C16_N50', 'S8_C16_N50', 'S16_C4_N1000', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N1000', 'S8_C8_N150', 'S4_C16_N150', 'S16_C8_N1000', 'S16_C8_N150', 'S8_C16_N150', 'S4_C16_N1000', 'S16_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000'],
+        "S2_C8_N50": ['S2_C8_N50', 'S4_C16_N50', 'S16_C4_N50', 'S8_C16_N50', 'S8_C8_N50', 'S4_C16_N150', 'S16_C16_N50', 'S16_C8_N50', 'S2_C2_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S8_C8_N150', 'S8_C16_N150', 'S16_C8_N150', 'S8_C2_N50', 'S16_C16_N150', 'S4_C16_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S16_C16_N1000', 'S2_C2_N1000', 'S2_C2_N150', 'S16_C4_N1000', 'S8_C2_N1000', 'S8_C2_N150'],
+        "S4_C16_N50": ['S4_C16_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S8_C16_N150', 'S8_C8_N150', 'S16_C16_N150', 'S16_C8_N150', 'S4_C16_N150', 'S2_C8_N50', 'S8_C16_N1000', 'S16_C16_N1000', 'S16_C4_N150', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N1000', 'S16_C4_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N1000', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N150'],
+        "S8_C8_N50": ['S8_C8_N50', 'S8_C16_N50', 'S16_C16_N50', 'S16_C8_N50', 'S4_C16_N50', 'S16_C4_N50', 'S16_C16_N150', 'S8_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S4_C16_N150', 'S2_C8_N50', 'S16_C16_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S16_C4_N1000', 'S4_C16_N1000', 'S8_C2_N50', 'S2_C2_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N1000', 'S2_C2_N150'],
+        "S8_C2_N50": ['S8_C2_N50', 'S2_C2_N50', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N1000', 'S2_C2_N150', 'S2_C8_N50', 'S16_C4_N50', 'S16_C4_N150', 'S4_C16_N50', 'S16_C16_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C4_N1000', 'S2_C8_N150', 'S2_C8_N1000', 'S16_C8_N150', 'S8_C8_N150', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S8_C16_N150', 'S16_C16_N150', 'S4_C16_N1000', 'S8_C16_N1000', 'S16_C16_N1000'],
+        "S8_C16_N50": ['S8_C16_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S4_C16_N50', 'S16_C4_N50', 'S16_C16_N150', 'S8_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S4_C16_N150', 'S2_C8_N50', 'S16_C16_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S16_C4_N1000', 'S4_C16_N1000', 'S8_C2_N50', 'S2_C2_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N1000', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N150'],
+        "S16_C4_N50": ['S16_C4_N50', 'S16_C16_N50', 'S8_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S4_C16_N50', 'S16_C8_N150', 'S8_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S4_C16_N150', 'S2_C8_N50', 'S16_C4_N150', 'S16_C8_N1000', 'S8_C8_N1000', 'S8_C16_N1000', 'S16_C16_N1000', 'S16_C4_N1000', 'S4_C16_N1000', 'S8_C2_N50', 'S2_C2_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N1000', 'S2_C2_N150'],
+        "S16_C8_N50": ['S16_C8_N50', 'S8_C16_N50', 'S16_C16_N50', 'S8_C8_N50', 'S4_C16_N50', 'S16_C4_N50', 'S16_C16_N150', 'S8_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S4_C16_N150', 'S2_C8_N50', 'S16_C16_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S16_C4_N1000', 'S4_C16_N1000', 'S8_C2_N50', 'S2_C2_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N1000', 'S2_C2_N150'],
+        "S16_C16_N50": ['S16_C16_N50', 'S8_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S4_C16_N50', 'S16_C4_N50', 'S16_C16_N150', 'S8_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S4_C16_N150', 'S2_C8_N50', 'S16_C16_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S16_C4_N1000', 'S4_C16_N1000', 'S8_C2_N50', 'S2_C2_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N1000', 'S2_C2_N150'],
+        "S2_C2_N150": ['S2_C2_N150', 'S2_C2_N1000', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N50', 'S8_C2_N50', 'S2_C8_N1000', 'S2_C8_N150', 'S16_C4_N1000', 'S2_C8_N50', 'S16_C4_N150', 'S4_C16_N1000', 'S16_C4_N50', 'S8_C8_N1000', 'S16_C8_N1000', 'S4_C16_N50', 'S4_C16_N150', 'S8_C16_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S8_C8_N150', 'S16_C8_N150', 'S8_C16_N150', 'S16_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000'],
+        "S2_C8_N150": ['S2_C8_N150', 'S2_C8_N1000', 'S4_C16_N1000', 'S2_C8_N50', 'S4_C16_N150', 'S16_C4_N1000', 'S2_C2_N150', 'S2_C2_N1000', 'S8_C8_N1000', 'S16_C4_N150', 'S16_C8_N1000', 'S2_C2_N50', 'S8_C8_N150', 'S8_C16_N1000', 'S8_C16_N150', 'S16_C8_N150', 'S16_C16_N150', 'S8_C2_N150', 'S8_C2_N1000', 'S4_C16_N50', 'S16_C16_N1000', 'S16_C4_N50', 'S8_C2_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50'],
+        "S4_C16_N150": ['S4_C16_N150', 'S8_C8_N150', 'S8_C16_N150', 'S16_C8_N150', 'S4_C16_N1000', 'S16_C16_N150', 'S8_C8_N1000', 'S8_C16_N1000', 'S16_C8_N1000', 'S16_C16_N1000', 'S16_C4_N150', 'S4_C16_N50', 'S16_C4_N50', 'S8_C16_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C4_N1000', 'S2_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N150', 'S8_C2_N1000'],
+        "S8_C8_N150": ['S8_C8_N150', 'S16_C8_N150', 'S8_C16_N150', 'S16_C16_N150', 'S4_C16_N150', 'S8_C8_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S16_C16_N1000', 'S16_C4_N150', 'S4_C16_N50', 'S16_C4_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N50', 'S4_C16_N1000', 'S16_C4_N1000', 'S2_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S8_C2_N150'],
+        "S8_C2_N150": ['S8_C2_N150', 'S8_C2_N1000', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N50', 'S2_C2_N50', 'S16_C4_N1000', 'S2_C8_N1000', 'S2_C8_N150', 'S16_C4_N150', 'S2_C8_N50', 'S16_C4_N50', 'S4_C16_N50', 'S16_C16_N50', 'S8_C8_N1000', 'S16_C8_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N1000', 'S4_C16_N1000', 'S16_C8_N150', 'S8_C8_N150', 'S4_C16_N150', 'S8_C16_N150', 'S16_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000'],
+        "S8_C16_N150": ['S8_C16_N150', 'S16_C16_N150', 'S8_C8_N150', 'S16_C8_N150', 'S8_C16_N1000', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S16_C4_N50', 'S16_C4_N150', 'S4_C16_N1000', 'S16_C4_N1000', 'S2_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N150', 'S8_C2_N1000'],
+        "S16_C4_N150": ['S16_C4_N150', 'S16_C4_N1000', 'S16_C8_N1000', 'S8_C8_N1000', 'S8_C8_N150', 'S16_C8_N150', 'S8_C16_N150', 'S4_C16_N150', 'S16_C16_N150', 'S4_C16_N1000', 'S16_C4_N50', 'S8_C16_N1000', 'S4_C16_N50', 'S16_C16_N50', 'S8_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S16_C16_N1000', 'S2_C8_N150', 'S2_C8_N50', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S8_C2_N150', 'S2_C2_N150', 'S8_C2_N1000'],
+        "S16_C8_N150": ['S16_C8_N150', 'S8_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000', 'S16_C4_N150', 'S8_C16_N50', 'S16_C4_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S4_C16_N50', 'S4_C16_N1000', 'S16_C4_N1000', 'S2_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N150', 'S8_C2_N1000'],
+        "S16_C16_N150": ['S16_C16_N150', 'S8_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S16_C16_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S4_C16_N50', 'S16_C4_N50', 'S16_C4_N150', 'S4_C16_N1000', 'S16_C4_N1000', 'S2_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N150', 'S8_C2_N1000'],
+        "S2_C2_N1000": ['S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N50', 'S8_C2_N50', 'S2_C8_N1000', 'S2_C8_N150', 'S2_C8_N50', 'S16_C4_N1000', 'S16_C4_N150', 'S4_C16_N1000', 'S16_C4_N50', 'S8_C8_N1000', 'S4_C16_N50', 'S16_C8_N1000', 'S4_C16_N150', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N150', 'S16_C8_N150', 'S8_C16_N150', 'S16_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000'],
+        "S2_C8_N1000": ['S2_C8_N1000', 'S2_C8_N150', 'S4_C16_N1000', 'S2_C8_N50', 'S4_C16_N150', 'S2_C2_N150', 'S2_C2_N1000', 'S16_C4_N1000', 'S8_C8_N1000', 'S16_C4_N150', 'S16_C8_N1000', 'S2_C2_N50', 'S8_C8_N150', 'S8_C16_N1000', 'S8_C16_N150', 'S8_C2_N150', 'S16_C8_N150', 'S8_C2_N1000', 'S16_C16_N150', 'S16_C16_N1000', 'S4_C16_N50', 'S16_C4_N50', 'S8_C2_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50'],
+        "S4_C16_N1000": ['S4_C16_N1000', 'S4_C16_N150', 'S8_C8_N1000', 'S16_C8_N1000', 'S8_C16_N1000', 'S8_C8_N150', 'S2_C8_N150', 'S16_C4_N1000', 'S2_C8_N1000', 'S8_C16_N150', 'S16_C4_N150', 'S16_C8_N150', 'S16_C16_N1000', 'S16_C16_N150', 'S2_C8_N50', 'S4_C16_N50', 'S16_C4_N50', 'S8_C16_N50', 'S16_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S2_C2_N150', 'S2_C2_N1000', 'S2_C2_N50', 'S8_C2_N150', 'S8_C2_N1000', 'S8_C2_N50'],
+        "S8_C8_N1000": ['S8_C8_N1000', 'S16_C8_N1000', 'S8_C8_N150', 'S8_C16_N1000', 'S16_C8_N150', 'S8_C16_N150', 'S16_C16_N150', 'S4_C16_N150', 'S16_C16_N1000', 'S16_C4_N150', 'S4_C16_N1000', 'S16_C4_N1000', 'S16_C4_N50', 'S4_C16_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S16_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S8_C2_N150'],
+        "S8_C2_N1000": ['S8_C2_N1000', 'S8_C2_N150', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N50', 'S2_C2_N50', 'S2_C8_N1000', 'S16_C4_N1000', 'S2_C8_N150', 'S16_C4_N150', 'S2_C8_N50', 'S16_C4_N50', 'S4_C16_N50', 'S8_C8_N1000', 'S16_C16_N50', 'S16_C8_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C8_N1000', 'S4_C16_N1000', 'S8_C8_N150', 'S16_C8_N150', 'S4_C16_N150', 'S8_C16_N150', 'S16_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000'],
+        "S8_C16_N1000": ['S8_C16_N1000', 'S16_C16_N1000', 'S8_C16_N150', 'S8_C8_N1000', 'S8_C8_N150', 'S16_C8_N1000', 'S16_C16_N150', 'S16_C8_N150', 'S4_C16_N150', 'S4_C16_N1000', 'S16_C4_N150', 'S4_C16_N50', 'S8_C8_N50', 'S8_C16_N50', 'S16_C8_N50', 'S16_C16_N50', 'S16_C4_N50', 'S16_C4_N1000', 'S2_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S8_C2_N150'],
+        "S16_C4_N1000": ['S16_C4_N1000', 'S16_C4_N150', 'S8_C8_N1000', 'S16_C8_N1000', 'S4_C16_N1000', 'S8_C8_N150', 'S16_C8_N150', 'S4_C16_N150', 'S8_C16_N150', 'S16_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000', 'S2_C8_N150', 'S2_C8_N1000', 'S16_C4_N50', 'S4_C16_N50', 'S8_C16_N50', 'S16_C16_N50', 'S16_C8_N50', 'S8_C8_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N150', 'S8_C2_N1000', 'S2_C2_N50', 'S2_C8_N50', 'S8_C2_N50'],
+        "S16_C8_N1000": ['S16_C8_N1000', 'S8_C8_N1000', 'S16_C8_N150', 'S8_C8_N150', 'S16_C16_N150', 'S8_C16_N150', 'S8_C16_N1000', 'S16_C16_N1000', 'S16_C4_N150', 'S4_C16_N150', 'S4_C16_N1000', 'S16_C4_N1000', 'S16_C4_N50', 'S8_C16_N50', 'S8_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C8_N50', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S8_C2_N150'],
+        "S16_C16_N1000": ['S16_C16_N1000', 'S8_C16_N1000', 'S16_C16_N150', 'S8_C16_N150', 'S16_C8_N150', 'S8_C8_N150', 'S16_C8_N1000', 'S8_C8_N1000', 'S4_C16_N150', 'S4_C16_N1000', 'S8_C16_N50', 'S8_C8_N50', 'S16_C8_N50', 'S16_C16_N50', 'S4_C16_N50', 'S16_C4_N150', 'S16_C4_N50', 'S16_C4_N1000', 'S2_C8_N50', 'S2_C8_N150', 'S2_C8_N1000', 'S2_C2_N50', 'S8_C2_N50', 'S2_C2_N1000', 'S2_C2_N150', 'S8_C2_N1000', 'S8_C2_N150']
     }
 
     if environment_to_string(target_environment) in dict_environment_most_similars.keys():
@@ -635,20 +599,22 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
 
 
     #base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets"
-    #file_list_currated = [glob.glob(f"{base_path_currated}/{signature}_currated_dataset*.csv") for signature in environments_to_use]
-    #for file in file_list_currated:
+    base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets_100high_100_rest"
+    file_list_currated = [glob.glob(f"{base_path_currated}/{signature}_currated_dataset*.csv") for signature in environments_to_use]
+    for file in file_list_currated:
+        if file:
+            df = pd.read_csv(file[0])
+            df = df[(df['time'] > time_threshold)]
+            data_frames.append(df)
+
+
+
+
+    #for file in file_list:
     #    if file:
     #        df = pd.read_csv(file[0])
-    #        df = df[(df['time'] > time_threshold)]
+    #        df = df[(df['transfer_id'] > 0)]
     #        data_frames.append(df)
-
-
-
-
-    for file in file_list:
-        df = pd.read_csv(file[0])
-        df = df[(df['transfer_id'] > 0)]
-        data_frames.append(df)
 
 
 
@@ -835,25 +801,25 @@ def execute_optimization_runs_multi_threaded(ssh_hosts, environments_to_run, alg
 
     for env in environments_to_run:
         if env == env_S2_C2_N50:                        # average run time per transfer in seconds, calculated from random samples.
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((186 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S2_C8_N50:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((143 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S4_C16_N50:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((116 + overhead_per_run) * len(algorithms_to_run) * loop_count)
 
         if env == env_S8_C8_N150:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((61 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S8_C2_N150:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((164 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S8_C16_N150:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((60 + overhead_per_run) * len(algorithms_to_run) * loop_count)
 
         if env == env_S16_C4_N1000:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((79 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S16_C8_N1000:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((54 + overhead_per_run) * len(algorithms_to_run) * loop_count)
         if env == env_S16_C16_N1000:
-            total_time_estimate = total_time_estimate + ((99 + overhead_per_run) * len(algorithms_to_run) * loop_count)
+            total_time_estimate = total_time_estimate + ((50 + overhead_per_run) * len(algorithms_to_run) * loop_count)
 
     print(total_time_estimate)
 
@@ -873,9 +839,10 @@ def execute_optimization_runs_multi_threaded(ssh_hosts, environments_to_run, alg
     threads = []
     for i in range(len(ssh_hosts)):
         thread = threading.Thread(target=queue_function, args=(queue, ssh_hosts[i]))
-        time.sleep(1.5)  # so no threads start at the same time, bc filenames depend on timestamp
         thread.start()
         threads.append(thread)
+        time.sleep(15)  # so no threads start at the same time, bc filenames depend on timestamp
+
 
     # wait for threads to finish
     for thread in threads:

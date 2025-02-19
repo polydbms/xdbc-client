@@ -1,4 +1,7 @@
 import sys
+
+import numpy as np
+from scipy.stats import qmc
 from syne_tune.config_space import choice, ordinal, Integer, Float
 from openbox import space as sp
 
@@ -86,6 +89,24 @@ config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE = \
      {'name': "comp_par", 'type': 'integer', 'lower': 1, 'upper': 16},
      ]
 
+config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_EX_BufSiz = \
+    [{'name': "compression", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]}, # remove either lzo or lz4, ss size from 10.5M to 8.4M
+     {'name': "format", 'type': 'categorical', 'domain': [1, 2]},
+     {'name': "client_bufpool_factor", 'type': 'integer', 'lower': 1, 'upper': 8},
+     {'name': "server_bufpool_factor", 'type': 'integer', 'lower': 1,  'upper': 8},
+     {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
+     {'name': "send_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "write_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "decomp_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "read_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "deser_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "ser_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     {'name': "comp_par", 'type': 'integer', 'lower': 1, 'upper': 16},
+     ]
+
+
+
+
 
 username_cloud_7 = "bene"
 all_hosts_cloud_7 = ["cloud-7.dima.tu-berlin.de",
@@ -109,28 +130,34 @@ reserved_hosts_big_cluster = [
     #"sr630-wn-a-24",
     #"sr630-wn-a-25",
 
+    # only for data generation
     #"sr630-wn-a-26",
     #"sr630-wn-a-27",
     #"sr630-wn-a-28",
     #"sr630-wn-a-29",
     #"sr630-wn-a-30",
 
+    # more permanent testing nodes
     "sr630-wn-a-31",
     "sr630-wn-a-32",
     "sr630-wn-a-33",
+
     "sr630-wn-a-34",
     "sr630-wn-a-35",
     "sr630-wn-a-36",
+
     "sr630-wn-a-37",
     "sr630-wn-a-38",
     "sr630-wn-a-39",
 
-    #"sr630-wn-a-40",
-    #"sr630-wn-a-41",
-    #"sr630-wn-a-42",
-    #"sr630-wn-a-43",
-    #"sr630-wn-a-44",
-    #"sr630-wn-a-45",
+    # temporary
+    "sr630-wn-a-40",
+    "sr630-wn-a-41",
+    "sr630-wn-a-42",
+    "sr630-wn-a-43",
+    "sr630-wn-a-44",
+    "sr630-wn-a-45",
+
     #"sr630-wn-a-46"
 ]
 
@@ -240,6 +267,8 @@ def get_config_space_string(config_space):
         config_space_string = "10_5M"
     elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE:
         config_space_string = "10_5M_flex"
+    elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_EX_BufSiz:
+        config_space_string = "10_5M_semi_flex"
     return config_space_string
 
 
