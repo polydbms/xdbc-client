@@ -239,12 +239,12 @@ std::tuple<double, double, double, double> printAndReturnAverageLoad(xdbc::Runti
 
         ret = std::tuple<double, double, double, double>(avgFreeBufferIdsSize, avgCompressedBufferIdsSize,
                                                          avgDecompressedBufferIdsSize, avgSerializedBufferIdsSize);
-        spdlog::get("XDBC.CLIENT")->info("Average Load of Queues: Free, Decompressor, Serializer, Writer");
-        spdlog::get("XDBC.CLIENT")->info("{0}\t{1}\t{2}\t{3}", avgFreeBufferIdsSize, avgCompressedBufferIdsSize, avgDecompressedBufferIdsSize, avgSerializedBufferIdsSize);
+        spdlog::get("XDBC.SINK")->info("Average Load of Queues: Free, Decompressor, Serializer, Writer");
+        spdlog::get("XDBC.SINK")->info("{0}\t{1}\t{2}\t{3}", avgFreeBufferIdsSize, avgCompressedBufferIdsSize, avgDecompressedBufferIdsSize, avgSerializedBufferIdsSize);
     }
     else
     {
-        spdlog::get("XDBC.CLIENT")->info("No records available to calculate averages.");
+        spdlog::get("XDBC.SINK")->info("No records available to calculate averages.");
     }
 
     return ret;
