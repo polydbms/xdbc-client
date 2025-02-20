@@ -5,13 +5,25 @@
 			"name": "Run Test in XDBC Client",
 			"type": "cppdbg",
 			"request": "launch",
-			"program": "/xdbc-client/build/tests/test_xclient", // Path to the test executable in the container
+			"program": "/xdbc-client/Sinks/build/xdbcsinks",
 			"args": [
+				"--server-host=xdbcserver",
 				"--table",
-				"ss13husallm"
+				"ss13husallm",
+				"-f1",
+				"-b",
+				"1024",
+				"-p",
+				"32000",
+				"-n1",
+				"-w1",
+				"-d2",
+				"-s8",
+				"--skip-serializer=0",
+				"--target=csv"
 			],
 			"stopAtEntry": false,
-			"cwd": "/xdbc-client/build/tests", // Current working directory inside the container
+			"cwd": "/xdbc-client/build/tests",
 			"environment": [],
 			"externalConsole": false,
 			"MIMode": "gdb",
