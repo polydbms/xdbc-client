@@ -29,7 +29,7 @@ endif()
 #    link_directories(${Boost_LIBRARY_DIRS})
 #endif()
 
-add_executable(xdbcsinks main.cpp CSVSink/CSVSink.cpp PQSink/PQSink.cpp)
+add_executable(xdbcsinks main.cpp CSVSink/CSVSink.cpp PQSink/PQSink.cpp ../xdbc/ControllerInterface/WebSocketClient.cpp)
 
 # Link dependencies
 set(USED_LIBS ${Boost_SYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} ${Boost_REGEX_LIBRARY})

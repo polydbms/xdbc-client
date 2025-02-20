@@ -1,4 +1,8 @@
 build/*
+.devcontainer/
+.vscode/
+Sinks/build/
+xdbc_client_timings.csv
 cmake-build-*
 .idea/*
 experiments/local_measurements/*
