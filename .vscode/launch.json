@@ -1,0 +1,34 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Run Test in XDBC Client",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "/xdbc-client/build/tests/test_xclient", // Path to the test executable in the container
+			"args": [
+				"--table",
+				"ss13husallm"
+			],
+			"stopAtEntry": false,
+			"cwd": "/xdbc-client/build/tests", // Current working directory inside the container
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "gdb",
+			"miDebuggerPath": "/usr/bin/gdb",
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Automatically get a backtrace on crash",
+					"text": "define hook-stop\nbt\nend",
+					"ignoreFailures": true
+				}
+			],
+			"internalConsoleOptions": "openOnSessionStart"
+		}
+	]
+}
