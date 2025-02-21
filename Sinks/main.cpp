@@ -143,7 +143,7 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
 nlohmann::json metrics_convert(xdbc::RuntimeEnv &env)
 {
     nlohmann::json metrics_json = nlohmann::json::object(); // Use a JSON object
-    if ((env.stop_updation == 0) && (env.pts))
+    if ((env.pts))
     {
         std::vector<xdbc::ProfilingTimestamps> env_pts;
         env_pts = env.pts->copy_newElements();
@@ -198,7 +198,7 @@ void env_convert(xdbc::RuntimeEnv &env, const nlohmann::json &env_json)
         env_.decomp_parallelism = std::stoi(env_json.at("decompParallelism").get<std::string>());
 
         // Update the actual environment object if updates are allowed
-        if (env.stop_updation == 0)
+        if (env.enable_updation == 1)
         {
             // std::lock_guard<std::mutex> lock(env.env_mutex);
 
@@ -234,7 +234,7 @@ int main(int argc, char *argv[])
     handleSinkCMDParams(argc, argv, env, outputBasePath);
 
     // *** Setup websocket interface for controller ***
-    env.stop_updation = 0;
+    env.enable_updation = 1;
     std::thread io_thread;
     WebSocketClient ws_client("xdbc-controller", "8002");
     if (env.spawn_source == 1)
