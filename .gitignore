@@ -1,4 +1,3 @@
-.vscode/
 build/*
 Sinks/build/*
 xdbc_client_timings.csv
