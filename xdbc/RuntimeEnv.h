@@ -82,7 +82,7 @@ namespace xdbc
 
         int spawn_source;
         transfer_details tf_paras;
-        std::atomic<int> stop_updation;
+        std::atomic<int> enable_updation;
 
         std::string toString() const
         {
