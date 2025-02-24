@@ -11,6 +11,7 @@ from experiments.model_optimizer import data_transfer_wrapper
 from experiments.model_optimizer.Configs import *
 from experiments.model_optimizer.NestedSSHHandler import NestedSSHClient
 from experiments.model_optimizer.environments import *
+from experiments.model_optimizer.model_implementations.lhs_search_optimizer import LHS_Search_Optimizer
 from experiments.model_optimizer.model_implementations.syne_tune_ask_tell import Syne_Tune_Ask_Tell
 
 
@@ -67,7 +68,7 @@ def process_configuration(queue, ssh_host):
             queue.task_done()
 
 
-def execute_all_configurations(config_file, output_dir, ssh_hosts, count, environments):
+def execute_all_configurations_old(config_file, output_dir, ssh_hosts, count, environments):
     """
     #todo
 
@@ -128,11 +129,78 @@ def execute_all_configurations(config_file, output_dir, ssh_hosts, count, enviro
 
     print(f"[{datetime.today().strftime('%H:%M:%S')}] Completed execution for N={count}. Results saved to {output_file}.")
 
+def execute_all_configurations(config_file, output_dir, ssh_hosts, count, environments):
+    """
+    #todo
 
-def generate_random_configurations(n=1000):
+    Parameters:
+        config_file (str): The file containing the configurations to be executed.
+        output_dir (str): The directory into which the results should be saved
+        ssh_hosts (list): The list of shh host to use for executing the transfers.
+    """
+
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    queue = Queue()
+
+    for environment in environments:
+
+        config_file = f"random_samples_{get_config_space_string(CONFIG_SPACE)}/configs/grid_configurations_{environment_to_string(environment)}_FIXED.csv"
+
+        # read the configurations to be executed
+        df = pd.read_csv(config_file)
+        configs = df.to_dict(orient="records")[:count]  # converts dataframe to LIST of dicts
+
+
+        output_file = os.path.join(output_dir, f"{environment_to_string(environment)}_random_samples.csv")
+
+        # check for already executed configurations
+        if os.path.exists(output_file):
+            df_out = pd.read_csv(output_file)
+            if "config_id" in df_out.columns:
+                executed_configs = df_out["config_id"].tolist()
+            else:
+                executed_configs = []
+        else:
+            executed_configs = []
+
+        # filter configurations to skip already executed ones
+        remaining_configs = [
+            (i, config) for i, config in enumerate(configs) if i not in executed_configs
+        ]
+
+        if not remaining_configs:
+            print(f"[{datetime.today().strftime('%H:%M:%S')}] All configurations already executed for {environment_to_string(environment)} with N = {count}.")
+            continue
+
+        lock = threading.Lock()
+
+        for config_id, config in remaining_configs:
+            queue.put((config_id, config, environment, output_file, lock))
+
+
+
+    # start threads
+    threads = []
+    for i in range(len(ssh_hosts)):
+        thread = threading.Thread(target=process_configuration,
+                                  args=(queue, ssh_hosts[i]))
+        thread.start()
+        threads.append(thread)
+
+    # wait for threads to finish
+    for thread in threads:
+        thread.join()
+
+    print(f"[{datetime.today().strftime('%H:%M:%S')}] Completed execution for N={count}. Results saved to {output_file}.")
+
+
+def generate_random_configurations(n=1000,env=None):
     config_space_string = get_config_space_string(CONFIG_SPACE)
 
-    filename = f"grid_configurations.csv"
+    filename = f"grid_configurations_{environment_to_string(env)}.csv"
     filepath = f"random_samples_{config_space_string}/"
 
     Path(filepath).mkdir(parents=True, exist_ok=True)
@@ -140,13 +208,14 @@ def generate_random_configurations(n=1000):
     results = pd.DataFrame()
     first_write_done = False
 
-    optimizer = Syne_Tune_Ask_Tell(config_space=CONFIG_SPACE, underlying='grid_search')
+    #optimizer = Syne_Tune_Ask_Tell(config_space=CONFIG_SPACE, underlying='grid_search')
+    optimizer = LHS_Search_Optimizer(config_space=CONFIG_SPACE, n_samples=n)
 
     for i in range(0, n):
 
         suggested_config = optimizer.suggest()
 
-        optimizer.report(suggested_config, {'time': 1})
+        #optimizer.report(suggested_config, {'time': 1})
 
         suggested_config['config_id'] = i
 
@@ -161,26 +230,41 @@ def generate_random_configurations(n=1000):
         results = pd.concat([results, df], axis=0)
 
 
-CONFIG_SPACE = config_space_variable_parameters_generalized_FOR_NEW_ITERATION_10_5_M
+CONFIG_SPACE = config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_EX_BufSiz
 
 if __name__ == "__main__":
 
-    #generate_random_configurations()
+    #for env in environment_list_base_envs:
+    #    generate_random_configurations(env=env)
+
     #'''
+    #generate_random_configurations()
     config_space_string = get_config_space_string(CONFIG_SPACE)
 
-    config_file = f"random_samples_{config_space_string}/grid_configurations_FIXED.csv"
+
     output_dir = f"random_samples_{config_space_string}"
 
     ssh_hosts = reserved_hosts_big_cluster
 
     environments = environment_list_base_envs
 
-    for i in [450,
-              #500, 600, 700, 800, 900,  1000
-              ]:
-        print(f"starting executing with n = {i}")
-        execute_all_configurations(config_file, output_dir, ssh_hosts, i, environments)
+
+    for i in [750,800,850,900,950,1000]:
+
+        #for env in environments:
+
+            #config_file = f"random_samples_{config_space_string}/configs/grid_configurations_{environment_to_string(env)}_FIXED.csv"
+            print(f"starting executing with n = {i}")
+            execute_all_configurations(None, output_dir, ssh_hosts, i, environments)
+
+    
     #'''
+
+    #for i in [450,
+    #          #500, 600, 700, 800, 900,  1000
+    #          ]:
+    #    config_file = f"random_samples_{config_space_string}/grid_configurations_{environment_to_string(env)}_FIXED.csv"
+    #    print(f"starting executing with n = {i}")
+    #    execute_all_configurations(config_file, output_dir, ssh_hosts, i, environments)
 
 

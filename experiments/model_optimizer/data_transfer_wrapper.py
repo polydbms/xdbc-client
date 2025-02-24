@@ -1,4 +1,5 @@
 import datetime
+import os
 import threading
 
 import pandas as pd
@@ -267,7 +268,12 @@ def save_failed_config(config):
 
     df = pd.DataFrame(config, index=[0])
 
-    df.to_csv(filename, mode='a', header=True)
+    #df.to_csv(filename, mode='a', header=True)
+
+    if os.path.isfile(filename):
+        df.to_csv(filename, mode='a', header=False, index=False)
+    else:
+        df.to_csv(filename, mode='a', header=True, index=False)
 
 
 

@@ -196,13 +196,13 @@ class OpenBox_Ask_Tell():
                 'client_bufpool_factor': int(row['client_bufpool_factor']),
                 'server_bufpool_factor': int(row['server_bufpool_factor']),
                 'buffer_size': row['buffer_size'],
-                'send_par': row['send_par'],
-                'write_par': row['write_par'],
-                'decomp_par': row['decomp_par'],
-                'read_par': row['read_par'],
-                'deser_par': row['deser_par'],
-                'ser_par': row['ser_par'],
-                'comp_par': row['comp_par']
+                'send_par': int(row['send_par']),
+                'write_par': int(row['write_par']),
+                'decomp_par': int(row['decomp_par']),
+                'read_par': int(row['read_par']),
+                'deser_par': int(row['deser_par']),
+                'ser_par': int(row['ser_par']),
+                'comp_par': int(row['comp_par'])
             }
 
             metric = row[self.metric]
