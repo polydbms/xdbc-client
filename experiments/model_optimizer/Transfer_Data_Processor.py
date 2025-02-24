@@ -100,25 +100,31 @@ def _cluster_groups(grouped_data, column, n_clusters):
             similarity_matrix[i, j] = distance
             similarity_matrix[j, i] = distance
 
-    optimal_clusters = _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=len(group_keys) - 1)
+    #optimal_clusters = _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=len(group_keys) - 1)
 
     # -1 = no clusters
     # 0 = optimal number *2
     # else : custom number
 
-    if n_clusters == -1:
-        actual_clusters = len(group_keys)  # min(optimal_clusters*2, len(group_keys) - 1) # todo optimal number of clusters seems too low ?
-    elif n_clusters == 0:
-        actual_clusters = min((optimal_clusters*2), len(group_keys) - 1) #todo !!!! maybe limit how many different environments can be in the same cluster ?
-    else:
-        actual_clusters = n_clusters
+    #if n_clusters == -1:
+    #    actual_clusters = len(group_keys)  # min(optimal_clusters*2, len(group_keys) - 1) # todo optimal number of clusters seems too low ?
+    #elif n_clusters == 0:
+    #    actual_clusters = min((optimal_clusters), len(group_keys) - 1) #todo !!!! maybe limit how many different environments can be in the same cluster ?
+    #else:
+    #    actual_clusters = n_clusters
 
-    actual_clusters = int(len(group_keys) / 2)
+    #actual_clusters = int(len(group_keys))
+
+    min_val = np.min(similarity_matrix)
+    max_val = np.max(similarity_matrix)
+    scaled_matrix = (similarity_matrix - min_val) / (max_val - min_val)
 
 
-
-    clustering = AgglomerativeClustering(n_clusters=actual_clusters, affinity='precomputed', linkage='average')
-    labels = clustering.fit_predict(similarity_matrix)
+    clustering = AgglomerativeClustering(n_clusters=None,
+                                         affinity='precomputed',
+                                         linkage='average',
+                                         distance_threshold=0.2)
+    labels = clustering.fit_predict(scaled_matrix)
 
     clusters = defaultdict(list)
     for i, label in enumerate(labels):
@@ -142,8 +148,28 @@ def _calculate_similarity(group1, group2, column):
     """
     values1 = group1[column].values
     values2 = group2[column].values
-    return wasserstein_distance(values1, values2)
 
+    #return wasserstein_distance(values1, values2)
+
+
+    server_group_1 = group1['server_cpu'].unique()[0]
+    client_group_1 = group1['client_cpu'].unique()[0]
+    network_group_1 = transform_network(group1['network'].unique()[0])
+
+    values_group_1 = np.array([server_group_1, client_group_1, network_group_1])
+
+    server_group_2 = group2['server_cpu'].unique()[0]
+    client_group_2 = group2['client_cpu'].unique()[0]
+    network_group_2 = transform_network(group2['network'].unique()[0])
+
+    values_group_2 = np.array([server_group_2, client_group_2, network_group_2])
+
+    distances = np.linalg.norm(values_group_1 - values_group_2)
+
+    return distances
+
+def transform_network(x):
+    return np.round(9.45 / (1 + 31 * np.exp(-0.03 * x)), 2)
 
 def _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=10):
     """
