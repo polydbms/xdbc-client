@@ -43,6 +43,7 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
     server_path =   os.path.abspath(os.path.join(os.getcwd(), '..', 'xdbc-server', 'experiments'))
     client_path =  "~/xdbc-client/experiments"
     measurement_path = os.path.abspath(os.path.join(perf_dir, 'xdbc_general_stats_bene.csv'))
+    #measurement_path = os.path.abspath(os.path.join(perf_dir, 'xdbc_general_stats.csv'))
     config['host'] = ssh.hostname
 
     config['client_readmode'] = mode
@@ -55,12 +56,16 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
 
     config['run'] = 1
     config['date'] = int(time.time_ns())
+    config['transfer_id'] = int(time.time_ns() + hash(ssh.hostname)%10000)
     config['xdbc_version'] = 10
     config['system_source'] = env["src"]
     config['system_dest'] = env["target"]
 
     if 'compression_lib' not in config:
         config['compression_lib'] = "nocomp"
+
+    if 'ser_par' not in config:
+        config['ser_par'] = 4
 
     result = {}
     profiling_interval = 1000
@@ -83,7 +88,7 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
                           -p{config['server_buffpool_size']} \
                           -f{config['format']} \
                           --skip-deserializer={config['skip_ser']} \
-                          --tid="{config['date']}" \
+                          --tid="{config['transfer_id']}" \
                           --system={env['src']} \
                           --profiling-interval={profiling_interval}"
                         """)
@@ -122,7 +127,7 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
                                 -s{config['ser_par']} \
                                 --skip-serializer={config['skip_ser']} \
                                 --target={env['target']} \
-                                --tid="{config['date']}" \
+                                --tid="{config['transfer_id']}" \
                                 --profiling-interval={profiling_interval} \"
                                 
                             """
@@ -180,10 +185,11 @@ def run_xdbserver_and_xdbclient(config, env, mode, perf_dir, ssh, return_transfe
         result['size'] = end_data_size - start_data_size
         result['avg_cpu_server'] = 0
         result['avg_cpu_client'] = 0
-        result['transfer_id'] = config['date']
+        result['transfer_id'] = config['transfer_id']
 
         #print(f"Total Data Transfer Size: {result['size']}")
         #write_csv_header(measurement_path)
+        config['date'] = config['transfer_id']
         write_to_csv(measurement_path, env, config, result)
         copy_metrics(env['server_container'], env['client_container'], perf_dir,ssh)
 
@@ -249,6 +255,7 @@ def copy_metrics(server_container, client_container, perf_dir,ssh):
         with file_lock:
 
             with open(f"{absolute_perf_dir}/xdbc_server_timings_bene.csv",'a') as file_server:
+            #with open(f"{absolute_perf_dir}/xdbc_server_timings.csv",'a') as file_server:
 
                 if "cannot open" in data_server:
                     print("error reading timing file")
@@ -258,6 +265,7 @@ def copy_metrics(server_container, client_container, perf_dir,ssh):
 
 
             with open(f"{absolute_perf_dir}/xdbc_client_timings_bene.csv",'a') as file_client:
+            #with open(f"{absolute_perf_dir}/xdbc_client_timings.csv",'a') as file_client:
 
                 if "cannot open" in data_client:
                     print("error reading timing file")
