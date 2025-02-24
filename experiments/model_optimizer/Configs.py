@@ -104,6 +104,20 @@ config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_EX_BufSi
      {'name': "comp_par", 'type': 'integer', 'lower': 1, 'upper': 16},
      ]
 
+config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_DISCRETE_EX_BufSiz = \
+   [{'name': "compression", 'type': 'categorical', 'domain': ["nocomp", "zstd", "lz4", "lzo", "snappy"]},
+    {'name': "format", 'type': 'categorical', 'domain': [1, 2]},
+    {'name': "client_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8]},
+    {'name': "server_bufpool_factor", 'type': 'discrete', 'domain': [1, 2, 3, 4, 5, 6, 7, 8]},
+    {'name': "buffer_size", 'type': 'discrete', 'domain': [64, 256, 512, 1024]},
+    {'name': "send_par", 'type': 'discrete', 'domain': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},
+    {'name': "write_par", 'type': 'discrete', 'domain': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},
+    {'name': "decomp_par", 'type': 'discrete', 'domain': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},
+    {'name': "read_par", 'type': 'discrete', 'domain': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},
+    {'name': "deser_par", 'type': 'discrete', 'domain': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},
+    {'name': "ser_par", 'type': 'discrete', 'domain': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},
+    {'name': "comp_par", 'type': 'discrete', 'domain': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]},
+    ]
 
 
 
@@ -118,10 +132,8 @@ all_hosts_cloud_7 = ["cloud-7.dima.tu-berlin.de",
 username_big_cluster = "bdidrich-ldap"
 big_cluster_main_host = "sr630-wn-a-01.dima.tu-berlin.de"
 reserved_hosts_big_cluster = [
-    #"sr630-wn-a-15",
-    #"sr630-wn-a-16",
-    #"sr630-wn-a-17",
-    #"sr630-wn-a-18",
+
+    #12
     #"sr630-wn-a-19",
     #"sr630-wn-a-20",
     #"sr630-wn-a-21",
@@ -129,36 +141,39 @@ reserved_hosts_big_cluster = [
     #"sr630-wn-a-23",
     #"sr630-wn-a-24",
     #"sr630-wn-a-25",
-
-    # only for data generation
     #"sr630-wn-a-26",
     #"sr630-wn-a-27",
+
     #"sr630-wn-a-28",
     #"sr630-wn-a-29",
     #"sr630-wn-a-30",
 
-    # more permanent testing nodes
+
+    # permanent testing nodes 9
     "sr630-wn-a-31",
     "sr630-wn-a-32",
     "sr630-wn-a-33",
-
     "sr630-wn-a-34",
     "sr630-wn-a-35",
     "sr630-wn-a-36",
-
     "sr630-wn-a-37",
     "sr630-wn-a-38",
     "sr630-wn-a-39",
 
-    # temporary
-    "sr630-wn-a-40",
-    "sr630-wn-a-41",
-    "sr630-wn-a-42",
-    "sr630-wn-a-43",
-    "sr630-wn-a-44",
-    "sr630-wn-a-45",
 
-    #"sr630-wn-a-46"
+    # 11
+    #"sr630-wn-a-40",
+    #"sr630-wn-a-41",
+    #"sr630-wn-a-42",
+    #"sr630-wn-a-43",
+    #"sr630-wn-a-44",
+    #"sr630-wn-a-45",
+    #"sr630-wn-a-46",
+    #"sr630-wn-a-47",
+    #"sr630-wn-a-48",
+    #"sr630-wn-a-49",
+    #"sr630-wn-a-50",
+
 ]
 
 
@@ -268,6 +283,8 @@ def get_config_space_string(config_space):
     elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE:
         config_space_string = "10_5M_flex"
     elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_EX_BufSiz:
+        config_space_string = "10_5M_semi_flex"
+    elif config_space == config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_DISCRETE_EX_BufSiz:
         config_space_string = "10_5M_semi_flex"
     return config_space_string
 

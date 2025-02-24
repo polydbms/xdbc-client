@@ -7,7 +7,7 @@ from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
 
-class Per_Environment_RF_Cost_Model:
+class Per_Environment_RF_Cost_ModelOLD:
     def __init__(self,
                  input_fields,
                  metric='time',

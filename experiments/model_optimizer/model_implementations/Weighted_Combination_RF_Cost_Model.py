@@ -7,7 +7,7 @@ from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
 
-class Per_Environment_RF_Cost_Model2:
+class Per_Environment_RF_Cost_Model:
     def __init__(self,
                  input_fields,
                  metric='time',
@@ -167,7 +167,7 @@ class Per_Environment_RF_Cost_Model2:
         weights = 1 / (errors + 1e-8)
         weights_normalized = weights / np.sum(weights)
 
-        #calculate constant error term
+        # Calculate constant error term
         const = (known_predictions - result[self.metric])
         self.len_history = self.len_history + 1
         self.continous_maintained_constant_vector = (self.continous_maintained_constant_vector * ( (self.len_history - 1) / self.len_history )) + (const * (1 / self.len_history))
@@ -246,14 +246,20 @@ class Per_Environment_RF_Cost_Model2:
 
 
         # Calculate the distances between environment signatures
-        distances = np.linalg.norm(known_features - target_features[0], axis=1)
-        distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
-        environment_weights = 1 / distances
-        environment_weights_normalized = environment_weights / np.sum(environment_weights)
+        #distances = np.linalg.norm(known_features - target_features[0], axis=1)
+        #distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
+        #environment_weights = 1 / distances
+        #environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
 
         # Use a combination of both weights or only environment weights
         if self.history_ratio < 1:
+
+            # Calculate the distances between environment signatures
+            distances = np.linalg.norm(known_features - target_features[0], axis=1)
+            distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
+            environment_weights = 1 / distances
+            environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
             # Dynamic history-ratio
             # hist_weight_ratio = self.total_history_updates / ((self.total_history_updates * 1.2) + 4)
@@ -267,6 +273,13 @@ class Per_Environment_RF_Cost_Model2:
             if np.all(self.continous_maintained_history_vector == 0):
 
                 if target_environment is not None:
+
+                    # Calculate the distances between environment signatures
+                    distances = np.linalg.norm(known_features - target_features[0], axis=1)
+                    distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
+                    environment_weights = 1 / distances
+                    environment_weights_normalized = environment_weights / np.sum(environment_weights)
+
                     combined_weights = environment_weights_normalized
                 else:
                     combined_weights = np.full(self.continous_maintained_history_vector.shape, 1/self.continous_maintained_history_vector.size)
@@ -317,6 +330,7 @@ class Per_Environment_RF_Cost_Model2:
             print(f"Estimated Environment :         { np.round(predicted_environment,2)}")
             print(f"Estimated Environment w/ hist.: { np.round(predicted_environment_w_history,2)}")
         '''
+        print_wieghts = False
         if print_wieghts:
             table = PrettyTable()
             table.field_names = ['Env/Cluster', 'Prediction', 'Env Weight', 'Combined Weight', 'History Weight', 'Constant Vector', 'Prediction + Constant']

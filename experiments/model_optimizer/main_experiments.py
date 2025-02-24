@@ -8,9 +8,10 @@ from experiments.experiment_scheduler.ssh_handler import SSHConnection
 from experiments.model_optimizer import Stopping_Rules, data_transfer_wrapper
 from experiments.model_optimizer.Helpers import *
 from experiments.model_optimizer.NestedSSHHandler import NestedSSHClient
+from experiments.model_optimizer.cost_model_config_finder import get_next_suggestion
 from experiments.model_optimizer.environments import *
 from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_Cost_Model import \
-    Per_Environment_RF_Cost_Model2
+    Per_Environment_RF_Cost_Model
 from experiments.model_optimizer.model_implementations.lhs_search_optimizer import LHS_Search_Optimizer
 from experiments.model_optimizer.model_implementations.Weighted_Combination_RF_Cost_Model_old import *
 from experiments.model_optimizer.model_implementations.openbox_ask_tell import OpenBox_Ask_Tell
@@ -20,44 +21,23 @@ from experiments.model_optimizer.model_implementations.own_random_search import 
 
 def main():
 
-    algo_selection_promising = [
-        "cost_model_xgb_rs_exc_cluster_net_trans",
-        "cost_model_xgb_rs_exc_cluster_update_net_trans",
-        "cost_model_xgb_rs_exc_cluster_update_only_hist",
 
-        #"tlbo_rgpe_prf",-
-        #"tlbo_topov3_prf",
-        #"quantile",
-        #"bayesian_open_box",
-    ]
-
-
-
-    algos_to_run = [
-                    #"random_search",
-
-                    #"bayesian_open_box",
-                    "cost_model_xgb_rs_exc_cluster_update_only_hist_v18",
-            
-                    "tlbo_rgpe_prf",
-                    "tlbo_topov3_prf",
-                    "quantile",
-                    #"asha",
-                    #"hyperband",
-                    ]
 
     execute_optimization_runs_multi_threaded(ssh_hosts=reserved_hosts_big_cluster,
                                              environments_to_run=environment_list_main_envs_3_times_sorted_slowest_first,
-                                             algorithms_to_run=algos_to_run,
+                                             algorithms_to_run=["cost_model_xgb_rs_exc_cluster_update_only_hist_v26"],
                                              config_space=config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FLEXIBLE_EX_BufSiz,
                                              metric='uncompressed_throughput',
                                              mode='max',
                                              loop_count=25,
                                              use_all_environments=True,
-                                             training_data_per_env=200,
+                                             training_data_per_env=900,
                                              max_training_transfers_per_iteration=1000,
                                              use_history=True,
                                              override=True)
+
+
+
     
 
 
@@ -269,7 +249,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
         best_predicted_metric = -1
 
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] now starting to run {max_training_transfers_per_iteration} surrogate transfers")
-
+        '''
         start_inner = datetime.now()
         for i_inner in range(1, max_training_transfers_per_iteration + 1):
 
@@ -295,18 +275,25 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
             #report result to optimizer
             optimizer.report(suggested_config, result_cost_model)
         end_inner = datetime.now()
+        '''
 
-        print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] running {max_training_transfers_per_iteration} surrogate transfers took {(end_inner - start_inner).total_seconds()} seconds")
+        best_predicted_config = get_next_suggestion(config_space,max_training_transfers_per_iteration,cost_model,environment,mode,metric)
+
+        complete_config = create_complete_config(environment, metric, 'dict', best_predicted_config)
+        best_predicted_metric = cost_model.predict(data=complete_config, target_environment=environment, print_wieghts=True)
+        best_predicted_metric = float(best_predicted_metric[metric])
+
+
+        #print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] running {max_training_transfers_per_iteration} surrogate transfers took {(end_inner - start_inner).total_seconds()} seconds")
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] best found configuration has predicted metric of {best_predicted_metric}  ({metric})")
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] now running best predicted config {best_predicted_config}")
         # Get weight table for best config
-        cost_model.predict(data=best_predicted_config, target_environment=environment, print_wieghts=True)
 
 
 
         start = datetime.now()
         # run the actual transfer
-        result = data_transfer_wrapper.transfer(best_predicted_config, i, max_retries=0, ssh=ssh)
+        result = data_transfer_wrapper.transfer(complete_config, i, max_retries=0, ssh=ssh)
 
         # if a transfer times out, save how long that timeout took
         # kinda bad to need to move the retry logic this high up
@@ -316,7 +303,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
             #try once more
             start = datetime.now()
 
-            result = data_transfer_wrapper.transfer(best_predicted_config, i, max_retries=0, ssh=ssh)
+            result = data_transfer_wrapper.transfer(complete_config, i, max_retries=0, ssh=ssh)
             if result['transfer_id'] == -1:
                 time_lost_too_timeouts = time_lost_too_timeouts + (datetime.now() - start).total_seconds()
 
@@ -324,7 +311,7 @@ def experiment_indirect_optimization(cost_model, optimizer, environment, metric,
 
 
         count_real_transfers = count_real_transfers + 1
-        result_time = float(result[metric])
+        result_metric = float(result[metric])
         print(f"[{datetime.today().strftime('%H:%M:%S')}] [{ssh.hostname}] [{cost_model.underlying}] true data transfer completed in {result['time']} seconds, result metric was {result[metric]} ({metric})")
 
         # add additional fields
@@ -504,7 +491,7 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
         regression_model = "xgb"
 
 
-    cost_model = Per_Environment_RF_Cost_Model2(input_fields=input_fields,
+    cost_model = Per_Environment_RF_Cost_Model(input_fields=input_fields,
                                                metric=metric,
                                                data_per_env=training_data_per_env,
                                                underlying=algorithm,
@@ -537,7 +524,7 @@ def execute_cost_model_run(ssh_host, algorithm, config_space, metric, mode, envi
 
 def get_transfer_learning_data_for_environment(target_environment, use_all_environments, except_N_most_similar=1):
 
-    base_path = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/random_samples_10_5M"
+    base_path = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/random_samples_10_5M_semi_flex"
     environments_to_use = []
     suffix = ""
 
@@ -592,13 +579,15 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
         for environment in environments_not_used:
             suffix = suffix + "_" + environment.replace("_", "")
 
+
+    #environments_to_use = dict_environment_most_similars[environment_to_string(target_environment)][0] #temporary todo todo
+    #environments_to_use = [environments_to_use]
+
     time_threshold = 2
     file_list = [glob.glob(f"{base_path}/{signature}_random_sample*.csv") for signature in environments_to_use]
     data_frames = []
 
 
-
-    #base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets"
     base_path_currated = "C:/Users/bened/Desktop/Uni/repos/xdbc-client/experiments/model_optimizer/currated_datasets_100high_100_rest"
     file_list_currated = [glob.glob(f"{base_path_currated}/{signature}_currated_dataset*.csv") for signature in environments_to_use]
     for file in file_list_currated:
@@ -608,18 +597,11 @@ def get_transfer_learning_data_for_environment(target_environment, use_all_envir
             data_frames.append(df)
 
 
-
-
-    #for file in file_list:
-    #    if file:
-    #        df = pd.read_csv(file[0])
-    #        df = df[(df['transfer_id'] > 0)]
-    #        data_frames.append(df)
-
-
-
-
-
+    for file in file_list:
+        if file:
+            df = pd.read_csv(file[0])
+            df = df[(df['transfer_id'] > 0)]
+            data_frames.append(df)
     data = pd.concat(data_frames, axis=0, ignore_index=True) if data_frames else pd.DataFrame()
 
     return data, suffix
