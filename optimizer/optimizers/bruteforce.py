@@ -1,10 +1,10 @@
 import math
 from itertools import product
-from config.helpers import Helpers
+from optimizer.config.helpers import Helpers
 import math
 import datetime
 import os
-from test_envs import test_envs
+from optimizer.test_envs import test_envs
 
 
 class BruteforceOptimizer:
@@ -17,10 +17,11 @@ class BruteforceOptimizer:
             'server_send_throughput_pb': 'send',
             'client_rcv_throughput_pb': 'rcv',
             'client_decomp_throughput_pb': 'decomp',
+            'client_ser_throughput_pb': 'ser',
             'client_write_throughput_pb': 'write'
         }
         self.server_stages = ['read', 'deser', 'comp', 'send']
-        self.client_stages = ['rcv', 'decomp', 'write']
+        self.client_stages = ['rcv', 'decomp', 'ser', 'write']
 
     def effective_service_rate(self, base_rate, workers):
         f0 = self.params["f0"]
@@ -51,8 +52,11 @@ class BruteforceOptimizer:
         return self.nth_slowest(out_throughputs, 0)[1]
 
     def nth_slowest(self, data, n):
-        # Sort the dictionary by value in descending order
-        sorted_items = sorted(data.items(), key=lambda item: item[1])
+        # Filter out items with value 0
+        non_zero_items = {key: value for key, value in data.items() if value != 0}
+
+        # Sort the filtered dictionary by value in ascending order
+        sorted_items = sorted(non_zero_items.items(), key=lambda item: item[1])
 
         # Return the n-th item from the sorted list
         return sorted_items[n] if n < len(sorted_items) else None
@@ -77,7 +81,7 @@ class BruteforceOptimizer:
         max_server = self.params["max_total_workers_server"]
         max_client = self.params["max_total_workers_client"]
         complibs = ['nocomp', 'zstd', 'lz4', 'lzo', 'snappy']
-        perf_dir = os.path.abspath(os.path.join(os.getcwd(), 'local_measurements'))
+        perf_dir = os.path.abspath(os.path.join(os.getcwd(), 'local_measurements_new'))
 
         throughput_data_comps = {}
         for complib in complibs:
@@ -94,6 +98,7 @@ class BruteforceOptimizer:
         config['send_par'] = 1
         config['rcv_par'] = 1
         config['decomp_par'] = 1
+        config['ser_par'] = 1
         config['write_par'] = 1
         config['compression_lib'] = 'nocomp'
         # print(f"LOWEST UPPER BOUND {lowest_upper_bound_component} with {lowest_upper_bound_thr}")
@@ -116,24 +121,29 @@ class BruteforceOptimizer:
                                 if send_par != rcv_par:
                                     break
                                 for decomp_par in range(1, max_client + 1 - rcv_par):
-                                    for write_par in range(1, max_client + 1 - (rcv_par + decomp_par)):
+                                    for ser_par in range(1, max_client + 1 - (rcv_par + decomp_par)):
+                                        # for write_par in range(1, max_client + 1 - (rcv_par + decomp_par + ser_par)):
+                                        for write_par in [1]:
 
-                                        config['read_par'] = read_par
-                                        config['deser_par'] = deser_par
-                                        config['comp_par'] = comp_par
-                                        config['send_par'] = send_par
-                                        config['rcv_par'] = rcv_par
-                                        config['decomp_par'] = decomp_par
-                                        config['write_par'] = write_par
-                                        config['compression_lib'] = comp
-                                        evaluated += 1
+                                            config['read_par'] = read_par
+                                            config['deser_par'] = deser_par
+                                            config['comp_par'] = comp_par
+                                            config['send_par'] = send_par
+                                            config['rcv_par'] = rcv_par
+                                            config['decomp_par'] = decomp_par
+                                            config['ser_par'] = ser_par
+                                            config['write_par'] = write_par
+                                            config['compression_lib'] = comp
+                                            config['skip_ser'] = 0
+                                            config['skip_deser'] = 0
+                                            evaluated += 1
 
-                                        thrpt = self.calculate_throughput(config, throughput_data_comps[comp])
-                                        if thrpt <= lowest and thrpt > max_throughput:
-                                            # print(f"chose {thrpt} over {max_throughput} with {config}")
-                                            # print(f"over {best_config}")
-                                            max_throughput = thrpt
-                                            best_config = config.copy()
+                                            thrpt = self.calculate_throughput(config, throughput_data_comps[comp])
+                                            if thrpt <= lowest and thrpt > max_throughput:
+                                                # print(f"chose {thrpt} over {max_throughput} with {config}")
+                                                # print(f"over {best_config}")
+                                                max_throughput = thrpt
+                                                best_config = config.copy()
 
         total_server_workers = sum(best_config[f"{stage}_par"] for stage in self.server_stages)
         total_client_workers = sum(best_config[f"{stage}_par"] for stage in self.client_stages)

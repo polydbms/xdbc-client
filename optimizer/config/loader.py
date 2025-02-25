@@ -2,13 +2,13 @@
 upper_bounds = {
     'postgres_postgres': {
         2: {
-            'read': 800,
+            'read': 1000,
             'write': 5000
         }
     },
     'spark_postgres': {
         2: {
-            'read': 800,
+            'read': 1000,
             'write': 7000
         }
     },
@@ -30,23 +30,23 @@ upper_bounds = {
     },
     'csv_postgres': {
         1: {
-            'read': 800,
+            'read': 1000,
             'write': 5000
         },
         2: {
-            'read': 850,
+            'read': 1000,
             'write': 1400
         }
     },
     'pandas_postgres': {
         # analytics
         1: {
-            'read': 800,
+            'read': 1000,
             'write': 5000
         },
         # storage
         2: {
-            'read': 800,
+            'read': 1000,
             'write': 5000
         }
     }
@@ -59,10 +59,30 @@ default_config = {
     'send_par': 1,
     'rcv_par': 1,
     'decomp_par': 1,
+    'ser_par': 1,
     'write_par': 1,
     'compression_lib': 'nocomp',
-    'buffer_size': 64,
-    'server_buffpool_size': 4 * 256 * 20,
-    'client_buffpool_size': 3 * 256 * 20,
-    'format': 1
+    'buffer_size': 1024,
+    'server_buffpool_size': 1024 * 4 * 3,
+    'client_buffpool_size': 1024 * 4 * 3,
+    'format': 1,
+    'skip_ser': 0,
+    'skip_deser': 0
+}
+parquet_config = {
+    'read_par': 1,
+    'deser_par': 1,
+    'comp_par': 1,
+    'send_par': 1,
+    'rcv_par': 1,
+    'decomp_par': 1,
+    'ser_par': 1,
+    'write_par': 1,
+    'compression_lib': 'nocomp',
+    'buffer_size': 65536,
+    'server_buffpool_size': 65536 * 4 * 3,
+    'client_buffpool_size': 65536 * 4 * 3,
+    'format': 1,
+    'skip_ser': 0,
+    'skip_deser': 0
 }

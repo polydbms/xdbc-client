@@ -3,7 +3,7 @@ from .helpers import Helpers
 
 class MetricsServer:
     def __init__(self, transfer_id, total_time, read_wait_time, read_proc_time, read_throughput, read_throughput_pb,
-                 read_load,
+                 free_load,
                  deser_wait_time, deser_proc_time, deser_throughput, deser_throughput_pb, deser_load,
                  comp_wait_time, comp_proc_time, comp_throughput, comp_throughput_pb, comp_load,
                  send_wait_time, send_proc_time, send_throughput, send_throughput_pb, send_load):
@@ -13,7 +13,7 @@ class MetricsServer:
         self.read_proc_time = read_proc_time
         self.read_throughput = read_throughput
         self.read_throughput_pb = read_throughput_pb
-        self.read_load = read_load
+        self.free_load = free_load
         self.deser_wait_time = deser_wait_time
         self.deser_proc_time = deser_proc_time
         self.deser_throughput = deser_throughput
@@ -45,7 +45,7 @@ class MetricsServer:
             read_proc_time=float(values[3]),
             read_throughput=float(values[4]),
             read_throughput_pb=float(values[5]),
-            read_load=float(values[6]),
+            free_load=float(values[6]),
             deser_wait_time=float(values[7]),
             deser_proc_time=float(values[8]),
             deser_throughput=float(values[9]),

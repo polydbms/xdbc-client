@@ -1,5 +1,6 @@
 import argparse
 from optimize import optimize
+from optimizer.test_envs import test_envs
 
 
 def main():
@@ -18,7 +19,11 @@ def main():
         optimizer_spec = 'heuristic'
 
     # TODO: split optimizer and runner
-    runtime, best_config, estimated_thr, opt_time = optimize(args.env_name, args.optimizer, optimizer_spec)
+
+    cur_env = next((env for env in test_envs if env['name'] == args.env_name), None)['env']
+
+    runtime, best_config, estimated_thr, opt_time = optimize(cur_env, args.optimizer, optimizer_spec,
+                                                             consider_skip_ser=0)
     print(f"took {runtime}")
 
 

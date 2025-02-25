@@ -8,8 +8,6 @@ class Helpers:
 
         general_stats = pd.read_csv(f"{perf_dir}/xdbc_general_stats.csv")
 
-        if table == 'iotm':
-            buffer_size = 256
         filtered_stats = general_stats[
             (general_stats['buffer_size'] == buffer_size) & (general_stats['table'] == table)]
 
@@ -83,7 +81,7 @@ class Helpers:
         # print(joined_server.columns)
 
         server_comps = ['read', 'deser', 'comp', 'send']
-        client_comps = ['rcv', 'decomp', 'write']
+        client_comps = ['rcv', 'decomp', 'ser', 'write']
 
         data = []
 
@@ -129,12 +127,13 @@ class Helpers:
         return {}
 
     @staticmethod
-    def load_throughput(environment, perf_dir, compression='nocomp'):
+    def load_throughput(environment, perf_dir, compression='nocomp', consider_skip_ser=0):
 
         try:
             general_stats = pd.read_csv(f"{perf_dir}/xdbc_general_stats.csv")
             server_timings = pd.read_csv(f"{perf_dir}/xdbc_server_timings.csv")
             client_timings = pd.read_csv(f"{perf_dir}/xdbc_client_timings.csv")
+
         except Exception as e:
             print(f"Error loading files: {e}")  # Optional: Print the error for debugging
             return None
@@ -146,7 +145,8 @@ class Helpers:
             (general_stats['source_system'] == environment['src']) &
             (general_stats['target_system'] == environment['target']) &
             (general_stats['table'] == environment['table']) &
-            (general_stats['compression'] == compression)
+            (general_stats['compression'] == compression) &
+            (general_stats['skip_ser'] == consider_skip_ser)
             ]
 
         par_columns = filtered_stats.filter(like='_par').columns
@@ -158,7 +158,6 @@ class Helpers:
         # print(filtered_stats)
 
         transfer_dates = filtered_stats['date'].unique()
-        # print(transfer_dates)
 
         matching_server_timings = server_timings[server_timings['transfer_id'].isin(transfer_dates)]
         matching_client_timings = client_timings[client_timings['transfer_id'].isin(transfer_dates)]
