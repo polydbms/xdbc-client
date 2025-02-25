@@ -1,6 +1,6 @@
 import math
 from itertools import product
-from config.helpers import Helpers
+from optimizer.config.helpers import Helpers
 import math
 
 
@@ -14,10 +14,11 @@ class HeuristicsOptimizer:
             'server_send_throughput_pb': 'send',
             'client_rcv_throughput_pb': 'rcv',
             'client_decomp_throughput_pb': 'decomp',
+            'client_ser_throughput_pb': 'ser',
             'client_write_throughput_pb': 'write'
         }
         self.server_stages = ['read', 'deser', 'comp', 'send']
-        self.client_stages = ['rcv', 'decomp', 'write']
+        self.client_stages = ['rcv', 'decomp', 'ser', 'write']
 
     def effective_service_rate(self, base_rate, workers):
         f0 = self.params["f0"]
@@ -42,8 +43,11 @@ class HeuristicsOptimizer:
         return self.nth_slowest(out_throughputs, 0)[1]
 
     def nth_slowest(self, data, n):
-        # Sort the dictionary by value in descending order
-        sorted_items = sorted(data.items(), key=lambda item: item[1])
+        # Filter out items with value 0
+        non_zero_items = {key: value for key, value in data.items() if value != 0}
+
+        # Sort the filtered dictionary by value in ascending order
+        sorted_items = sorted(non_zero_items.items(), key=lambda item: item[1])
 
         # Return the n-th item from the sorted list
         return sorted_items[n] if n < len(sorted_items) else None
@@ -72,10 +76,11 @@ class HeuristicsOptimizer:
             'send': 1,
             'rcv': 1,
             'decomp': 1,
+            'ser': 1,
             'write': 1,
         }
         workers_server = 4
-        workers_client = 3
+        workers_client = 4
 
         if start_config is not None:
             best_config = {key[:-4] if key.endswith('_par') else key: value for key, value in start_config.items()}
@@ -136,9 +141,9 @@ class HeuristicsOptimizer:
 
         total_server_workers = sum(best_config[stage] for stage in self.server_stages)
         total_client_workers = sum(best_config[stage] for stage in self.client_stages)
-        best_config['buffer_size'] = 256  # Helpers.get_cache_size_in_kib(1)
-        best_config['server_buffpool_size'] = best_config['buffer_size'] * total_server_workers * 20
-        best_config['client_buffpool_size'] = best_config['buffer_size'] * total_client_workers * 20
+        best_config['buffer_size'] = 1024  # Helpers.get_cache_size_in_kib(1)
+        best_config['server_buffpool_size'] = best_config['buffer_size'] * total_server_workers * 3
+        best_config['client_buffpool_size'] = best_config['buffer_size'] * total_client_workers * 3
 
         print("Optimizer: Initial base throughputs")
         print(throughput_data)

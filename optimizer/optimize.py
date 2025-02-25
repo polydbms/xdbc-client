@@ -1,32 +1,34 @@
-from optimizers import HeuristicsOptimizer, BruteforceOptimizer
-from runner import run_xdbserver_and_xdbclient, print_metrics
-from config import loader
-from config.helpers import Helpers
-from test_envs import test_envs, expert_configs
+from optimizer.optimizers import HeuristicsOptimizer, BruteforceOptimizer
+from optimizer.runner import run_xdbserver_and_xdbclient, print_metrics
+from optimizer.config import loader
+from optimizer.config.helpers import Helpers
+from optimizer.test_envs import expert_configs
 import os
 import math
 import datetime
 import time
 
 
-def optimize(env_name, optimizer, optimizer_opt):
+def optimize(env, optimizer, optimizer_opt, run=True, consider_skip_ser=1):
     print("-------------Starting Optimization-----------------")
     print(optimizer_opt)
-    env = next((entry['env'] for entry in test_envs if entry['name'] == env_name), None)
+    # env = next((entry['env'] for entry in test_envs if entry['name'] == env_name), None)
     sleep = 2
     mode = 2
-    perf_dir = os.path.abspath(os.path.join(os.getcwd(), 'local_measurements'))
+    perf_dir = os.path.abspath(os.path.join(os.getcwd(), 'local_measurements_new'))
 
-    throughput_data = Helpers.load_throughput(env, perf_dir)
+    throughput_data = Helpers.load_throughput(env, perf_dir, consider_skip_ser=consider_skip_ser)
 
     optimize = False
     if throughput_data is None:
         print(f"No log information for env: {env}")
+        # TODO: make optimizer only optimize and not run
+        exit(1)
         print(f"Running the default config: {loader.default_config}")
     else:
         # s = Helpers.compute_serial_fractions(env, perf_dir, throughput_data)
         # print(s)
-        print(f"Found average throughput data: ")
+        print(f"Found average throughput data")
         # print(f"{throughput_data}")
         print("Running the optimizer")
         optimize = True
@@ -81,6 +83,7 @@ def optimize(env_name, optimizer, optimizer_opt):
         lowest_upper_bound_component = min_upper_bound_pair[0]
         # print(f"lowest upper bound: {lowest_upper_bound_component}")
 
+        '''
         if lowest_upper_bound_component in ['send', 'rcv'] and optimizer_opt != 'heuristics':
             complibs = ['zstd', 'lz4', 'lzo', 'snappy']
 
@@ -91,7 +94,8 @@ def optimize(env_name, optimizer, optimizer_opt):
 
             for complib in complibs:
 
-                throughput_data_compress = Helpers.load_throughput(env, perf_dir, compression=complib)
+                throughput_data_compress = Helpers.load_throughput(env, perf_dir, compression=complib,
+                                                                   consider_skip_ser=consider_skip_ser)
                 if throughput_data_compress is None:
                     print(f"No data for compressor {complib}")
                 else:
@@ -111,18 +115,29 @@ def optimize(env_name, optimizer, optimizer_opt):
             best_comp = Helpers.get_best_comp_config(compconfigs)
             best_config = compconfigs[best_comp]['config']
             best_config['compression_lib'] = best_comp
+            '''
 
-            # best_config = optimizer.find_best_config(throughput_data)
+        # best_config = optimizer.find_best_config(throughput_data)
 
     if 'compression_lib' not in best_config:
         best_config['compression_lib'] = 'nocomp'
     best_config['format'] = 1
     if (env['src_format'] == 2 or env['target_format'] == 2) or best_config['compression_lib'] != 'nocomp':
         best_config['format'] = 2
+    # TODO: maybe as optimizer config
+    if consider_skip_ser and (env['src'] == env['target'] == 'csv' or env['src'] == env['target'] == 'parquet'):
+        best_config['skip_ser'] = 1
+        best_config['skip_deser'] = 1
+        best_config['deser_par'] = best_config['read_par']
+        best_config['ser_par'] = best_config['decomp_par']
+    else:
+        best_config['skip_ser'] = 0
+        best_config['skip_deser'] = 0
 
     # TODO: handle peculiarities
     if env['target'] == 'pandas':
         best_config['send_par'] = best_config['rcv_par'] = 1
+        best_config['ser_par'] = best_config['write_par']
     if env['target'] == 'spark' and env['src'] == 'postgres':
         best_config['server_buffpool_size'] = 30000
     if env['target'] == 'spark':
@@ -131,29 +146,18 @@ def optimize(env_name, optimizer, optimizer_opt):
         best_config['write_par'] = 1
         best_config['format'] = 1
 
-    if env['table'] == 'iotm':
-        best_config['buffer_size'] = 256
-        best_config['server_buffpool_size'] = best_config['deser_par'] * 30000
-        client_stages = ['rcv', 'deser', 'write']
-        client_pars = sum(best_config[f"{stage}_par"] for stage in client_stages)
-        best_config['client_buffpool_size'] = best_config['buffer_size'] * client_pars * 10
-
-    # Got the config, now run
+    # if env['table'] == 'iotm':
+    # best_config['buffer_size'] = 256
+    # best_config['server_buffpool_size'] = best_config['deser_par'] * 30000
+    # client_stages = ['rcv', 'deser', 'ser', 'write']
+    # client_pars = sum(best_config[f"{stage}_par"] for stage in client_stages)
+    # best_config['client_buffpool_size'] = best_config['buffer_size'] * client_pars * 10
 
     t = -1
-    t = run_xdbserver_and_xdbclient(best_config, env, mode, perf_dir, sleep, show_output=(False, False))
-    print("Optimization time:", opt_time)
-    print("Actual time:", t)
-    # print("Estimated time:", 9200 / throughput)
-    print("Actual total throughput:", 9200 / t)
-    # print("Estimated total throughput:", throughput)
+    # Got the config, now run
 
-    if t > 0:
-        print("Real throughputs:")
-        real = print_metrics(perf_dir, dict=True)
-        print(real)
-
-    throughput_data_compress = Helpers.load_throughput(env, perf_dir, compression=best_config['compression_lib'])
+    throughput_data_compress = Helpers.load_throughput(env, perf_dir, compression=best_config['compression_lib'],
+                                                       consider_skip_ser=consider_skip_ser)
     if optimize:
         print("Estimated throughputs:")
 
@@ -164,6 +168,18 @@ def optimize(env_name, optimizer, optimizer_opt):
     else:
         optimizer = HeuristicsOptimizer(params)
         estimated_thr = optimizer.calculate_throughput(best_config, throughput_data_compress, False)
+    if run:
+        t = run_xdbserver_and_xdbclient(best_config, env, perf_dir, sleep, show_output=(False, False))
+        print(f"Optimization time: {opt_time} us")
+        print(f"Actual time: {t} s")
+        # print("Estimated time:", 9200 / throughput)
+        print(f"Actual total throughput: {9200 / t} mb/s")
+        # print("Estimated total throughput:", throughput)
+
+        if t > 0:
+            print("Real throughputs:")
+            real = print_metrics(perf_dir, dict=True)
+            print(real)
 
     return t, best_config, estimated_thr, opt_time
     '''
