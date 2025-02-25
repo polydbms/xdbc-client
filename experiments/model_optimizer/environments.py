@@ -395,6 +395,13 @@ environment_27 = {
     "timeout": 300
 }
 
+environment_28 = {
+    "server_cpu": 16,
+    "client_cpu": 16,
+    "network": 100000,
+    "timeout": 300
+}
+
 env_S2_C2_N50 = environment_1
 env_S2_C8_N50 = environment_2
 env_S4_C16_N50 = environment_3
@@ -422,6 +429,8 @@ env_S8_C16_N1000 = environment_24
 env_S16_C4_N1000 = environment_25
 env_S16_C8_N1000 = environment_26
 env_S16_C16_N1000 = environment_27
+
+env_S16_C16_100000 = environment_28
 
 all_final_base_signatures = ["S2_C2_N50","S2_C8_N50","S4_C16_N50","S8_C8_N50","S8_C2_N50","S8_C16_N50","S16_C4_N50","S16_C8_N50","S16_C16_N50",
                              "S2_C2_N150","S2_C8_N150","S4_C16_N150","S8_C8_N150","S8_C2_N150","S8_C16_N150","S16_C4_N150","S16_C8_N150","S16_C16_N150",

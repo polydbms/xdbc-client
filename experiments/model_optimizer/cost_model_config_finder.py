@@ -31,6 +31,15 @@ def get_next_suggestion(search_space, n_queries, cost_model, environment, mode, 
 
         end = datetime.now()
 
+        best_performance = max(entry['performance'] for entry in configurations)
+
+        top_configurations = [
+            entry for entry in configurations
+            if entry['performance'] == best_performance
+        ]
+
+        return top_configurations[0]['config']
+
 
 
         # Idea : instead of taking the single best prediction, take the average of all top n best predictions. Might make it more robust.
@@ -49,7 +58,7 @@ def get_next_suggestion(search_space, n_queries, cost_model, environment, mode, 
                 if entry['performance'] >= best_performance - threshold
             ]
         elif mode == 'min':
-            
+
             best_performance = min(entry['performance'] for entry in configurations)
             threshold = best_performance * 0.025
             top_configurations = [

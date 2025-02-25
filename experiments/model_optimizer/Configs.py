@@ -134,19 +134,21 @@ big_cluster_main_host = "sr630-wn-a-01.dima.tu-berlin.de"
 reserved_hosts_big_cluster = [
 
     #12
-    #"sr630-wn-a-19",
-    #"sr630-wn-a-20",
-    #"sr630-wn-a-21",
-    #"sr630-wn-a-22",
-    #"sr630-wn-a-23",
-    #"sr630-wn-a-24",
-    #"sr630-wn-a-25",
-    #"sr630-wn-a-26",
-    #"sr630-wn-a-27",
+    "sr630-wn-a-19",
+    "sr630-wn-a-20",
+    "sr630-wn-a-21",
 
-    #"sr630-wn-a-28",
-    #"sr630-wn-a-29",
-    #"sr630-wn-a-30",
+    "sr630-wn-a-22",
+    "sr630-wn-a-23",
+    "sr630-wn-a-24",
+
+    "sr630-wn-a-25",
+    "sr630-wn-a-26",
+    "sr630-wn-a-27",
+
+    "sr630-wn-a-28",
+    "sr630-wn-a-29",
+    "sr630-wn-a-30",
 
 
     # permanent testing nodes 9
@@ -165,12 +167,15 @@ reserved_hosts_big_cluster = [
     #"sr630-wn-a-40",
     #"sr630-wn-a-41",
     #"sr630-wn-a-42",
+
     #"sr630-wn-a-43",
     #"sr630-wn-a-44",
     #"sr630-wn-a-45",
+
     #"sr630-wn-a-46",
     #"sr630-wn-a-47",
     #"sr630-wn-a-48",
+
     #"sr630-wn-a-49",
     #"sr630-wn-a-50",
 

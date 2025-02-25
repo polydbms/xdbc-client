@@ -4,7 +4,7 @@ import threading
 
 import pandas as pd
 from experiments.experiment_scheduler.ssh_handler import SSHConnection
-from Metrics import add_all_metrics_to_result
+from experiments.model_optimizer.Metrics import add_all_metrics_to_result
 from datetime import datetime
 from func_timeout import func_timeout, FunctionTimedOut
 

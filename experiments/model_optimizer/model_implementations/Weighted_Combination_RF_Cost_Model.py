@@ -1,13 +1,13 @@
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor
 from xgboost import XGBRegressor, DMatrix
 from experiments.model_optimizer import Transfer_Data_Processor
 from experiments.model_optimizer.Configs import *
 
-
 class Per_Environment_RF_Cost_Model:
+
     def __init__(self,
                  input_fields,
                  metric='time',
@@ -114,8 +114,19 @@ class Per_Environment_RF_Cost_Model:
                     reg_lambda=1,
                     reg_alpha=0,
                     gamma=0.5,
+                    #colsample_bytree=0.8,
                     subsample=0.8,
                     random_state=123)
+            elif self.regression_model == 'hgb':
+                model_name = "HistGradientBoostingRegressor"
+                model = HistGradientBoostingRegressor(
+                    learning_rate=0.1,
+                    max_iter=100,
+                    max_leaf_nodes=31,
+                    max_depth=None,
+                    min_samples_leaf=20,
+                    random_state=123
+                )
             else:
                 raise ValueError(f"Unkown underlying regression model: {self.regression_model}")
 
@@ -151,6 +162,8 @@ class Per_Environment_RF_Cost_Model:
         """
 
         data = self.convert_dict(dict(config))
+
+        #print('now updating cost model with new result')
 
 
         X = np.array([[data[field] for field in self.input_fields]], dtype=float)
@@ -237,7 +250,7 @@ class Per_Environment_RF_Cost_Model:
         # Transform network using a sigmoid like function
         if self.network_transformation:
             def transform_network(x):
-                return np.round(9.45 / (1 + 31 * np.exp(-0.03 * x)), 2)
+                return np.round(20 / (1 + 31 * np.exp(-0.02 * x)), 2)
             known_features[:, 2] = transform_network(known_features[:, 2])
             target_features[0, 2] = transform_network(target_features[0, 2])
         else:
@@ -246,20 +259,20 @@ class Per_Environment_RF_Cost_Model:
 
 
         # Calculate the distances between environment signatures
-        #distances = np.linalg.norm(known_features - target_features[0], axis=1)
-        #distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
-        #environment_weights = 1 / distances
-        #environment_weights_normalized = environment_weights / np.sum(environment_weights)
+        distances = np.linalg.norm(known_features - target_features[0], axis=1)
+        distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
+        environment_weights = 1 / distances
+        environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
 
         # Use a combination of both weights or only environment weights
         if self.history_ratio < 1:
 
             # Calculate the distances between environment signatures
-            distances = np.linalg.norm(known_features - target_features[0], axis=1)
-            distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
-            environment_weights = 1 / distances
-            environment_weights_normalized = environment_weights / np.sum(environment_weights)
+            #distances = np.linalg.norm(known_features - target_features[0], axis=1)
+            #distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
+            #environment_weights = 1 / distances
+            #environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
             # Dynamic history-ratio
             # hist_weight_ratio = self.total_history_updates / ((self.total_history_updates * 1.2) + 4)
@@ -275,10 +288,10 @@ class Per_Environment_RF_Cost_Model:
                 if target_environment is not None:
 
                     # Calculate the distances between environment signatures
-                    distances = np.linalg.norm(known_features - target_features[0], axis=1)
-                    distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
-                    environment_weights = 1 / distances
-                    environment_weights_normalized = environment_weights / np.sum(environment_weights)
+                    #distances = np.linalg.norm(known_features - target_features[0], axis=1)
+                    #distances = np.where(distances == 0, 1e-8, distances) # to not divide by 0
+                    #environment_weights = 1 / distances
+                    #environment_weights_normalized = environment_weights / np.sum(environment_weights)
 
                     combined_weights = environment_weights_normalized
                 else:
@@ -330,7 +343,7 @@ class Per_Environment_RF_Cost_Model:
             print(f"Estimated Environment :         { np.round(predicted_environment,2)}")
             print(f"Estimated Environment w/ hist.: { np.round(predicted_environment_w_history,2)}")
         '''
-        print_wieghts = False
+        #print_wieghts = False
         if print_wieghts:
             table = PrettyTable()
             table.field_names = ['Env/Cluster', 'Prediction', 'Env Weight', 'Combined Weight', 'History Weight', 'Constant Vector', 'Prediction + Constant']

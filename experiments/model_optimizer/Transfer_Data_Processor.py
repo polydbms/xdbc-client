@@ -30,8 +30,8 @@ def process_data(data, training_data_per_env=-1, cluster_labes_avg=False, n_clus
     for combination, group in df.groupby(['server_cpu', 'client_cpu', 'network']):
         if training_data_per_env != -1:
             # 2. take first n entries
-            if len(group) < training_data_per_env:
-                print(f"Length of data is less than specified data per environment ({len(group)} vs {training_data_per_env})")
+            #if len(group) < training_data_per_env:
+                #print(f"Length of data is less than specified data per environment ({len(group)} vs {training_data_per_env})")
             group = group.head(training_data_per_env)
         grouped_data[combination].append(group)
     grouped_data = {key: pd.concat(frames, ignore_index=True) for key, frames in grouped_data.items()}
@@ -123,7 +123,7 @@ def _cluster_groups(grouped_data, column, n_clusters):
     clustering = AgglomerativeClustering(n_clusters=None,
                                          affinity='precomputed',
                                          linkage='average',
-                                         distance_threshold=0.2)
+                                         distance_threshold=0.15)
     labels = clustering.fit_predict(scaled_matrix)
 
     clusters = defaultdict(list)
@@ -169,7 +169,7 @@ def _calculate_similarity(group1, group2, column):
     return distances
 
 def transform_network(x):
-    return np.round(9.45 / (1 + 31 * np.exp(-0.03 * x)), 2)
+    return np.round(30 / (1 + 31 * np.exp(-0.02 * x)), 2)
 
 def _find_optimal_clusters_with_silhouette(similarity_matrix, max_clusters=10):
     """

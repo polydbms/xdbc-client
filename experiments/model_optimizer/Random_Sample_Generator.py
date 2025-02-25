@@ -234,7 +234,7 @@ CONFIG_SPACE = config_space_variable_parameters_generalized_FOR_NEW_ITERATION_FL
 
 if __name__ == "__main__":
 
-    #for env in environment_list_base_envs:
+    #for env in [env_S16_C16_100000]:
     #    generate_random_configurations(env=env)
 
     #'''
@@ -247,6 +247,7 @@ if __name__ == "__main__":
     ssh_hosts = reserved_hosts_big_cluster
 
     environments = environment_list_base_envs
+    #environments = [env_S16_C16_100000]
 
 
     for i in [750,800,850,900,950,1000]:
