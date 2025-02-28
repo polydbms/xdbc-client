@@ -8,6 +8,7 @@
 #include <iostream>
 #include <thread>
 #include "../xdbc/ControllerInterface/WebSocketClient.h"
+#include "../xdbc/EnvironmentReconfigure/EnvironmentManager.h"
 #include "../xdbc/metrics_calculator.h"
 
 // Utility functions for schema handling
@@ -252,6 +253,9 @@ int main(int argc, char *argv[])
     }
     // *** Finished Setup websocket interface for controller ***
 
+    //*** Setting  up EnvironmentReconfigure that handles threads during run-time
+    EnvironmentManager env_manager;
+    //***
     // Initialize XClient
     xdbc::XClient xclient(env);
     xclient.startReceiving(env.table);
@@ -260,16 +264,53 @@ int main(int argc, char *argv[])
     {
         CsvSink csvSink(outputBasePath, &env);
 
+        env_manager.registerOperation("CSV_serial", [&](int thr)
+                                      { try {
+            if (thr >= env.max_threads) {
+                spdlog::get("XCLIENT")->error("Thread index {} exceeds preallocated size {}", thr, env.max_threads);
+                return; // Prevent out-of-bounds access
+            }
+            csvSink.serialize(thr);
+            } catch (const std::exception& e) {
+            spdlog::get("XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
+            } catch (...) {
+            spdlog::get("XCLIENT")->error("Unknown exception in thread {}", thr);
+            } }, env.decompressedBufferIds);
+        // Start the reconfiguration manager
+        env_manager.start();
+        env_manager.registerOperation("CSV_write", [&](int thr)
+                                      { try {
+            if (thr >= env.max_threads) {
+            spdlog::get("XCLIENT")->error("Thread index {} exceeds preallocated size {}", thr, env.max_threads);
+            return; // Prevent out-of-bounds access
+            }
+            csvSink.write(thr);
+            } catch (const std::exception& e) {
+            spdlog::get("XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
+            } catch (...) {
+            spdlog::get("XCLIENT")->error("Unknown exception in thread {}", thr);
+            } }, env.serializedBufferIds);
+
+        env_manager.configureThreads("CSV_serial", env.ser_parallelism);
+        env_manager.configureThreads("CSV_write", env.write_parallelism);
+        std::this_thread::sleep_for(std::chrono::milliseconds(6000));
+        env.ser_parallelism = 2;
+        env_manager.configureThreads("CSV_serial", env.ser_parallelism);
+        // Wait for threads to finish
+        env_manager.joinThreads("CSV_serial");
+        env_manager.configureThreads("CSV_write", 0);
+        env_manager.joinThreads("CSV_write");
+
         // Start serialization and writing threads
-        std::vector<std::thread> threads;
-        for (int i = 0; i < env.ser_parallelism; ++i)
-        {
-            xclient._serThreads[i] = std::thread(&CsvSink::serialize, &csvSink, i);
-        }
-        for (int i = 0; i < env.write_parallelism; ++i)
-        {
-            xclient._writeThreads[i] = std::thread(&CsvSink::write, &csvSink, i);
-        }
+        // std::vector<std::thread> threads;
+        // for (int i = 0; i < env.ser_parallelism; ++i)
+        // {
+        //     xclient._serThreads[i] = std::thread(&CsvSink::serialize, &csvSink, i);
+        // }
+        // for (int i = 0; i < env.write_parallelism; ++i)
+        // {
+        //     xclient._writeThreads[i] = std::thread(&CsvSink::write, &csvSink, i);
+        // }
     }
     else if (env.target == "parquet")
     {
@@ -287,19 +328,19 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Wait for threads to finish
-    for (int i = 0; i < env.ser_parallelism; ++i)
-    {
-        xclient._serThreads[i].join();
-    }
-    for (int i = 0; i < env.write_parallelism; ++i)
-    {
-        xclient._writeThreads[i].join();
-    }
+    // for (int i = 0; i < env.ser_parallelism; ++i)
+    // {
+    //     xclient._serThreads[i].join();
+    // }
+    // for (int i = 0; i < env.write_parallelism; ++i)
+    // {
+    //     xclient._writeThreads[i].join();
+    // }
 
     xclient.finalize();
     spdlog::get("XDBC.CSVSINK")->info("{} serialization completed. Output files are available at: {}", env.target, outputBasePath);
 
+    env_manager.stop(); // *** Stop Reconfigurration handler
     // *** Stop websocket client
     if (env.spawn_source == 1)
     {
