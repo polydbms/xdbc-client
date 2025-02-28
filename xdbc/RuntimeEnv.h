@@ -10,17 +10,20 @@
 #include <numeric>
 #include <sstream>
 
-namespace xdbc {
+namespace xdbc
+{
 
     constexpr size_t MAX_ATTRIBUTES = 230;
 
-    struct SchemaAttribute {
+    struct SchemaAttribute
+    {
         std::string name;
         std::string tpe;
         int size;
     };
 
-    struct ProfilingTimestamps {
+    struct ProfilingTimestamps
+    {
         std::chrono::high_resolution_clock::time_point timestamp;
         int thread;
         std::string component;
@@ -30,13 +33,15 @@ namespace xdbc {
     typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
     typedef std::shared_ptr<customQueue<ProfilingTimestamps>> PTQ_ptr;
 
-    struct transfer_details {
+    struct transfer_details
+    {
         float elapsed_time = 0.0f;     // Default value for elapsed_time
         std::vector<int> bufProcessed; // Default value: vector with one element, 0
         std::tuple<size_t, size_t, size_t> latest_queueSizes;
     };
 
-    class RuntimeEnv {
+    class RuntimeEnv
+    {
     public:
         // Public members for configuration and state
         std::vector<std::vector<std::byte>> *bp = nullptr;
@@ -78,8 +83,10 @@ namespace xdbc {
         int spawn_source;
         transfer_details tf_paras;
         std::atomic<int> enable_updation;
+        int max_threads = 16;
 
-        std::string toString() const {
+        std::string toString() const
+        {
             std::ostringstream oss;
 
             oss << "RuntimeEnv Configuration:\n";
@@ -127,9 +134,11 @@ namespace xdbc {
         RuntimeEnv() = default;
 
         // Utility to calculate tuple size based on schema
-        void calculateTupleSize() {
+        void calculateTupleSize()
+        {
             tuple_size = std::accumulate(schema.begin(), schema.end(), 0,
-                                         [](int acc, const SchemaAttribute &attr) {
+                                         [](int acc, const SchemaAttribute &attr)
+                                         {
                                              return acc + attr.size;
                                          });
             tuples_per_buffer = (buffer_size * 1024 / tuple_size);
@@ -139,7 +148,8 @@ namespace xdbc {
     typedef std::shared_ptr<customQueue<int>> FBQ_ptr;
     typedef std::shared_ptr<customQueue<ProfilingTimestamps>> PTQ_ptr;
 
-    struct Header {
+    struct Header
+    {
 
         size_t compressionType;
         size_t totalSize;
