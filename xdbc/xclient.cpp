@@ -105,10 +105,7 @@ namespace xdbc
     void XClient::finishReceiving()
     {
 
-        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++)
-        {
-            _rcvThreads[i].join();
-        }
+        _xdbcenv->env_manager.joinThreads("receive");
         _xdbcenv->env_manager.configureThreads("decompress", 0);
         _xdbcenv->env_manager.joinThreads("decompress");
         spdlog::get("XDBC.CLIENT")->info("Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads", _xdbcenv->env_name, _xdbcenv->rcv_parallelism, _xdbcenv->decomp_parallelism);
@@ -231,18 +228,19 @@ namespace xdbc
 
         _monitorThread = std::thread(&XClient::monitorQueues, this, _xdbcenv->profilingInterval);
 
-        // create rcv threads
-        for (int i = 0; i < _xdbcenv->rcv_parallelism; i++)
-        {
-            _rcvThreads[i] = std::thread(&XClient::receive, this, i);
-        }
+        _xdbcenv->env_manager.registerOperation("receive", [&](int thr)
+                                                { try {
+            receive(thr);
+            } catch (const std::exception& e) {
+            spdlog::get("XDBC.XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
+            } catch (...) {
+            spdlog::get("XDBC.XCLIENT")->error("Unknown exception in thread {}", thr);
+            } }, _xdbcenv->freeBufferIds);
+
+        _xdbcenv->env_manager.configureThreads("receive", _xdbcenv->rcv_parallelism); // start serial component threads
 
         _xdbcenv->env_manager.registerOperation("decompress", [&](int thr)
                                                 { try {
-            if (thr >= _xdbcenv->max_threads) {
-            spdlog::get("XDBC.XCLIENT")->error("Thread index {} exceeds preallocated size {}", thr, _xdbcenv->max_threads);
-            return; // Prevent out-of-bounds access
-            }
             decompress(thr);
             } catch (const std::exception& e) {
             spdlog::get("XDBC.XCLIENT")->error("Exception in thread {}: {}", thr, e.what());

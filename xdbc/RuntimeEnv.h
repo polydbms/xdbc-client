@@ -1,7 +1,6 @@
 #ifndef XDBC_RUNTIMEENV_H
 #define XDBC_RUNTIMEENV_H
 
-// #include "customQueue.h"
 #include <vector>
 #include <string>
 #include <atomic>
@@ -10,6 +9,7 @@
 #include <numeric>
 #include <sstream>
 #include "EnvironmentReconfigure/EnvironmentManager.h"
+// #include "customQueue.h"
 
 namespace xdbc
 {
