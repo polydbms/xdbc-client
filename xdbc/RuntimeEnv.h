@@ -1,7 +1,7 @@
 #ifndef XDBC_RUNTIMEENV_H
 #define XDBC_RUNTIMEENV_H
 
-#include "customQueue.h"
+// #include "customQueue.h"
 #include <vector>
 #include <string>
 #include <atomic>
@@ -9,6 +9,7 @@
 #include <memory>
 #include <numeric>
 #include <sstream>
+#include "EnvironmentReconfigure/EnvironmentManager.h"
 
 namespace xdbc
 {
@@ -84,6 +85,7 @@ namespace xdbc
         transfer_details tf_paras;
         std::atomic<int> enable_updation;
         int max_threads = 16;
+        EnvironmentManager env_manager;
 
         std::string toString() const
         {
