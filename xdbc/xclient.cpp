@@ -105,19 +105,13 @@ namespace xdbc
     void XClient::finishReceiving()
     {
 
-        spdlog::get("XDBC.CLIENT")->info("Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads", _xdbcenv->env_name, _xdbcenv->rcv_parallelism, _xdbcenv->decomp_parallelism);
-
-        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
-        {
-            _decompThreads[i].join();
-        }
-
         for (int i = 0; i < _xdbcenv->rcv_parallelism; i++)
         {
             _rcvThreads[i].join();
         }
-
-        _xdbcenv->env_manager.stop(); // *** Stop Reconfigurration handler
+        _xdbcenv->env_manager.configureThreads("decompress", 0);
+        _xdbcenv->env_manager.joinThreads("decompress");
+        spdlog::get("XDBC.CLIENT")->info("Finalizing XClient: {0}, shutting down {1} receive threads & {2} decomp threads", _xdbcenv->env_name, _xdbcenv->rcv_parallelism, _xdbcenv->decomp_parallelism);
     }
 
     void XClient::finalize()
@@ -202,6 +196,8 @@ namespace xdbc
                  << component_metrics["write"].per_buffer_throughput << ","
                  << std::get<3>(loads) << "\n";
         csv_file.close();
+
+        _xdbcenv->env_manager.stop(); // *** Stop Reconfigurration handler
     }
 
     std::string XClient::get_name() const
@@ -241,11 +237,20 @@ namespace xdbc
             _rcvThreads[i] = std::thread(&XClient::receive, this, i);
         }
 
-        // create decomp threads
-        for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
-        {
-            _decompThreads[i] = std::thread(&XClient::decompress, this, i);
-        }
+        _xdbcenv->env_manager.registerOperation("decompress", [&](int thr)
+                                                { try {
+            if (thr >= _xdbcenv->max_threads) {
+            spdlog::get("XDBC.XCLIENT")->error("Thread index {} exceeds preallocated size {}", thr, _xdbcenv->max_threads);
+            return; // Prevent out-of-bounds access
+            }
+            decompress(thr);
+            } catch (const std::exception& e) {
+            spdlog::get("XDBC.XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
+            } catch (...) {
+            spdlog::get("XDBC.XCLIENT")->error("Unknown exception in thread {}", thr);
+            } }, _xdbcenv->compressedBufferIds);
+
+        _xdbcenv->env_manager.configureThreads("decompress", _xdbcenv->decomp_parallelism); // start serial component threads
 
         spdlog::get("XDBC.CLIENT")->info("Initialized receiver & decomp threads");
 
@@ -460,11 +465,12 @@ namespace xdbc
             }
 
             _xdbcenv->finishedRcvThreads.fetch_add(1);
-            if (_xdbcenv->finishedRcvThreads == _xdbcenv->rcv_parallelism)
-            {
-                for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
-                    _xdbcenv->compressedBufferIds->push(-1);
-            }
+            // Not needed anymore
+            // if (_xdbcenv->finishedRcvThreads == _xdbcenv->rcv_parallelism)
+            // {
+            //     for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
+            //         _xdbcenv->compressedBufferIds->push(-1);
+            // }
             socket.close();
 
             spdlog::get("XDBC.CLIENT")->info("Receive thread {0} finished, #buffers: {1}", thr, buffers);
@@ -557,11 +563,12 @@ namespace xdbc
         }
 
         _xdbcenv->finishedDecompThreads.fetch_add(1);
-        if (_xdbcenv->finishedDecompThreads == _xdbcenv->decomp_parallelism)
-        {
-            for (int i = 0; i < _xdbcenv->ser_parallelism; i++)
-                _xdbcenv->decompressedBufferIds->push(-1);
-        }
+        // *****************Not needed anymore *****************
+        // if (_xdbcenv->finishedDecompThreads == _xdbcenv->decomp_parallelism)
+        // {
+        //     for (int i = 0; i < _xdbcenv->ser_parallelism; i++)
+        //         _xdbcenv->decompressedBufferIds->push(-1);
+        // }
         spdlog::get("XDBC.CLIENT")->warn("Decomp thread {0} finished, {1} buffers", thr, buffersDecompressed);
         _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "end"});
     }

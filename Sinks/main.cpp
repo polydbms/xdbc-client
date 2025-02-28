@@ -322,12 +322,14 @@ int main(int argc, char *argv[])
     std::this_thread::sleep_for(std::chrono::milliseconds(6000));
     env.ser_parallelism = 2;
     env.env_manager.configureThreads("serial", env.ser_parallelism);
+
     // Wait for threads to finish
+    xclient.finishReceiving();
+    env.env_manager.configureThreads("serial", 0);
     env.env_manager.joinThreads("serial");
     env.env_manager.configureThreads("write", 0);
     env.env_manager.joinThreads("write");
 
-    xclient.finishReceiving();
     xclient.finalize();
     spdlog::get("XDBC.CSVSINK")->info("{} serialization completed. Output files are available at: {}", env.target, outputBasePath);
     // *** Stop websocket client
