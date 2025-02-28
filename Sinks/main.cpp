@@ -8,7 +8,6 @@
 #include <iostream>
 #include <thread>
 #include "../xdbc/ControllerInterface/WebSocketClient.h"
-#include "../xdbc/EnvironmentReconfigure/EnvironmentManager.h"
 #include "../xdbc/metrics_calculator.h"
 
 // Utility functions for schema handling
@@ -275,8 +274,6 @@ int main(int argc, char *argv[])
         env.env_manager.registerOperation("write", [&](int thr)
                                           { try {
             if (thr >= env.max_threads) {
-            spdlog::get("XCLIENT")->error("Thread index {} exceeds preallocated size {}", thr, env.max_threads);
-            return; // Prevent out-of-bounds access
             }
             csvSink.write(thr);
             } catch (const std::exception& e) {
@@ -304,10 +301,7 @@ int main(int argc, char *argv[])
 
         env.env_manager.registerOperation("write", [&](int thr)
                                           { try {
-            if (thr >= env.max_threads) {
-            spdlog::get("XCLIENT")->error("Thread index {} exceeds preallocated size {}", thr, env.max_threads);
-            return; // Prevent out-of-bounds access
-            }
+
             parquetSink.write(thr);
             } catch (const std::exception& e) {
             spdlog::get("XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
