@@ -182,37 +182,24 @@ void env_convert(xdbc::RuntimeEnv &env, const nlohmann::json &env_json)
 {
     try
     {
-        // Temporary environment object to load values from JSON
-        xdbc::RuntimeEnv env_;
-
-        // Parse JSON values into the temporary object
-        env_.transfer_id = std::stoll(env_json.at("transferID").get<std::string>());
-        env_.table = env_json.at("table").get<std::string>();
-        env_.server_host = env_json.at("serverHost").get<std::string>();
-        env_.iformat = std::stoi(env_json.at("intermediateFormat").get<std::string>());
-        env_.sleep_time = std::chrono::milliseconds(std::stoll(env_json.at("sleepTime").get<std::string>()));
-        env_.buffer_size = std::stoi(env_json.at("bufferSize").get<std::string>());
-        env_.buffers_in_bufferpool = std::stoi(env_json.at("bufferpoolSize").get<std::string>()) / env_.buffer_size;
-        env_.rcv_parallelism = std::stoi(env_json.at("netParallelism").get<std::string>());
-        env_.write_parallelism = std::stoi(env_json.at("writeParallelism").get<std::string>());
-        env_.decomp_parallelism = std::stoi(env_json.at("decompParallelism").get<std::string>());
-        // env_.ser_parallelism = std::stoi(env_json.at("serParallelism").get<std::string>());
+        // env.transfer_id = std::stoll(env_json.at("transferID").get<std::string>());
+        // env.table = env_json.at("table").get<std::string>();
+        // env.server_host = env_json.at("serverHost").get<std::string>();
+        // env.iformat = std::stoi(env_json.at("intermediateFormat").get<std::string>());
+        // env.sleep_time = std::chrono::milliseconds(std::stoll(env_json.at("sleepTime").get<std::string>()));
+        // env.buffer_size = std::stoi(env_json.at("bufferSize").get<std::string>());
+        // env.buffers_in_bufferpool = std::stoi(env_json.at("bufferpoolSize").get<std::string>()) / env_.buffer_size;
+        // env.rcv_parallelism = std::stoi(env_json.at("netParallelism").get<std::string>());
+        // env.write_parallelism = std::stoi(env_json.at("writeParallelism").get<std::string>());
+        // env.decomp_parallelism = std::stoi(env_json.at("decompParallelism").get<std::string>());
+        // env.ser_parallelism = std::stoi(env_json.at("serParallelism").get<std::string>());
 
         // Update the actual environment object if updates are allowed
         if (env.enable_updation == 1)
         {
-            // std::lock_guard<std::mutex> lock(env.env_mutex);
-            env.write_parallelism = env_.write_parallelism;
-            // env.decomp_parallelism = env_.decomp_parallelism;
-
-            // env.env_manager.configureThreads("decompress", env.decomp_parallelism);
-            // env.env_manager.configureThreads("write", env.write_parallelism);
-
-            // env.ser_parallelism = env_.ser_parallelism;
-            // env.env_manager.configureThreads("serial", env.ser_parallelism);
-
-            // Notify waiting threads about the update
-            // env.env_condition.notify_all();
+            env.write_parallelism = std::stoi(env_json.at("writeParallelism").get<std::string>());
+            env.decomp_parallelism = std::stoi(env_json.at("decompParallelism").get<std::string>());
+            env.ser_parallelism = std::stoi(env_json.at("serParallelism").get<std::string>());
         }
     }
     catch (const std::exception &e)
@@ -315,19 +302,17 @@ int main(int argc, char *argv[])
                                       std::bind(&metrics_convert, std::ref(env)),
                                       std::bind(&additional_msg, std::ref(env)),
                                       std::bind(&env_convert, std::ref(env), std::placeholders::_1)); });
-        while (!ws_client.is_active())
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
     }
-    // *** Finished Setup websocket interface for controller ***
-    // Wait for threads to finish
-    while (env.enable_updation == 1)
+    while (env.enable_updation == 1) // Reconfigure threads as long as it is allowed
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         env.env_manager.configureThreads("write", env.write_parallelism);
+        env.env_manager.configureThreads("serial", env.ser_parallelism);
+        env.env_manager.configureThreads("decompress", env.decomp_parallelism);
     }
+    // *** Finished Setup websocket interface for controller ***
 
+    // Wait for receive threads to finish, then kill the remaining components in proper sequence : decompress-serial-write
     xclient.finishReceiving();
     env.env_manager.configureThreads("serial", 0);
     env.env_manager.joinThreads("serial");
