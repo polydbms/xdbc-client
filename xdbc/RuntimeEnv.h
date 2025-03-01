@@ -38,7 +38,7 @@ namespace xdbc
     {
         float elapsed_time = 0.0f;     // Default value for elapsed_time
         std::vector<int> bufProcessed; // Default value: vector with one element, 0
-        std::tuple<size_t, size_t, size_t> latest_queueSizes;
+        std::tuple<size_t, size_t, size_t, size_t> latest_queueSizes;
     };
 
     class RuntimeEnv

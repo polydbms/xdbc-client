@@ -135,6 +135,7 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
                                      });
 
     env.tuples_per_buffer = (env.buffer_size * 1024) / env.tuple_size;
+    env.max_threads = env.buffers_in_bufferpool;
     env.startTime = std::chrono::steady_clock::now();
 
     spdlog::get("XDBC.SINK")->info("Table: {0}, Tuple size: {1}, Schema:\n{2}", env.table, env.tuple_size, formatSchema(env.schema));
@@ -174,6 +175,7 @@ nlohmann::json additional_msg(xdbc::RuntimeEnv &env)
     metrics_json["freeBufferQ_load"] = std::get<0>(env.tf_paras.latest_queueSizes);
     metrics_json["compressedBufferQ_load"] = std::get<1>(env.tf_paras.latest_queueSizes);
     metrics_json["decompressedBufferQ_load"] = std::get<2>(env.tf_paras.latest_queueSizes);
+    metrics_json["serializedBufferQ_load"] = std::get<3>(env.tf_paras.latest_queueSizes);
 
     return metrics_json;
 }
@@ -229,7 +231,7 @@ int main(int argc, char *argv[])
 
         env.env_manager.registerOperation("serial", [&](int thr)
                                           { try {
-            if (thr >= env.buffers_in_bufferpool) {
+            if (thr >= env.max_threads) {
                 spdlog::get("XCLIENT")->error("No of threads exceed limit");
                 return;
             }
@@ -242,7 +244,7 @@ int main(int argc, char *argv[])
 
         env.env_manager.registerOperation("write", [&](int thr)
                                           { try {
-            if (thr >= env.buffers_in_bufferpool) {
+            if (thr >= env.max_threads) {
                 spdlog::get("XCLIENT")->error("No of threads exceed limit");
                 return;
             }
