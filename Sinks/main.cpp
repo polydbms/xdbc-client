@@ -143,7 +143,7 @@ void handleSinkCMDParams(int argc, char *argv[], xdbc::RuntimeEnv &env, std::str
 nlohmann::json metrics_convert(xdbc::RuntimeEnv &env)
 {
     nlohmann::json metrics_json = nlohmann::json::object(); // Use a JSON object
-    if ((env.pts))
+    if ((env.pts) && (env.enable_updation == 1))
     {
         std::vector<xdbc::ProfilingTimestamps> env_pts;
         env_pts = env.pts->copy_newElements();
@@ -196,22 +196,18 @@ void env_convert(xdbc::RuntimeEnv &env, const nlohmann::json &env_json)
         env_.rcv_parallelism = std::stoi(env_json.at("netParallelism").get<std::string>());
         env_.write_parallelism = std::stoi(env_json.at("writeParallelism").get<std::string>());
         env_.decomp_parallelism = std::stoi(env_json.at("decompParallelism").get<std::string>());
+        env_.ser_parallelism = std::stoi(env_json.at("serParallelism").get<std::string>());
 
         // Update the actual environment object if updates are allowed
         if (env.enable_updation == 1)
         {
             // std::lock_guard<std::mutex> lock(env.env_mutex);
-
-            env.transfer_id = env_.transfer_id;
-            env.table = env_.table;
-            env.server_host = env_.server_host;
-            env.iformat = env_.iformat;
-            env.sleep_time = env_.sleep_time;
-            env.buffer_size = env_.buffer_size;
-            env.buffers_in_bufferpool = env_.buffers_in_bufferpool;
-            env.rcv_parallelism = env_.rcv_parallelism;
             env.write_parallelism = env_.write_parallelism;
             env.decomp_parallelism = env_.decomp_parallelism;
+            // env.ser_parallelism = env_.ser_parallelism;
+            env.env_manager.configureThreads("decompress", env.write_parallelism);
+            // env.env_manager.configureThreads("serial", env.ser_parallelism);
+            env.env_manager.configureThreads("write", env.write_parallelism);
 
             // Notify waiting threads about the update
             // env.env_condition.notify_all();
@@ -263,7 +259,10 @@ int main(int argc, char *argv[])
 
         env.env_manager.registerOperation("serial", [&](int thr)
                                           { try {
-
+            if (thr >= env.buffers_in_bufferpool) {
+                spdlog::get("XCLIENT")->error("No of threads exceed limit");
+                return;
+            }
             csvSink.serialize(thr);
             } catch (const std::exception& e) {
             spdlog::get("XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
@@ -273,7 +272,9 @@ int main(int argc, char *argv[])
 
         env.env_manager.registerOperation("write", [&](int thr)
                                           { try {
-            if (thr >= env.max_threads) {
+            if (thr >= env.buffers_in_bufferpool) {
+                spdlog::get("XCLIENT")->error("No of threads exceed limit");
+                return;
             }
             csvSink.write(thr);
             } catch (const std::exception& e) {
@@ -291,7 +292,10 @@ int main(int argc, char *argv[])
 
         env.env_manager.registerOperation("serial", [&](int thr)
                                           { try {
-
+            if (thr >= env.buffers_in_bufferpool) {
+                spdlog::get("XCLIENT")->error("No of threads exceed limit");
+                return;
+            }
             parquetSink.serialize(thr);
             } catch (const std::exception& e) {
             spdlog::get("XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
@@ -301,7 +305,10 @@ int main(int argc, char *argv[])
 
         env.env_manager.registerOperation("write", [&](int thr)
                                           { try {
-
+            if (thr >= env.buffers_in_bufferpool) {
+                spdlog::get("XCLIENT")->error("No of threads exceed limit");
+                return;
+            }
             parquetSink.write(thr);
             } catch (const std::exception& e) {
             spdlog::get("XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
@@ -313,16 +320,14 @@ int main(int argc, char *argv[])
         env.env_manager.configureThreads("write", env.write_parallelism); // start write component threads
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(6000));
-    env.ser_parallelism = 2;
-    env.env_manager.configureThreads("serial", env.ser_parallelism);
-
     // Wait for threads to finish
     xclient.finishReceiving();
     env.env_manager.configureThreads("serial", 0);
     env.env_manager.joinThreads("serial");
     env.env_manager.configureThreads("write", 0);
     env.env_manager.joinThreads("write");
+
+    env.enable_updation = 0;
 
     xclient.finalize();
     spdlog::get("XDBC.CSVSINK")->info("{} serialization completed. Output files are available at: {}", env.target, outputBasePath);
