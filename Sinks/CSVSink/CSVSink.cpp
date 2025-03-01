@@ -394,6 +394,7 @@ void CsvSink::write(int thr)
 
         runtimeEnv->freeBufferIds->push(bufferId);
         buffersWritten++;
+        runtimeEnv->tf_paras.bufProcessed.at(thr) = buffersWritten;
     }
 
     outputFile.close();

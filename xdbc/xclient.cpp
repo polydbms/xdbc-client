@@ -94,6 +94,8 @@ namespace xdbc
             _xdbcenv->freeBufferIds->push(i);
         }
 
+        _xdbcenv->tf_paras.bufProcessed.resize(_xdbcenv->max_threads);
+
         spdlog::get("XDBC.CLIENT")->info("Initialized queues, "
                                          "freeBuffersQ: {0}, "
                                          "compQ: {1}, "
@@ -121,6 +123,7 @@ namespace xdbc
 
         auto end = std::chrono::steady_clock::now();
         auto total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - _xdbcenv->startTime).count();
+        _xdbcenv->tf_paras.elapsed_time = static_cast<float>(total_time);
         spdlog::get("XDBC.CLIENT")->info("Total elapsed time: {0} ms", total_time);
 
         auto pts = std::vector<xdbc::ProfilingTimestamps>(_xdbcenv->pts->size());
@@ -230,7 +233,7 @@ namespace xdbc
 
         _xdbcenv->env_manager.registerOperation("receive", [&](int thr)
                                                 { try {
-            if (thr >= _xdbcenv->buffers_in_bufferpool) {
+            if (thr >= _xdbcenv->max_threads) {
                 spdlog::get("XCLIENT")->error("No of threads exceed limit");
                 return;
             }
@@ -245,7 +248,7 @@ namespace xdbc
 
         _xdbcenv->env_manager.registerOperation("decompress", [&](int thr)
                                                 { try {
-            if (thr >= _xdbcenv->buffers_in_bufferpool) {
+            if (thr >= _xdbcenv->max_threads) {
                 spdlog::get("XCLIENT")->error("No of threads exceed limit");
                 return;
             }
@@ -296,6 +299,8 @@ namespace xdbc
             // Store the measurement as a tuple
             _xdbcenv->queueSizes.emplace_back(curTimeInterval, freeBufferTotalSize, compressedBufferTotalSize,
                                               decompressedBufferTotalSize, serializedBufferTotalSize);
+
+            _xdbcenv->tf_paras.latest_queueSizes = std::make_tuple(freeBufferTotalSize, compressedBufferTotalSize, decompressedBufferTotalSize, serializedBufferTotalSize);
 
             std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
             curTimeInterval += interval_ms / 1000;
