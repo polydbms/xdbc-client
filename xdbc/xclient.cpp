@@ -230,6 +230,10 @@ namespace xdbc
 
         _xdbcenv->env_manager.registerOperation("receive", [&](int thr)
                                                 { try {
+            if (thr >= _xdbcenv->buffers_in_bufferpool) {
+                spdlog::get("XCLIENT")->error("No of threads exceed limit");
+                return;
+            }
             receive(thr);
             } catch (const std::exception& e) {
             spdlog::get("XDBC.XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
@@ -241,6 +245,10 @@ namespace xdbc
 
         _xdbcenv->env_manager.registerOperation("decompress", [&](int thr)
                                                 { try {
+            if (thr >= _xdbcenv->buffers_in_bufferpool) {
+                spdlog::get("XCLIENT")->error("No of threads exceed limit");
+                return;
+            }
             decompress(thr);
             } catch (const std::exception& e) {
             spdlog::get("XDBC.XCLIENT")->error("Exception in thread {}: {}", thr, e.what());
