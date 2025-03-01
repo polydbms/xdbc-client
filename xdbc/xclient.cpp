@@ -259,7 +259,6 @@ namespace xdbc
         _xdbcenv->env_manager.configureThreads("decompress", _xdbcenv->decomp_parallelism); // start serial component threads
 
         spdlog::get("XDBC.CLIENT")->info("Initialized receiver & decomp threads");
-
         return 1;
     }
 
@@ -472,11 +471,12 @@ namespace xdbc
 
             _xdbcenv->finishedRcvThreads.fetch_add(1);
             // Not needed anymore
-            // if (_xdbcenv->finishedRcvThreads == _xdbcenv->rcv_parallelism)
-            // {
-            //     for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
-            //         _xdbcenv->compressedBufferIds->push(-1);
-            // }
+            if (_xdbcenv->finishedRcvThreads == _xdbcenv->rcv_parallelism)
+            {
+                // for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
+                //     _xdbcenv->compressedBufferIds->push(-1);
+                _xdbcenv->enable_updation = 0;
+            }
             socket.close();
 
             spdlog::get("XDBC.CLIENT")->info("Receive thread {0} finished, #buffers: {1}", thr, buffers);

@@ -196,18 +196,20 @@ void env_convert(xdbc::RuntimeEnv &env, const nlohmann::json &env_json)
         env_.rcv_parallelism = std::stoi(env_json.at("netParallelism").get<std::string>());
         env_.write_parallelism = std::stoi(env_json.at("writeParallelism").get<std::string>());
         env_.decomp_parallelism = std::stoi(env_json.at("decompParallelism").get<std::string>());
-        env_.ser_parallelism = std::stoi(env_json.at("serParallelism").get<std::string>());
+        // env_.ser_parallelism = std::stoi(env_json.at("serParallelism").get<std::string>());
 
         // Update the actual environment object if updates are allowed
         if (env.enable_updation == 1)
         {
             // std::lock_guard<std::mutex> lock(env.env_mutex);
             env.write_parallelism = env_.write_parallelism;
-            env.decomp_parallelism = env_.decomp_parallelism;
+            // env.decomp_parallelism = env_.decomp_parallelism;
+
+            // env.env_manager.configureThreads("decompress", env.decomp_parallelism);
+            // env.env_manager.configureThreads("write", env.write_parallelism);
+
             // env.ser_parallelism = env_.ser_parallelism;
-            env.env_manager.configureThreads("decompress", env.write_parallelism);
             // env.env_manager.configureThreads("serial", env.ser_parallelism);
-            env.env_manager.configureThreads("write", env.write_parallelism);
 
             // Notify waiting threads about the update
             // env.env_condition.notify_all();
@@ -228,25 +230,6 @@ int main(int argc, char *argv[])
     std::string outputBasePath;
 
     handleSinkCMDParams(argc, argv, env, outputBasePath);
-
-    // *** Setup websocket interface for controller ***
-    env.enable_updation = 1;
-    std::thread io_thread;
-    WebSocketClient ws_client("xdbc-controller", "8002");
-    if (env.spawn_source == 1)
-    {
-        ws_client.start();
-        io_thread = std::thread([&]()
-                                { ws_client.run(
-                                      std::bind(&metrics_convert, std::ref(env)),
-                                      std::bind(&additional_msg, std::ref(env)),
-                                      std::bind(&env_convert, std::ref(env), std::placeholders::_1)); });
-        while (!ws_client.is_active())
-        {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-    }
-    // *** Finished Setup websocket interface for controller ***
 
     //***
     // Initialize XClient
@@ -320,14 +303,36 @@ int main(int argc, char *argv[])
         env.env_manager.configureThreads("write", env.write_parallelism); // start write component threads
     }
 
+    // *** Setup websocket interface for controller ***
+    env.enable_updation = 1;
+    std::thread io_thread;
+    WebSocketClient ws_client("xdbc-controller", "8002");
+    if (env.spawn_source == 1)
+    {
+        ws_client.start();
+        io_thread = std::thread([&]()
+                                { ws_client.run(
+                                      std::bind(&metrics_convert, std::ref(env)),
+                                      std::bind(&additional_msg, std::ref(env)),
+                                      std::bind(&env_convert, std::ref(env), std::placeholders::_1)); });
+        while (!ws_client.is_active())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    }
+    // *** Finished Setup websocket interface for controller ***
     // Wait for threads to finish
+    while (env.enable_updation == 1)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        env.env_manager.configureThreads("write", env.write_parallelism);
+    }
+
     xclient.finishReceiving();
     env.env_manager.configureThreads("serial", 0);
     env.env_manager.joinThreads("serial");
     env.env_manager.configureThreads("write", 0);
     env.env_manager.joinThreads("write");
-
-    env.enable_updation = 0;
 
     xclient.finalize();
     spdlog::get("XDBC.CSVSINK")->info("{} serialization completed. Output files are available at: {}", env.target, outputBasePath);

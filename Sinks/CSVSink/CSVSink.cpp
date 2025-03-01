@@ -347,13 +347,13 @@ void CsvSink::serialize(int thr)
     spdlog::get("XDBC.CSVSINK")->info("CSV Serializer stopping thread {}, written buffers: {}, tuples: {}", thr, writtenBuffers, writtenTuples);
 
     runtimeEnv->finishedSerializerThreads.fetch_add(1);
-    if (runtimeEnv->finishedSerializerThreads == runtimeEnv->ser_parallelism)
-    {
-        for (int i = 0; i < runtimeEnv->write_parallelism; ++i)
-        {
-            // runtimeEnv->serializedBufferIds->push(-1); // Termination signal
-        }
-    }
+    // if (runtimeEnv->finishedSerializerThreads == runtimeEnv->ser_parallelism)
+    // {
+    //     for (int i = 0; i < runtimeEnv->write_parallelism; ++i)
+    //     {
+    //         // runtimeEnv->serializedBufferIds->push(-1); // Termination signal
+    //     }
+    // }
 }
 
 void CsvSink::write(int thr)

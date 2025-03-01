@@ -83,7 +83,7 @@ namespace xdbc
 
         int spawn_source;
         transfer_details tf_paras;
-        std::atomic<int> enable_updation;
+        std::atomic<int> enable_updation = 0;
         int max_threads = 16;
         EnvironmentManager env_manager;
 
