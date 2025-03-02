@@ -172,11 +172,13 @@ nlohmann::json additional_msg(xdbc::RuntimeEnv &env)
 	nlohmann::json metrics_json = nlohmann::json::object(); // Use a JSON object
 	metrics_json["totalTime_ms"] = env.tf_paras.elapsed_time;
 	metrics_json["bufTransferred"] = std::accumulate(env.tf_paras.bufProcessed.begin(), env.tf_paras.bufProcessed.end(), 0);
-	metrics_json["freeBufferQ_load"] = std::get<0>(env.tf_paras.latest_queueSizes);
-	metrics_json["compressedBufferQ_load"] = std::get<1>(env.tf_paras.latest_queueSizes);
-	metrics_json["decompressedBufferQ_load"] = std::get<2>(env.tf_paras.latest_queueSizes);
-	metrics_json["serializedBufferQ_load"] = std::get<3>(env.tf_paras.latest_queueSizes);
-
+	if ((env.enable_updation == 1))
+	{
+		metrics_json["freeBufferQ_load"] = std::get<0>(env.tf_paras.latest_queueSizes);
+		metrics_json["compressedBufferQ_load"] = std::get<1>(env.tf_paras.latest_queueSizes);
+		metrics_json["decompressedBufferQ_load"] = std::get<2>(env.tf_paras.latest_queueSizes);
+		metrics_json["serializedBufferQ_load"] = std::get<3>(env.tf_paras.latest_queueSizes);
+	}
 	return metrics_json;
 }
 
