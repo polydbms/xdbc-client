@@ -475,11 +475,8 @@ namespace xdbc
             }
 
             _xdbcenv->finishedRcvThreads.fetch_add(1);
-            // Not needed anymore
             if (_xdbcenv->finishedRcvThreads == _xdbcenv->rcv_parallelism)
             {
-                // for (int i = 0; i < _xdbcenv->decomp_parallelism; i++)
-                //     _xdbcenv->compressedBufferIds->push(-1);
                 _xdbcenv->enable_updation = 0;
             }
             socket.close();
@@ -574,12 +571,6 @@ namespace xdbc
         }
 
         _xdbcenv->finishedDecompThreads.fetch_add(1);
-        // *****************Not needed anymore *****************
-        // if (_xdbcenv->finishedDecompThreads == _xdbcenv->decomp_parallelism)
-        // {
-        //     for (int i = 0; i < _xdbcenv->ser_parallelism; i++)
-        //         _xdbcenv->decompressedBufferIds->push(-1);
-        // }
         spdlog::get("XDBC.CLIENT")->warn("Decomp thread {0} finished, {1} buffers", thr, buffersDecompressed);
         _xdbcenv->pts->push(ProfilingTimestamps{std::chrono::high_resolution_clock::now(), thr, "decomp", "end"});
     }
