@@ -9,7 +9,6 @@
 #include <numeric>
 #include <sstream>
 #include "EnvironmentReconfigure/EnvironmentManager.h"
-// #include "customQueue.h"
 
 namespace xdbc
 {
