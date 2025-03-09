@@ -172,11 +172,13 @@ nlohmann::json additional_msg(xdbc::RuntimeEnv &env)
 	nlohmann::json metrics_json = nlohmann::json::object(); // Use a JSON object
 	metrics_json["totalTime_ms"] = env.tf_paras.elapsed_time;
 	metrics_json["bufTransferred"] = std::accumulate(env.tf_paras.bufProcessed.begin(), env.tf_paras.bufProcessed.end(), 0);
-	metrics_json["freeBufferQ_load"] = std::get<0>(env.tf_paras.latest_queueSizes);
-	metrics_json["compressedBufferQ_load"] = std::get<1>(env.tf_paras.latest_queueSizes);
-	metrics_json["decompressedBufferQ_load"] = std::get<2>(env.tf_paras.latest_queueSizes);
-	metrics_json["serializedBufferQ_load"] = std::get<3>(env.tf_paras.latest_queueSizes);
-
+	if (env.enable_updation == 1)
+	{
+		metrics_json["freeBufferQ_load"] = std::get<0>(env.tf_paras.latest_queueSizes);
+		metrics_json["compressedBufferQ_load"] = std::get<1>(env.tf_paras.latest_queueSizes);
+		metrics_json["decompressedBufferQ_load"] = std::get<2>(env.tf_paras.latest_queueSizes);
+		metrics_json["serializedBufferQ_load"] = std::get<3>(env.tf_paras.latest_queueSizes);
+	}
 	return metrics_json;
 }
 
@@ -194,6 +196,9 @@ void env_convert(xdbc::RuntimeEnv &env, const nlohmann::json &env_json)
 			env.write_parallelism = std::stoi(env_json.at("writeParallelism").get<std::string>());
 			env.decomp_parallelism = std::stoi(env_json.at("decompParallelism").get<std::string>());
 			env.ser_parallelism = std::stoi(env_json.at("serParallelism").get<std::string>());
+			env.env_manager.configureThreads("write", env.write_parallelism);
+			env.env_manager.configureThreads("serial", env.ser_parallelism);
+			env.env_manager.configureThreads("decompress", env.decomp_parallelism);
 		}
 	}
 	catch (const std::exception &e)
@@ -300,9 +305,6 @@ int main(int argc, char *argv[])
 	while (env.enable_updation == 1) // Reconfigure threads as long as it is allowed
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-		env.env_manager.configureThreads("write", env.write_parallelism);
-		env.env_manager.configureThreads("serial", env.ser_parallelism);
-		env.env_manager.configureThreads("decompress", env.decomp_parallelism);
 	}
 	// *** Finished Setup websocket interface for controller ***
 
