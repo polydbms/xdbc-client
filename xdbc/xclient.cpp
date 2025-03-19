@@ -94,7 +94,7 @@ namespace xdbc
             _xdbcenv->freeBufferIds->push(i);
         }
 
-        _xdbcenv->tf_paras.bufProcessed.resize(_xdbcenv->max_threads);
+        _xdbcenv->tf_paras.bufProcessed.resize(_xdbcenv->max_threads, 0);
 
         spdlog::get("XDBC.CLIENT")->info("Initialized queues, "
                                          "freeBuffersQ: {0}, "
