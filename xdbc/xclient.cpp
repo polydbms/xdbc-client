@@ -126,11 +126,8 @@ namespace xdbc
         _xdbcenv->tf_paras.elapsed_time = static_cast<float>(total_time);
         spdlog::get("XDBC.CLIENT")->info("Total elapsed time: {0} ms", total_time);
 
-        auto pts = std::vector<xdbc::ProfilingTimestamps>(_xdbcenv->pts->size());
-        while (_xdbcenv->pts->size() != 0)
-            pts.push_back(_xdbcenv->pts->pop());
-
-        auto component_metrics = calculate_metrics(pts, _xdbcenv->buffer_size);
+        auto &env_pts = *(_xdbcenv->pts);
+        auto component_metrics = calculate_metrics(env_pts, _xdbcenv->buffer_size);
         std::ostringstream totalTimes;
         std::ostringstream procTimes;
         std::ostringstream waitingTimes;

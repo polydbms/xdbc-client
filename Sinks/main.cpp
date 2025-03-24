@@ -146,9 +146,8 @@ nlohmann::json metrics_convert(xdbc::RuntimeEnv &env)
 	nlohmann::json metrics_json = nlohmann::json::object(); // Use a JSON object
 	if ((env.pts) && (env.enable_updation == 1))
 	{
-		std::vector<xdbc::ProfilingTimestamps> env_pts;
-		env_pts = env.pts->copy_newElements();
-		auto component_metrics_ = calculate_metrics(env_pts, env.buffer_size);
+		auto &env_pts = *(env.pts);
+		auto component_metrics_ = calculate_metrics(env_pts, env.buffer_size, true);
 		for (const auto &pair : component_metrics_)
 		{
 			nlohmann::json metric_object = nlohmann::json::object();
