@@ -12,6 +12,6 @@ services:
       restart_policy:
         condition: any
     environment:
-      HTTP_BIND: "${HTTP_BIND:-127.0.0.1}"
+      HTTP_BIND: "0.0.0.0"
       HTTP_PORT: "${HTTP_PORT:-4080}"
     network_mode: host
