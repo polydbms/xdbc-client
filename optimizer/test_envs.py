@@ -1,6 +1,42 @@
 test_envs = [
     {
+        'name': "local_transfer",
+        'active': 0,
+        'env': {
+            'server_cpu': 16,
+            'client_cpu': 16,
+            'network': 0,
+            'network_latency': 0,
+            'network_loss': 0,
+            'src': 'csv',
+            'src_format': 1,
+            'target': 'csv',
+            'target_format': 1,
+            'server_container': 'xdbcserver',
+            'client_container': 'xdbcclient',
+            'table': 'lineitem_sf10'
+        }
+    }, {
+        'name': "cloudfog",
+        'active': 1,
+        'env': {
+            'server_cpu': 8,
+            'client_cpu': 2,
+            'network': 0,
+            'network_latency': 0,
+            'network_loss': 0,
+            'src': 'csv',
+            'src_format': 1,
+            'target': 'csv',
+            'target_format': 1,
+            'server_container': 'xdbcserver',
+            'client_container': 'xdbcclient',
+            'table': 'lineitem_sf10'
+        }
+    },
+    {
         'name': "iot_analysis",
+        'active': 0,
         'env': {
             'server_cpu': 16,
             'client_cpu': 8,
@@ -18,6 +54,7 @@ test_envs = [
     },
     {
         'name': "backup",
+        'active': 0,
         'env': {
             'server_cpu': 32,
             'client_cpu': 16,
@@ -35,6 +72,7 @@ test_envs = [
     },
     {
         'name': "icu_analysis",
+        'active': 0,
         'env': {
             'server_cpu': 16,
             'client_cpu': 12,
@@ -52,6 +90,7 @@ test_envs = [
     },
     {
         'name': "copy",
+        'active': 0,
         'env': {
             'server_cpu': 8,
             'client_cpu': 8,
@@ -69,6 +108,7 @@ test_envs = [
     },
     {
         'name': "etl",
+        'active': 0,
         'env': {
             'server_cpu': 8,
             'client_cpu': 8,
@@ -86,6 +126,7 @@ test_envs = [
     },
     {
         'name': "pg",
+        'active': 0,
         'env': {
             'server_cpu': 16,
             'client_cpu': 16,
@@ -114,7 +155,8 @@ expert_configs = [
             'send_par': 2,
             'rcv_par': 2,
             'decomp_par': 3,
-            'write_par': 3,
+            'ser_par': 3,
+            'write_par': 1,
             'compression_lib': 'zstd',
             'buffer_size': 128,
             'server_buffpool_size': 4 * 128 * 20,
@@ -131,7 +173,8 @@ expert_configs = [
             'send_par': 2,
             'rcv_par': 2,
             'decomp_par': 4,
-            'write_par': 10,
+            'ser_par': 10,
+            'write_par': 1,
             'compression_lib': 'snappy',
             'buffer_size': 256,
             'server_buffpool_size': 8 * 256 * 20,
@@ -148,7 +191,8 @@ expert_configs = [
             'send_par': 2,
             'rcv_par': 2,
             'decomp_par': 2,
-            'write_par': 2,
+            'ser_par': 2,
+            'write_par': 1,
             'compression_lib': 'zstd',
             'buffer_size': 64,
             'server_buffpool_size': 4 * 64 * 20,
@@ -165,7 +209,8 @@ expert_configs = [
             'send_par': 2,
             'rcv_par': 2,
             'decomp_par': 2,
-            'write_par': 4,
+            'ser_par': 4,
+            'write_par': 1,
             'compression_lib': 'lz4',
             'buffer_size': 512,
             'server_buffpool_size': 4 * 512 * 20,
@@ -182,7 +227,8 @@ expert_configs = [
             'send_par': 4,
             'rcv_par': 4,
             'decomp_par': 6,
-            'write_par': 8,
+            'ser_par': 8,
+            'write_par': 1,
             'compression_lib': 'zstd',
             'buffer_size': 256,
             'server_buffpool_size': 15000,
@@ -199,6 +245,7 @@ expert_configs = [
             'send_par': 2,
             'rcv_par': 2,
             'decomp_par': 4,
+            'ser_par': 1,
             'write_par': 1,
             'compression_lib': 'zstd',
             'buffer_size': 256,
