@@ -33,32 +33,32 @@ services:
     labels:
       com.docker-tc.enabled: 1
 
-  #xdbc-python:
-  #  image: xdbc-python:latest
-  #  container_name: xdbcpython
-  #  restart: always
-  #  volumes:
-  #    - /dev/shm:/dev/shm
-  #  shm_size: '16gb'
-  #  cap_add:
-  #    - NET_ADMIN
-  #  networks:
-  #    - xdbc-net
-  #  labels:
-  #    com.docker-tc.enabled: 1
+  xdbc-python:
+    image: xdbc-python:latest
+    container_name: xdbcpython
+    restart: always
+    volumes:
+      - /dev/shm:/dev/shm
+    shm_size: '16gb'
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - xdbc-net
+    labels:
+      com.docker-tc.enabled: 1
 
-  #postgres-1:
-  #  image: postgresdb
-  #  container_name: pg1
-  #  restart: always
-  #  volumes:
-  #    - test-data:/data
-  #    - pgvolume1:/var/lib/postgresql/
-  #  ports:
-  #    - 15432:5432
-  #  shm_size: '2gb'
-  #  networks:
-  #    - xdbc-net
+  postgres-1:
+    image: postgresdb
+    container_name: pg1
+    restart: always
+    volumes:
+      - test-data:/data
+      - pgvolume1:/var/lib/postgresql/
+    ports:
+      - 15432:5432
+    shm_size: '2gb'
+    networks:
+      - xdbc-net
 
 #  clickhouse:
 #    image: clickhousedb
