@@ -52,7 +52,6 @@ services:
     container_name: pg1
     restart: always
     volumes:
-      - test-data:/data
       - pgvolume1:/var/lib/postgresql/
     ports:
       - 15432:5432
@@ -68,13 +67,10 @@ services:
 #      - 19000:9000
 #      - 18123:8123
 #    volumes:
-#      - test-data:/data
 #      - chdbvol:/var/lib/clickhouse
 #    shm_size: '2gb'
 
 volumes:
-  test-data:
-    external: true
   pgvolume1:
   chdbvol:
 
