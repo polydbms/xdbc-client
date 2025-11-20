@@ -21,7 +21,7 @@ RUN apt update && apt install -qy cmake git gdb nlohmann-json3-dev clang libboos
 
 RUN apt install -qy libzstd-dev liblzo2-dev liblz4-dev libsnappy-dev libbrotli-dev
 
-RUN git clone https://github.com/lemire/FastPFor.git && cd FastPFor && \
+RUN git clone https://github.com/lemire/FastPFor.git && cd FastPFor && git checkout 039134b && \
     mkdir build && \
     cd build && \
     cmake .. && \
