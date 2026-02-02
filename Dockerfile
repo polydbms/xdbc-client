@@ -15,7 +15,7 @@ RUN wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | 
 
 RUN apt install -y -V ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
 
-RUN apt update && apt install -qy cmake git gdb nlohmann-json3-dev clang libboost-all-dev build-essential libspdlog-dev iproute2 netcat libarrow-dev=18.1.0-1 libparquet-dev=18.1.0-1
+RUN apt update && apt install -qy cmake git gdb nlohmann-json3-dev clang libboost-all-dev build-essential libspdlog-dev iproute2 netcat libarrow-dev=18.1.0-1 libparquet-dev=18.1.0-1 libthrift-dev pkg-config
 
 # install compression libs
 
@@ -27,6 +27,8 @@ RUN git clone https://github.com/lemire/FastPFor.git && cd FastPFor && \
     cmake .. && \
     cmake --build . --config Release && \
     make install
+
+RUN ln -s /FastPFor /fastpfor
 
 RUN git clone https://github.com/LLNL/fpzip.git && cd fpzip && \
     mkdir build && \

@@ -1,0 +1,17 @@
+[
+    {
+        "name": "id",
+        "type": "INT",
+        "size": 4
+    },
+    {
+        "name": "name",
+        "type": "STRING",
+        "size": 255
+    },
+    {
+        "name": "value",
+        "type": "DOUBLE",
+        "size": 8
+    }
+]

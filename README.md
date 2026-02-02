@@ -25,7 +25,7 @@ docker exec -it xdbcserver bash -c "./xdbc-server/build/xdbc-server"
 The XDBC Server supports multiple options. For example, to transfer from a CSV source with a buffer size of 256 kb, a buffer pool size of 16384, and the parallelism for deserialization at 16, read at 1 and compression at 2 with a row format and snappy, run:
 ```
 docker exec -it xdbcserver bash -c "./xdbc-server/build/xdbc-server \
---system csv -b 256 -p 16384 --deser-parallelism 16 --read-parallelism 1 \
+--system postgres -b 256 -p 16384 --deser-parallelism 16 --read-parallelism 1 \
 --compression-parallelism=2 -f1 -csnappy"
 ```
 Currently, XDBC assumes your data is placed in `/dev/shm`, which is also mapped to the containers' `/dev/shm`.
