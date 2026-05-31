@@ -74,6 +74,7 @@ namespace xdbc
 
         // Unified receive queue
         _xdbcenv->freeBufferIds = std::make_shared<customQueue<int>>();
+        _xdbcenv->freeBufferIds->setCapacity(_xdbcenv->buffers_in_bufferpool);
         // Unified decompression queue
         _xdbcenv->compressedBufferIds = std::make_shared<customQueue<int>>();
         _xdbcenv->compressedBufferIds->setCapacity(queueCapacityPerComp);
@@ -94,7 +95,7 @@ namespace xdbc
             _xdbcenv->freeBufferIds->push(i);
         }
 
-        _xdbcenv->tf_paras.bufProcessed.resize(_xdbcenv->max_threads);
+        _xdbcenv->tf_paras.bufProcessed.resize(_xdbcenv->max_threads, 0);
 
         spdlog::get("XDBC.CLIENT")->info("Initialized queues, "
                                          "freeBuffersQ: {0}, "
@@ -126,11 +127,8 @@ namespace xdbc
         _xdbcenv->tf_paras.elapsed_time = static_cast<float>(total_time);
         spdlog::get("XDBC.CLIENT")->info("Total elapsed time: {0} ms", total_time);
 
-        auto pts = std::vector<xdbc::ProfilingTimestamps>(_xdbcenv->pts->size());
-        while (_xdbcenv->pts->size() != 0)
-            pts.push_back(_xdbcenv->pts->pop());
-
-        auto component_metrics = calculate_metrics(pts, _xdbcenv->buffer_size);
+        auto &env_pts = *(_xdbcenv->pts);
+        auto component_metrics = calculate_metrics(env_pts, _xdbcenv->buffer_size);
         std::ostringstream totalTimes;
         std::ostringstream procTimes;
         std::ostringstream waitingTimes;
@@ -281,26 +279,22 @@ namespace xdbc
             size_t decompressedBufferTotalSize = _xdbcenv->decompressedBufferIds->size();
             size_t serializedBufferTotalSize = _xdbcenv->serializedBufferIds->size();
 
-            // size_t freeBufferTotalSize = 0;
-            // for (auto &queue_ptr: _xdbcenv->freeBufferIds) {
-            //     freeBufferTotalSize += queue_ptr->size();
-            // }
+            float freeBufferLoadFloat = (freeBufferTotalSize * 100.0f) / _xdbcenv->freeBufferIds->getCapacity();
+            float compressedBufferLoadFloat = (compressedBufferTotalSize * 100.0f) / _xdbcenv->compressedBufferIds->getCapacity();
+            float decompressedBufferLoadFloat = (decompressedBufferTotalSize * 100.0f) / _xdbcenv->decompressedBufferIds->getCapacity();
+            float serializedBufferLoadFloat = (serializedBufferTotalSize * 100.0f) / _xdbcenv->serializedBufferIds->getCapacity();
 
-            // size_t compressedBufferTotalSize = 0;
-            // for (auto &queue_ptr: _xdbcenv->compressedBufferIds) {
-            //     compressedBufferTotalSize += queue_ptr->size();
-            // }
-
-            // size_t decompressedBufferTotalSize = 0;
-            // for (auto &queue_ptr: _xdbcenv->decompressedBufferIds) {
-            //     decompressedBufferTotalSize += queue_ptr->size();
-            // }
+            size_t freeBufferLoad = static_cast<size_t>(freeBufferLoadFloat);
+            size_t compressedBufferLoad = static_cast<size_t>(compressedBufferLoadFloat);
+            size_t decompressedBufferLoad = static_cast<size_t>(decompressedBufferLoadFloat);
+            size_t serializedBufferLoad = static_cast<size_t>(serializedBufferLoadFloat);
 
             // Store the measurement as a tuple
             _xdbcenv->queueSizes.emplace_back(curTimeInterval, freeBufferTotalSize, compressedBufferTotalSize,
                                               decompressedBufferTotalSize, serializedBufferTotalSize);
 
-            _xdbcenv->tf_paras.latest_queueSizes = std::make_tuple(freeBufferTotalSize, compressedBufferTotalSize, decompressedBufferTotalSize, serializedBufferTotalSize);
+            _xdbcenv->tf_paras.latest_queueSizes = std::make_tuple(freeBufferLoad, compressedBufferLoad,
+                                                                   decompressedBufferLoad, serializedBufferLoad);
 
             std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
             curTimeInterval += interval_ms / 1000;
